@@ -1,0 +1,47 @@
+# config/basis_sets.yaml
+#
+# GUIの「基底関数」ドロップダウンに表示される選択肢の一覧です。
+# 2つのカテゴリを分けているのは、遷移金属を含む構造がアップロードされたときに
+# main_group(主にH~Arなど典型元素用のPople系基底)ではなく
+# transition_metal_ecp(有効内殻ポテンシャル付き基底)を自動的に候補として
+# 提示できるようにするためです(現時点ではecp自動判定ロジックは未実装で、
+# main_groupのみをGUIに出しています。将来 io_reader.py 側で元素種別を
+# チェックし、遷移金属があればこちらのカテゴリを提示するように拡張予定です)。
+#
+# 各項目の意味:
+#   label       : GUI上に表示される日本語ラベル
+#   key         : プログラム内部の識別子
+#   pyscf_basis : pyscf.gto.Mole.basis に渡す文字列
+#   ecp         : 有効内殻ポテンシャル名。不要な場合は null。
+
+main_group:
+  - label: "3-21G"
+    key: "3-21g"
+    pyscf_basis: "3-21g"
+    ecp: null
+
+# ----- 今後追加予定(まだ実装していません。プレースホルダとして残しています) -----
+#  - label: "6-31G"
+#    key: "6-31g"
+#    pyscf_basis: "6-31g"
+#    ecp: null
+#  - label: "6-31G*"
+#    key: "6-31g*"
+#    pyscf_basis: "6-31g*"
+#    ecp: null
+#  - label: "6-31+G**"
+#    key: "6-31+g**"
+#    pyscf_basis: "6-31+g**"
+#    ecp: null
+
+transition_metal_ecp: []
+# ----- 今後追加予定(遷移金属対応時にコメントを解除) -----
+# transition_metal_ecp:
+#   - label: "LANL2DZ (ECP)"
+#     key: "lanl2dz"
+#     pyscf_basis: "lanl2dz"
+#     ecp: "lanl2dz"
+#   - label: "def2-SVP (ECP)"
+#     key: "def2-svp"
+#     pyscf_basis: "def2-svp"
+#     ecp: "def2-svp"

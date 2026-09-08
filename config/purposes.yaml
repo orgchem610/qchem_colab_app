@@ -1,0 +1,27 @@
+# config/purposes.yaml
+#
+# GUIの「計算目的」ドロップダウンに表示される選択肢の一覧です。
+# 各項目の意味:
+#   label      : GUI上に表示される日本語ラベル
+#   key        : プログラム内部で使う識別子(engine.py / gui.py から参照)
+#   does_opt   : 構造最適化を行うかどうか
+#   allow_freq : このpurposeで振動数計算を(オプションとして)許可するかどうか
+#
+# ここに項目を1つ追加するだけで、GUIのドロップダウンに選択肢が増える設計です。
+# 例えば「一点計算」を追加したい場合は、does_opt: false の項目を追記してください。
+
+- label: "構造最適化"
+  key: "geometry_optimization"
+  does_opt: true
+  allow_freq: true
+
+# ----- 今後追加予定(まだ実装していません。プレースホルダとして残しています) -----
+# - label: "一点計算"
+#   key: "single_point"
+#   does_opt: false
+#   allow_freq: false
+#
+# - label: "TS(遷移状態)最適化"
+#   key: "ts_optimization"
+#   does_opt: true
+#   allow_freq: true

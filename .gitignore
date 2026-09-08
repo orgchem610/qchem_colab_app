@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Colab上での計算出力(実行のたびに変わるためコミット対象外。
+# 「動作確認済みライブラリ一式」であるrequirements-lock.txtは
+# 逆に必ずコミットしてください)
+/outputs/
+*.molden
+*.cube

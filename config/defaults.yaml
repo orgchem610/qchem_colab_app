@@ -1,0 +1,32 @@
+# config/defaults.yaml
+#
+# GUIの初期値や、計算の収束条件などの既定値をまとめています。
+# 「保守性のため設定ファイルに切り分ける」方針に沿って、
+# コード中にマジックナンバーとして埋め込まず、すべてここに集約しています。
+
+gui_defaults:
+  charge: 0
+  multiplicity: 1        # スピン多重度。1=閉殻(不対電子なし)
+  do_frequency: true      # 振動数計算チェックボックスの初期状態(要望によりデフォルトON)
+
+scf:
+  conv_tol: 1.0e-10       # SCFエネルギー収束条件(Hartree)。PySCFの既定よりやや厳しめ
+  max_cycle: 100          # SCF反復回数の上限
+  # SCFが収束しない場合に自動リトライする際、収束条件をどれだけ緩めるか
+  retry_conv_tol: 1.0e-6
+  retry_max_cycle: 200
+  retry_level_shift: 0.3  # リトライ時に付与するレベルシフト(Hartree)。収束を助けるための常套手段
+
+geometry_optimization:
+  max_cycle: 100          # geomeTRICの最大ステップ数
+  convergence_set: "GAU"  # geomeTRICの収束基準セット("GAU"はGaussianの既定に準じた基準)
+
+frequency:
+  temperature_K: 298.15
+  pressure_Pa: 101325.0
+
+validation:
+  min_interatomic_distance_angstrom: 0.4  # これより近い原子対があればアップロード時にエラー
+
+gpu:
+  try_gpu4pyscf: true     # Trueの場合、GPU4PySCFの利用を試み、失敗したら自動でCPUにフォールバック

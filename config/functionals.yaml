@@ -1,0 +1,22 @@
+# config/functionals.yaml
+#
+# GUIの「計算手法」ドロップダウンに表示される選択肢の一覧です。
+# 各項目の意味:
+#   label  : GUI上に表示される日本語ラベル
+#   key    : プログラム内部の識別子
+#   engine : "hf" または "dft" (engine.pyがこの値でRHF/UHFかRKS/UKSかを分岐します)
+#   xc     : engineが"dft"の場合に使う交換相関汎関数名(PySCFの記法)。HFの場合はnullのままでOK。
+#
+# B3LYPなど新しい手法を追加したいときは、engine: "dft" の項目を1つ書き足すだけです。
+# コード(engine.py)を変更する必要はありません。
+
+- label: "HF (Hartree-Fock)"
+  key: "hf"
+  engine: "hf"
+  xc: null
+
+# ----- 今後追加予定(まだ実装していません。プレースホルダとして残しています) -----
+# - label: "B3LYP"
+#   key: "b3lyp"
+#   engine: "dft"
+#   xc: "b3lyp"
