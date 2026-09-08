@@ -1,0 +1,133 @@
+# qchem_colab_app
+
+Google Colab上で動作する量子化学計算プロトタイプです。Gaussian等のライセンスソフトを
+利用できない方(高校生等)でも、ブラウザだけで構造最適化・振動数解析を実行できることを
+最終目標にしています。将来的には、本ツールで最適化した構造を
+[ColabReaction](https://github.com/BILAB/ColabReaction) にそのまま渡し、
+反応経路探索・TS(遷移状態)最適化へシームレスにつなげることを目指しています。
+
+**現在のバージョン(v0.1.0)は、計算手法 HF・基底関数 3-21G のみに対応した
+最小プロトタイプです。** これは「まず最小構成で動作と所要時間を確認する」という
+方針によるものです。対応範囲は `config/` 以下のYAMLファイルを編集するだけで
+順次拡張していく設計になっています(詳細は下記「拡張のしかた」参照)。
+
+## できること(v0.1.0)
+
+- `.xyz` 形式の初期構造をアップロードして読み込み
+- 電荷・スピン多重度を指定(スピン多重度・電荷の組み合わせが化学的に妥当かを自動チェック)
+- HF/3-21G での構造最適化
+- 振動数解析(既定でON。ZPE・自由エネルギーの概算値も出力、虚振動があれば警告)
+- 可視化: エネルギー収束グラフ、最適化軌跡アニメーション、振動アニメーション、
+  分子軌道(HOMO/LUMO周辺)、電荷密度の等値面表示(すべてノートブック内、py3Dmol / plotly)
+- 出力ファイル: 最終構造(`.xyz`, ColabReactionにそのままアップロード可能)、
+  最適化トラジェクトリ(多フレーム`.xyz`)、`.molden`(構造+分子軌道。GaussView / MacMolPlt /
+  Avogadro / Multiwfn 等で開けます)
+- GPU4PySCFが利用可能な場合は自動でGPUを使用し、利用できない場合は自動的にCPUに
+  フォールバック
+
+## できないこと・既知の制約(v0.1.0時点)
+
+- HF以外の手法(B3LYP等)、3-21G以外の基底関数には未対応(`config/functionals.yaml`,
+  `config/basis_sets.yaml` に追加すれば対応可能な設計にはなっています)
+- 遷移金属元素を含む構造はアップロード時にエラーとして弾かれます(ECP付き基底が
+  未実装のため)
+- TS(遷移状態)構造最適化は未実装です(`config/purposes.yaml` にプレースホルダとして
+  記載していますが、実装はこれからです)
+- **開発環境の制約により、PySCF・GPU4PySCF等を実際にインストールして動作確認する
+  ことができていません**(サンドボックス環境からネットワークへアクセスできないため)。
+  pyscf/ase不要な部分(`config/`読み込み、入力バリデーション)は`tests/`で
+  実際にテスト済みですが、PySCFを呼び出す部分(`engine.py`/`optimize.py`/`freq.py`)は
+  Google Colab上で実際に動かして初めて検証できます。想定される調整点は下記
+  「トラブルシューティング」に記載しています。
+
+## ディレクトリ構成
+
+```
+qchem_colab_app/
+├── ColabApp.ipynb          # ノートブック本体(Setup Section / Execution Section)
+├── README.md                # 本ファイル
+├── CHANGELOG.md              # バージョンごとの変更履歴
+├── requirements.txt          # 依存パッケージのバージョン指定(初回インストール用の目安)
+├── requirements-lock.txt     # 初回Colab実行時に自動生成される「動作確認済み」の正確な記録
+├── .gitignore
+├── config/
+│   ├── purposes.yaml         # 計算目的の選択肢(現在: 構造最適化のみ)
+│   ├── functionals.yaml      # 計算手法の選択肢(現在: HFのみ)
+│   ├── basis_sets.yaml       # 基底関数の選択肢(現在: 3-21Gのみ)
+│   └── defaults.yaml         # 電荷・多重度・収束条件などの既定値
+├── qcapp/
+│   ├── __init__.py           # バージョン番号, config/読み込み共通関数
+│   ├── io_reader.py          # .xyz読み込み・入力バリデーション
+│   ├── engine.py              # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
+│   ├── optimize.py            # geomeTRICによる構造最適化
+│   ├── freq.py                 # Hessian・振動数解析
+│   ├── writer_xyz.py           # xyz出力(単一構造・多フレーム)
+│   ├── writer_molden.py        # moldenファイル出力
+│   └── visualizer.py            # py3Dmol / plotly ビジュアライザー
+├── gui.py                     # ipywidgets によるGUI組み立て
+└── tests/
+    ├── test_io_reader.py        # 入力読み込み・バリデーションの単体テスト
+    └── test_config.py            # 設定ファイルのスキーマテスト
+```
+
+## 使い方
+
+Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセルに詳しく
+書いてあります。ノートブックを開き、上から順にセルを実行してください。
+初めてJupyter/Colabを使う方向けの手順は、本リポジトリを共有した際のメッセージも
+あわせてご確認ください。
+
+## 拡張のしかた(新しい手法・基底関数を追加する)
+
+コードを変更せず、`config/` 以下のYAMLに1エントリ追加するだけで選択肢が増えます。
+
+例: B3LYPを追加する場合、`config/functionals.yaml` に以下を追記します。
+
+```yaml
+- label: "B3LYP"
+  key: "b3lyp"
+  engine: "dft"
+  xc: "b3lyp"
+```
+
+例: 6-31G*を追加する場合、`config/basis_sets.yaml` の `main_group` に以下を追記します。
+
+```yaml
+- label: "6-31G*"
+  key: "6-31g*"
+  pyscf_basis: "6-31g*"
+  ecp: null
+```
+
+## バージョン管理・ロールバックの方針
+
+- **1機能追加 = 1コミット、区切りの良い段階でGitタグを打つ** 方針とします。
+  例えば本バージョンは `v0.1.0` としてタグを打っています。
+- 次に6-31G系列やB3LYPを追加する際は `feature/b3lyp-and-more-basis` のような
+  作業用ブランチを切り、`ColabApp.ipynb`を含めて動作確認が取れてから`main`に
+  マージ・新しいタグ(`v0.2.0`等)を打つ運用を推奨します。
+- 「最新版に不具合があった場合にすぐ前の版へ戻す」には、
+  `git checkout v0.1.0` のようにタグを指定してチェックアウトするか、
+  問題のコミットを `git revert <コミットID>` で打ち消してください。
+- 依存パッケージのバージョンは、各タグの `requirements-lock.txt` と
+  セットでコミットしてください。「タグを戻す」= 「コードと動作確認済みの
+  ライブラリバージョンの両方が一緒に戻る」状態を保つことが目的です。
+- CHANGELOG.md に、タグごとの変更点を必ず日本語で簡潔に残してください。
+
+## トラブルシューティング
+
+- **構造最適化のエネルギー履歴(グラフ)がほぼ1点しかない場合**:
+  `qcapp/optimize.py` の `_make_callback()` 内で、
+  PySCFのgeomeTRIC連携が実行時に渡すコールバック引数のキー名
+  (`energy` / `e_tot` / `mol` / `coords` 等)が、お使いのPySCFのバージョンと
+  一致していない可能性があります。該当箇所のキー名を、実際のPySCFの
+  ドキュメント・ソースコード(`pyscf.geomopt.geometric_solver`)と
+  照らし合わせて調整してください。
+- **GPU4PySCFのインストールに失敗する / GPUが使われない**:
+  ColabのCUDAバージョンと `gpu4pyscf-cuda12x` / `gpu4pyscf-cuda11x` の
+  対応関係が変わっている可能性があります。`ColabApp.ipynb` のSetup Section内、
+  GPU4PySCFインストールセルのパッケージ名を読み替えてください。GPUが
+  使えなくても、CPU実行として問題なく計算は継続されます。
+- **SCFが収束しない**: `engine.run_scf()` がレベルシフト付きで自動的に
+  1回リトライしますが、それでも収束しない場合は画面に日本語の原因・対策が
+  表示されます。初期構造・電荷・スピン多重度・基底関数の設定を見直してください。
