@@ -11,6 +11,9 @@ ColabReactionがreactant/productとして受け付ける標準的な.xyz形式
 """
 
 
+from qcapp import __version__ as _QCAPP_VERSION
+
+
 def _format_xyz_block(symbols, coords, comment=""):
     lines = [str(len(symbols)), comment]
     for sym, xyz in zip(symbols, coords):
@@ -19,7 +22,8 @@ def _format_xyz_block(symbols, coords, comment=""):
     return "\n".join(lines)
 
 
-def write_final_structure(symbols, coords, filepath, comment="Optimized by qchem_colab_app (v0.1.0, HF/3-21G)"):
+def write_final_structure(symbols, coords, filepath,
+                           comment=f"Optimized by qchem_colab_app (v{_QCAPP_VERSION}, HF/3-21G)"):
     """最終構造を単一フレームの標準.xyzとして書き出す。
 
     このファイルはColabReactionのreactant/productとしてそのまま

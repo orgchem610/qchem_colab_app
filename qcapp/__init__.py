@@ -16,7 +16,7 @@ qcapp: Google Colab上で動作する量子化学計算プロトタイプのコ�
 from pathlib import Path
 import yaml
 
-__version__ = "0.1.0"  # v0.1.0 = HF / 3-21G のみの最小プロトタイプ
+__version__ = "0.1.1"  # HF / 3-21G のみの最小プロトタイプ(v0.1.1: 依存関係インストールの不具合修正)
 
 # qchem_colab_app/ がプロジェクトのルート、config/ がその直下にある前提
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
