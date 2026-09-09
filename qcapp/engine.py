@@ -60,6 +60,12 @@ def build_mole(structure: Structure, charge: int, multiplicity: int, basis_key: 
     mol.charge = charge
     mol.spin = multiplicity - 1  # PySCFのspinは (n_alpha - n_beta) = multiplicity - 1 の意味
     mol.verbose = verbose
+    # デカルト型のd/f軌道(6D/10F)を使用する。Popleタイプの基底関数(6-31G*等)は
+    # 歴史的にデカルト型が標準的な定義であることに加え、MacMolPltは分子軌道の
+    # 等値面表示にデカルト型ガウス関数のみ対応しているため
+    # (PySCFの既定である球面調和関数型/5D7Fのままだと、GaussViewは読めても
+    # MacMolPltでは分子軌道が正しく表示されないことがある)。
+    mol.cart = True
     mol.build()
     return mol
 

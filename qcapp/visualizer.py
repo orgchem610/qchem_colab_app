@@ -118,14 +118,44 @@ def _mo_coeff_for_cube(mf, orbital_index):
     return mo_coeff[:, orbital_index]
 
 
-def render_orbital(mol, mf, orbital_index, isoval=0.02, width=500, height=400):
-    """指定した分子軌道(例: HOMO, LUMO)をcubeファイル経由で等値面表示する。"""
+def _max_abs_from_cube_file(cube_path):
+    """cubeファイルを直接読み、格子点上の値の最大絶対値を求める(フォールバック用)。
+
+    cube形式は「2行のコメント」「原子数と原点」「3方向の軸情報」
+    「原子リスト(原子数分)」に続けて、格子点の値がスペース/改行区切りで
+    並ぶ。値本体だけを数値として読み取る。
+    """
+    with open(cube_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    natm = abs(int(lines[2].split()[0]))
+    header_lines = 2 + 1 + 3 + natm  # コメント2 + 原子数行 + 軸3行 + 原子natm行
+    values = []
+    for line in lines[header_lines:]:
+        values.extend(float(tok) for tok in line.split())
+    return max(abs(v) for v in values) if values else 0.0
+
+
+def render_orbital(mol, mf, orbital_index, isoval_fraction=0.12, width=500, height=400):
+    """指定した分子軌道(例: HOMO, LUMO)をcubeファイル経由で等値面表示する。
+
+    isoval(等値面の閾値)は固定値ではなく、その軌道自身の格子点上での
+    最大絶対値に対する割合(既定12%)として動的に決めている。HOMOとLUMOでは
+    振幅の広がり方(ピーク値の大きさ)が異なることが多く、固定のisoval
+    (例: 0.02)だとLUMO側が分子全体を覆うように大きく表示されすぎることが
+    あったため、この方式に変更した。
+    """
     import py3Dmol
     from pyscf.tools import cubegen
 
     tmpdir = tempfile.mkdtemp()
     cube_path = os.path.join(tmpdir, "orbital.cube")
-    cubegen.orbital(mol, cube_path, _mo_coeff_for_cube(mf, orbital_index))
+    grid = cubegen.orbital(mol, cube_path, _mo_coeff_for_cube(mf, orbital_index))
+    if grid is not None:
+        max_abs = float(np.max(np.abs(np.asarray(grid))))
+    else:
+        max_abs = _max_abs_from_cube_file(cube_path)
+    isoval = max(max_abs * isoval_fraction, 1e-4)
+
     with open(cube_path, "r", encoding="utf-8") as f:
         cube_data = f.read()
 
@@ -136,6 +166,30 @@ def render_orbital(mol, mf, orbital_index, isoval=0.02, width=500, height=400):
     view.addVolumetricData(cube_data, "cube", {"isoval": -isoval, "color": "red", "opacity": 0.75})
     view.zoomTo()
     return view
+
+
+def compute_mulliken_charges(mol, mf):
+    """Mulliken電荷を原子ごとに計算する。戻り値は [(元素記号, 電荷), ...]。"""
+    _, atomic_charges = mf.mulliken_pop(verbose=0)
+    symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
+    return list(zip(symbols, [float(c) for c in atomic_charges]))
+
+
+def atomic_charges_table_html(charges):
+    """compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
+    rows = "".join(
+        f"<tr><td style='padding:2px 10px;text-align:right'>{i + 1}</td>"
+        f"<td style='padding:2px 10px'>{sym}</td>"
+        f"<td style='padding:2px 10px;text-align:right'>{chg:+.3f}</td></tr>"
+        for i, (sym, chg) in enumerate(charges)
+    )
+    return (
+        "<table style='border-collapse:collapse'>"
+        "<tr><th style='padding:2px 10px'>原子番号</th>"
+        "<th style='padding:2px 10px'>元素</th>"
+        "<th style='padding:2px 10px'>Mulliken電荷</th></tr>"
+        f"{rows}</table>"
+    )
 
 
 def render_density(mol, mf, isoval=0.02, width=500, height=400):

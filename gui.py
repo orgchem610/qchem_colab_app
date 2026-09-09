@@ -199,7 +199,11 @@ def build_app():
         with energy_output:
             clear_output(wait=True)
             fig = visualizer.plot_energy_convergence(opt_result.energies)
-            fig.show()
+            # 注意: ipywidgets.Output()の中では fig.show() だと描画されないことがある
+            # (plotlyのshow()はレンダラーの自動判定に依存するため、Output内で
+            # うまく機能しない場合がある)。IPython.display.display()を使うと
+            # 確実に描画される。
+            display(fig)
         with traj_output:
             clear_output(wait=True)
             view = visualizer.render_trajectory(
@@ -252,7 +256,13 @@ def build_app():
     def _on_density_button_clicked(_):
         with density_output:
             clear_output(wait=True)
-            view = visualizer.render_density(state["final_mol"], state["mf_final"])
+            mol_final = state["final_mol"]
+            mf_final = state["mf_final"]
+            charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
+            display(widgets.HTML(
+                "<b>原子ごとのMulliken電荷</b>" +
+                visualizer.atomic_charges_table_html(charges)))
+            view = visualizer.render_density(mol_final, mf_final)
             view.show()
 
     vib_button.on_click(_on_vib_button_clicked)
@@ -262,6 +272,13 @@ def build_app():
     # -------------------------------------------------------------------
     # ダウンロードリンクの用意
     # -------------------------------------------------------------------
+    def _sanitize_filename_stem(raw: str) -> str:
+        """ファイル名として使えない文字を除去する。空ならデフォルトの'result'にする。"""
+        import re
+        stem = (raw or "").strip()
+        stem = re.sub(r'[\\/:*?"<>|]', "", stem)
+        return stem or "result"
+
     def _refresh_downloads():
         with download_output:
             clear_output(wait=True)
@@ -271,30 +288,53 @@ def build_app():
             except ImportError:
                 in_colab = False
 
-            paths = {
-                "最終構造(ColabReactionにそのままアップロード可能な.xyz)": state["final_xyz_path"],
-                "最適化トラジェクトリ(多フレーム.xyz)": state["traj_xyz_path"],
-                "分子軌道・構造(.molden)": state["molden_path"],
-            }
-            for label, path in paths.items():
-                print(f"・{label}: {os.path.basename(path)}")
-
-            if in_colab:
-                def _make_handler(p):
-                    def _handler(_):
-                        colab_files.download(p)
-                    return _handler
-                buttons = []
-                for label, path in paths.items():
-                    b = widgets.Button(description=f"{os.path.basename(path)} をダウンロード")
-                    b.on_click(_make_handler(path))
-                    buttons.append(b)
-                display(widgets.VBox(buttons))
-            else:
+            if not in_colab:
                 print(
-                    "\n(Google Colab以外の環境で実行しているため自動ダウンロードは"
-                    "行いません。上記のパスから直接ファイルを取得してください。)"
+                    "(Google Colab以外の環境で実行しているため自動ダウンロードは"
+                    "行いません。以下のパスから直接ファイルを取得してください。)"
                 )
+                print(f"・最終構造: {state['final_xyz_path']}")
+                print(f"・トラジェクトリ: {state['traj_xyz_path']}")
+                print(f"・molden: {state['molden_path']}")
+                return
+
+            # (説明ラベル, 元ファイルのパス, 付与する拡張子/サフィックス, ボタンラベル)
+            items = [
+                ("最終構造(ColabReactionにそのままアップロード可能)",
+                 state["final_xyz_path"], ".xyz", ".xyz"),
+                ("最適化トラジェクトリ(多フレーム)",
+                 state["traj_xyz_path"], "_traj.xyz", "_traj.xyz"),
+                ("分子軌道・構造(molden)",
+                 state["molden_path"], ".molden", ".molden"),
+            ]
+
+            rows = []
+            for description, src_path, suffix, button_label in items:
+                name_input = widgets.Text(
+                    placeholder="result",
+                    layout=widgets.Layout(width="160px"),
+                )
+                suffix_label = widgets.HTML(f"<code>{suffix}</code>")
+                button = widgets.Button(description=button_label, layout=widgets.Layout(width="110px"))
+
+                def _make_handler(src_path=src_path, suffix=suffix, name_input=name_input):
+                    def _handler(_):
+                        stem = _sanitize_filename_stem(name_input.value)
+                        filename = f"{stem}{suffix}"
+                        tmp_dir = tempfile.mkdtemp(prefix="qchem_dl_")
+                        dst_path = os.path.join(tmp_dir, filename)
+                        import shutil
+                        shutil.copyfile(src_path, dst_path)
+                        colab_files.download(dst_path)
+                    return _handler
+
+                button.on_click(_make_handler())
+                rows.append(widgets.HBox([
+                    widgets.HTML(f"<div style='width:280px'>{description}</div>"),
+                    name_input, suffix_label, button,
+                ]))
+
+            display(widgets.VBox(rows))
 
     # -------------------------------------------------------------------
     # 実行ボタンのハンドラ(計算パイプライン本体)
@@ -349,6 +389,7 @@ def build_app():
                     )
 
                 final_mol = opt_result.mol_final
+                final_mol.cart = True  # 念のため明示(GaussView/MacMolPlt互換のデカルト型d/f軌道)
                 mf_final, _, _ = engine.build_scf(final_mol, functional_key, try_gpu=False)
                 mf_final = engine.run_scf(mf_final, defaults)
 
