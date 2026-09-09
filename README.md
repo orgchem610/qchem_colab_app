@@ -49,7 +49,6 @@ Google Colab上で動作する量子化学計算プロトタイプです。Gauss
 qchem_colab_app/
 ├── ColabApp.ipynb          # ノートブック本体(Setup Section / Execution Section)
 ├── README.md                # 本ファイル
-├── CHANGELOG.md              # バージョンごとの変更履歴
 ├── requirements.txt          # 依存パッケージのバージョン指定(初回インストール用の目安)
 ├── requirements-lock.txt     # 初回Colab実行時に自動生成される「動作確認済み」の正確な記録
 ├── .gitignore
@@ -153,6 +152,21 @@ Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセル�
 将来、共同開発者が増えて複数機能が同時進行するようになったら、その時点で
 `release`/`hotfix`ブランチの導入を検討すれば大丈夫です。
 
+### GitHub上でのブランチの見え方
+
+`main`・`develop`・`feature/*` はすべて同じ1つのGitHubリポジトリの中に共存できます
+(別々のリポジトリを作る必要はありません)。`git push origin <ブランチ名>` を実行した
+ブランチだけがGitHub上にも現れ、リポジトリ右上の「Branches」やコードのブランチ切り替え
+プルダウンから確認できます。`feature/*` は完成後に`develop`へ合流したら用済みになる
+一時的な作業ブランチなので、GitHubに逐一pushせず手元だけで作業し、合流できたら
+ローカルでもリモートでも削除してしまって構いません(バックアップ目的で毎回pushしても
+問題はありません)。
+
+**エンドユーザー(高校生等)から見えるのは常に`main`ブランチだけ**です。Colabの共有リンクは
+`.../blob/main/ColabApp.ipynb` のように特定のブランチ・ファイルを指しているため、
+`develop`や`feature/*`で何を作業していても、`main`にマージしてpushするまでは
+公開版には一切影響しません。
+
 ### 具体的な運用の流れ
 
 1. 新機能に着手するとき: `git checkout develop && git checkout -b feature/xxx`
@@ -174,20 +188,15 @@ Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセル�
    git push origin main --tags
    ```
 
-### CHANGELOG.mdの二重管理を避ける方法
+### 変更履歴の記録方法(CHANGELOG.mdは廃止しました)
 
-上記の運用にすると、`git merge --no-ff` で作られる合流コミットのメッセージや、
-リリース時のタグメッセージそのものが「このバージョンで何が変わったか」の記録になります。
-これをそのままGitHubの **Releases** 機能(タグを選んで「Create a new release」から
-リリースノートとして貼り付けるだけ)に転記すれば、変更履歴はGitHub上の1箇所
-(タグメッセージ・Releaseページ)に集約でき、`CHANGELOG.md`というファイルを
-別途手で更新し続ける必要がなくなります。
-
-このプロジェクトでもこの運用に切り替えることを推奨します。`CHANGELOG.md`は
-今回はまだ残していますが(過去の記録として)、次にリリースする際("develop"を
-"main"にマージしてタグを打つタイミング)にGitHub Releasesへの記録に一本化し、
-`CHANGELOG.md`自体は削除する形で問題ないと思います。よろしければ次回の対応時に
-削除します。
+`git merge --no-ff` で作られる合流コミットのメッセージや、リリース時のタグメッセージ
+そのものが「このバージョンで何が変わったか」の記録になります。これをそのまま
+GitHubの **Releases** 機能(タグを選んで「Create a new release」からリリースノートとして
+貼り付けるだけ)に転記すれば、変更履歴はGitHub上の1箇所(タグメッセージ・Releaseページ)
+に集約できます。`CHANGELOG.md`は二重管理になるため削除済みです。新しいタグを打つ際は、
+必ず `git tag -a vX.Y.Z -m "変更点"` のメッセージを具体的に書き、GitHub上でもその
+タグから「Create a new release」→リリースノートに同内容を貼り付けてください。
 
 ### ロールバックの方法
 
