@@ -1,5 +1,7 @@
 # qchem_colab_app
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp.ipynb)
+
 **GitHubリポジトリ: https://github.com/orgchem610/qchem_colab_app**
 (今後、コードの変更・バージョン管理はこのリポジトリで一元管理します)
 
@@ -100,6 +102,32 @@ Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセル�
 選択が引き継がれているかをご自身でご確認いただけますでしょうか。もし
 引き継がれない場合は、ノートブックの先頭に「まずこの設定をしてください」という
 案内をMarkdownセルで明記しておくのが確実です。
+
+## requirements-lock.txtを軽量に保つ理由
+
+`pip freeze`は現在の環境に入っている**すべての**パッケージ(Colabの場合、
+プリインストール済みのものだけで700個以上)を書き出してしまいます。これを
+そのまま`requirements-lock.txt`として使うと、次回以降のインストール処理
+(1パッケージずつインストールして失敗箇所を特定する方式)が700回以上の
+`pip install`呼び出しになり、非常に時間がかかっていました。
+
+対策として、`ColabApp.ipynb`のSetup Section側で、`pip freeze`の結果から
+「`requirements.txt`に明示的に書かれているパッケージ」と「`gpu4pyscf`関連
+パッケージ」だけを抜き出して`requirements-lock.txt`を生成するように変更しました。
+これにより、ロックファイルは`requirements.txt`とほぼ同じ数(現在8個)の
+パッケージだけを含む軽量なものになります。
+
+**トレードオフ**: この方式では、pyscfやgeometricなどが依存する間接的な
+パッケージ(例: h5py等)まではバージョンを固定していません。そのため、
+将来それらの間接的な依存パッケージに破壊的変更が入った場合、影響を受ける
+可能性はゼロではありません。ただし、これは元々`requirements.txt`(下限/上限
+指定のみ)が持っていたのと同程度のリスクであり、`pip freeze`の全量出力
+(700個以上を厳密固定)と比べて特別にリスクが増えたわけではありません。
+また、Colabの「ランタイムバージョン」を固定していれば、Python本体や
+numpy等の基盤部分はそもそも変化しないため、実際に影響が及ぶ範囲は限定的
+です。万一この間接的な依存関係が原因で動かなくなった場合も、1パッケージ
+ずつインストールする方式のおかげで、どのパッケージが問題かはすぐに
+分かるようになっています。
 
 ## 拡張のしかた(新しい手法・基底関数を追加する)
 
