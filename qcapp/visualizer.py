@@ -40,6 +40,22 @@ def plot_energy_convergence(energies):
     return fig
 
 
+def energy_convergence_html(energies):
+    """plot_energy_convergence() の図を、埋め込み用HTML文字列に変換する。
+
+    Google Colab上のipywidgets.Output()内でplotlyの図を
+    display(fig) や fig.show() で表示しようとすると、環境によっては
+    正しく描画されないことが確認された(plotly.js側のレンダラー判定/
+    mimetype登録がColabの出力サンドボックスとかみ合わないことがあるため)。
+    そのため、plotly.js本体を丸ごと埋め込んだ自己完結型のHTML文字列に
+    変換し、IPython.display.HTML() 経由で表示する、より確実な方式に
+    変更している。include_plotlyjs=True によりネットワーク接続(CDN)にも
+    依存しない。
+    """
+    fig = plot_energy_convergence(energies)
+    return fig.to_html(include_plotlyjs=True, full_html=False)
+
+
 def render_trajectory(symbols, coords_history, energies=None, width=500, height=400):
     """最適化トラジェクトリをpy3Dmolのアニメーションとして表示するviewを作る。"""
     import py3Dmol
@@ -192,8 +208,30 @@ def atomic_charges_table_html(charges):
     )
 
 
-def render_density(mol, mf, isoval=0.02, width=500, height=400):
-    """全電子密度をcubeファイル経由で等値面表示する。"""
+def add_atom_charge_labels(view, mol, charges, font_size=12):
+    """3D構造上の各原子位置に、電荷の数値ラベルを直接描画する。"""
+    coords = mol.atom_coords(unit="Angstrom")
+    for (_, chg), pos in zip(charges, coords):
+        view.addLabel(f"{chg:+.2f}", {
+            "position": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
+            "backgroundColor": "white",
+            "backgroundOpacity": 0.65,
+            "fontColor": "black",
+            "fontSize": font_size,
+            "showBackground": True,
+            "inFront": True,
+        })
+    return view
+
+
+def render_density(mol, mf, isoval_fractions=(0.04, 0.12, 0.30), width=500, height=400):
+    """全電子密度を、淡色(低密度)から濃色(高密度)へのグラデーションになるよう
+    3段階の等値面を重ねて表示する。
+
+    単一のisoval・単色だと「全体が同じような緑色」に見えて密度の高低が
+    伝わりにくいという指摘を受け、複数の等値面を透明度を変えて重ねる方式
+    (低密度側ほど淡く透明、高密度側ほど濃く不透明)に変更した。
+    """
     import py3Dmol
     from pyscf.tools import cubegen
 
@@ -203,13 +241,25 @@ def render_density(mol, mf, isoval=0.02, width=500, height=400):
 
     tmpdir = tempfile.mkdtemp()
     cube_path = os.path.join(tmpdir, "density.cube")
-    cubegen.density(mol, cube_path, dm)
+    grid = cubegen.density(mol, cube_path, dm)
+    if grid is not None:
+        max_abs = float(np.max(np.abs(np.asarray(grid))))
+    else:
+        max_abs = _max_abs_from_cube_file(cube_path)
+
     with open(cube_path, "r", encoding="utf-8") as f:
         cube_data = f.read()
+
+    # (割合, 色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
+    # → オレンジ → 濃い赤(高密度・原子核付近)の順。
+    colors = ["#fff2b2", "#ff9900", "#cc0000"]
+    opacities = [0.18, 0.45, 0.85]
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_data, "cube")
     view.setStyle({"stick": {}})
-    view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": "green", "opacity": 0.6})
+    for fraction, color, opacity in zip(isoval_fractions, colors, opacities):
+        isoval = max(max_abs * fraction, 1e-4)
+        view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": color, "opacity": opacity})
     view.zoomTo()
     return view

@@ -27,7 +27,7 @@ import time
 import traceback
 
 import ipywidgets as widgets
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, HTML
 
 from qcapp import load_yaml, __version__
 from qcapp import io_reader, engine, optimize, freq as freq_module
@@ -198,12 +198,8 @@ def build_app():
         opt_result = state["opt_result"]
         with energy_output:
             clear_output(wait=True)
-            fig = visualizer.plot_energy_convergence(opt_result.energies)
-            # 注意: ipywidgets.Output()の中では fig.show() だと描画されないことがある
-            # (plotlyのshow()はレンダラーの自動判定に依存するため、Output内で
-            # うまく機能しない場合がある)。IPython.display.display()を使うと
-            # 確実に描画される。
-            display(fig)
+            html_str = visualizer.energy_convergence_html(opt_result.energies)
+            display(HTML(html_str))
         with traj_output:
             clear_output(wait=True)
             view = visualizer.render_trajectory(
@@ -260,9 +256,10 @@ def build_app():
             mf_final = state["mf_final"]
             charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
             display(widgets.HTML(
-                "<b>原子ごとのMulliken電荷</b>" +
+                "<b>原子ごとのMulliken電荷</b>(3D図中の数値ラベルにも同じ値を表示しています)" +
                 visualizer.atomic_charges_table_html(charges)))
             view = visualizer.render_density(mol_final, mf_final)
+            visualizer.add_atom_charge_labels(view, mol_final, charges)
             view.show()
 
     vib_button.on_click(_on_vib_button_clicked)
@@ -308,16 +305,20 @@ def build_app():
                  state["molden_path"], ".molden", ".molden"),
             ]
 
-            rows = []
+            # ファイル名入力欄は1つだけ用意し、3つのボタン全てで共有する
+            # (「.xyz」「_traj.xyz」「.molden」を同じ名前に対して付与する)。
+            name_input = widgets.Text(
+                placeholder="result",
+                description="ファイル名",
+                style={"description_width": "70px"},
+                layout=widgets.Layout(width="240px"),
+            )
+
+            rows = [name_input]
             for description, src_path, suffix, button_label in items:
-                name_input = widgets.Text(
-                    placeholder="result",
-                    layout=widgets.Layout(width="160px"),
-                )
-                suffix_label = widgets.HTML(f"<code>{suffix}</code>")
                 button = widgets.Button(description=button_label, layout=widgets.Layout(width="110px"))
 
-                def _make_handler(src_path=src_path, suffix=suffix, name_input=name_input):
+                def _make_handler(src_path=src_path, suffix=suffix):
                     def _handler(_):
                         stem = _sanitize_filename_stem(name_input.value)
                         filename = f"{stem}{suffix}"
@@ -331,7 +332,7 @@ def build_app():
                 button.on_click(_make_handler())
                 rows.append(widgets.HBox([
                     widgets.HTML(f"<div style='width:280px'>{description}</div>"),
-                    name_input, suffix_label, button,
+                    button,
                 ]))
 
             display(widgets.VBox(rows))
