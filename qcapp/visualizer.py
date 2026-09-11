@@ -250,8 +250,36 @@ def add_atom_charge_labels(view, mol, charges, font_size=12):
     return view
 
 
+def render_charges(mol, charges, width=500, height=400):
+    """構造(棒モデル)と、原子ごとの電荷ラベルだけを表示するシンプルなビュー。
+
+    以前は電子密度の等値面(render_density)や電荷を色分けした球
+    (add_atom_charge_spheres)も重ねて表示していたが、意図した通りの
+    グラデーション表示にするのが難しかったため、数値ラベルだけを表示する
+    シンプルな構成に変更した。render_density/add_atom_charge_spheres自体は
+    将来また使う可能性を考えて残してあるが、現在gui.pyからは呼び出していない。
+    """
+    import py3Dmol
+
+    symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
+    coords = mol.atom_coords(unit="Angstrom")
+    lines = [str(len(symbols)), "structure for atomic charge labeling"]
+    for sym, pos in zip(symbols, coords):
+        lines.append(f"{sym} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
+    xyz_block = "\n".join(lines)
+
+    view = py3Dmol.view(width=width, height=height)
+    view.addModel(xyz_block, "xyz")
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.25}})
+    add_atom_charge_labels(view, mol, charges)
+    view.zoomTo()
+    return view
+
+
 def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
-    """全電子密度を、淡色(低密度)から濃色(高密度)へのグラデーションになるよう
+    """(現在gui.pyからは未使用。将来また使う可能性を考えて残している)
+
+    全電子密度を、淡色(低密度)から濃色(高密度)へのグラデーションになるよう
     3段階の等値面を重ねて表示する。
 
     軌道(render_orbital)とは異なり、電子密度は原子核付近で桁違いに大きく
@@ -294,7 +322,9 @@ def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
 
 
 def add_atom_charge_spheres(view, mol, charges, base_radius=0.15, scale=0.35, opacity=0.55):
-    """原子ごとに、電荷の符号で色分けした半透明の球を重ねて表示する。
+    """(現在gui.pyからは未使用。将来また使う可能性を考えて残している)
+
+    原子ごとに、電荷の符号で色分けした半透明の球を重ねて表示する。
 
     厳密には「全電子密度」は常に正の値であり符号を持たないため、
     (全電子密度の等値面を正負で塗り分けることは物理的にできない)、
