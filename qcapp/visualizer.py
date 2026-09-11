@@ -20,27 +20,32 @@ def plot_energy_convergence(energies):
 
     絶対エネルギー(Hartree)は値の変化が小数点以下にしか現れず見づらいため、
     最終ステップを基準とした相対エネルギー(kcal/mol)としてプロットする。
+
+    タイトル・軸ラベルは英語表記にしている。PNG書き出しに使っている
+    kaleido(内蔵のヘッドレスChromium)がCJK(日本語等)フォントを
+    持たない環境だと、日本語部分が文字化けして表示されるため
+    (半角英数字は正しく表示される)。
     """
     import plotly.graph_objects as go
 
     fig = go.Figure()
     if not energies:
-        fig.update_layout(title="エネルギー履歴がありません")
+        fig.update_layout(title="No energy history available")
         return fig
 
     e_final = energies[-1]
     rel = [(e - e_final) * _HARTREE2KCAL for e in energies]
-    fig.add_trace(go.Scatter(x=list(range(len(energies))), y=rel, mode="lines+markers", name="相対エネルギー"))
+    fig.add_trace(go.Scatter(x=list(range(len(energies))), y=rel, mode="lines+markers", name="Relative Energy"))
     fig.update_layout(
-        title="構造最適化におけるエネルギー収束",
-        xaxis_title="最適化ステップ",
-        yaxis_title="相対エネルギー (kcal/mol, 最終構造を基準)",
+        title="Energy Convergence During Geometry Optimization",
+        xaxis_title="Optimization Step",
+        yaxis_title="Relative Energy (kcal/mol, vs. final structure)",
         template="plotly_white",
     )
     return fig
 
 
-def energy_convergence_png(energies, width=700, height=400, scale=2):
+def energy_convergence_png(energies, width=230, height=135, scale=2):
     """plot_energy_convergence() の図を、PNG画像のバイト列に変換する。
 
     Google Colab上のipywidgets.Output()内では、plotlyの図をdisplay(fig)や
@@ -217,14 +222,20 @@ def atomic_charges_table_html(charges):
 
 
 def add_atom_charge_labels(view, mol, charges, font_size=12):
-    """3D構造上の各原子位置に、電荷の数値ラベルを直接描画する。"""
+    """3D構造上の各原子位置に、電荷の数値ラベルを直接描画する。
+
+    正電荷(電子が少ない)は青系、負電荷(電子が多い)は赤系の背景色にして、
+    静電ポテンシャルマップ等でよく使われる配色(赤=電子リッチ/負、
+    青=電子プア/正)に合わせ、符号による見分けがつきやすいようにしている。
+    """
     coords = mol.atom_coords(unit="Angstrom")
     for (_, chg), pos in zip(charges, coords):
+        bg_color = "#5b9bff" if chg >= 0 else "#ff5b5b"  # 正=青系、負=赤系
         view.addLabel(f"{chg:+.2f}", {
             "position": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
-            "backgroundColor": "white",
-            "backgroundOpacity": 0.65,
-            "fontColor": "black",
+            "backgroundColor": bg_color,
+            "backgroundOpacity": 0.85,
+            "fontColor": "white",
             "fontSize": font_size,
             "showBackground": True,
             "inFront": True,
@@ -261,8 +272,10 @@ def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
 
     # (色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
     # → オレンジ → 濃い赤(高密度・原子核付近)の順。
-    colors = ["#fff2b2", "#ff9900", "#cc0000"]
-    opacities = [0.18, 0.45, 0.85]
+    # 「薄すぎて分かりにくい」という指摘を受け、より濃い/彩度の高い色に変更した
+    # (原子(棒モデル)が完全に隠れないよう、不透明度は0.8程度を上限にしている)。
+    colors = ["#ffd400", "#ff6600", "#990000"]
+    opacities = [0.35, 0.55, 0.8]
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_data, "cube")

@@ -3,9 +3,13 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 
-# Colab上での計算出力(実行のたびに変わるためコミット対象外。
-# 「動作確認済みライブラリ一式」であるrequirements-lock.txtは
-# 逆に必ずコミットしてください)
+# Colab上での計算出力(実行のたびに変わるためコミット対象外)
 /outputs/
 *.molden
 *.cube
+
+# 依存ライブラリのバージョンが今しばらく変わりやすい段階のため、
+# requirements-lock.txt は一旦Git管理から外している(手元やColab上には
+# 生成されるが、コミットはしない)。依存関係が落ち着いてきたら、
+# 動作確認済みの内容を再度Git管理に戻すことを検討する。
+requirements-lock.txt
