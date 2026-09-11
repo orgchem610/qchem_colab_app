@@ -197,7 +197,7 @@ def render_orbital(mol, mf, orbital_index, isoval_fraction=0.12, width=500, heig
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_data, "cube")
-    view.setStyle({"stick": {}})
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
     view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": "blue", "opacity": 0.75})
     view.addVolumetricData(cube_data, "cube", {"isoval": -isoval, "color": "red", "opacity": 0.75})
     view.zoomTo()
