@@ -27,7 +27,7 @@ import time
 import traceback
 
 import ipywidgets as widgets
-from IPython.display import display, clear_output, HTML
+from IPython.display import display, clear_output, HTML, Image
 
 from qcapp import load_yaml, __version__
 from qcapp import io_reader, engine, optimize, freq as freq_module
@@ -198,8 +198,14 @@ def build_app():
         opt_result = state["opt_result"]
         with energy_output:
             clear_output(wait=True)
-            html_str = visualizer.energy_convergence_html(opt_result.energies)
-            display(HTML(html_str))
+            try:
+                png_bytes = visualizer.energy_convergence_png(opt_result.energies)
+                display(Image(data=png_bytes))
+            except Exception as e:
+                # kaleidoが使えない等の理由でPNG化に失敗した場合のフォールバック。
+                print(f"(静的画像への変換に失敗したため、HTML表示にフォールバックします: {e})")
+                html_str = visualizer.energy_convergence_html(opt_result.energies)
+                display(HTML(html_str))
         with traj_output:
             clear_output(wait=True)
             view = visualizer.render_trajectory(

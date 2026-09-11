@@ -40,17 +40,25 @@ def plot_energy_convergence(energies):
     return fig
 
 
-def energy_convergence_html(energies):
-    """plot_energy_convergence() の図を、埋め込み用HTML文字列に変換する。
+def energy_convergence_png(energies, width=700, height=400, scale=2):
+    """plot_energy_convergence() の図を、PNG画像のバイト列に変換する。
 
-    Google Colab上のipywidgets.Output()内でplotlyの図を
-    display(fig) や fig.show() で表示しようとすると、環境によっては
-    正しく描画されないことが確認された(plotly.js側のレンダラー判定/
-    mimetype登録がColabの出力サンドボックスとかみ合わないことがあるため)。
-    そのため、plotly.js本体を丸ごと埋め込んだ自己完結型のHTML文字列に
-    変換し、IPython.display.HTML() 経由で表示する、より確実な方式に
-    変更している。include_plotlyjs=True によりネットワーク接続(CDN)にも
-    依存しない。
+    Google Colab上のipywidgets.Output()内では、plotlyの図をdisplay(fig)や
+    display(HTML(fig.to_html(...)))のどちらで表示しようとしても描画されない
+    (グラフの領域自体が確保されない)ケースが確認された。plotlyのインタラク
+    ティブ表示はJavaScriptの実行に依存しており、Colabの出力領域のサンドボックス
+    環境でそのJavaScriptが実行されないことが原因と考えられる。
+    そこで、JavaScript実行に一切依存しない静的PNG画像に変換して埋め込む方式に
+    変更した(kaleidoパッケージを使用)。対話性(ホバーでの数値表示等)は
+    失われるが、確実に表示されることを優先している。
+    """
+    fig = plot_energy_convergence(energies)
+    return fig.to_image(format="png", width=width, height=height, scale=scale)
+
+
+def energy_convergence_html(energies):
+    """(フォールバック用) plot_energy_convergence() の図を埋め込みHTML文字列に
+    変換する。kaleidoが使えない環境向けの代替手段として残している。
     """
     fig = plot_energy_convergence(energies)
     return fig.to_html(include_plotlyjs=True, full_html=False)
@@ -224,13 +232,18 @@ def add_atom_charge_labels(view, mol, charges, font_size=12):
     return view
 
 
-def render_density(mol, mf, isoval_fractions=(0.04, 0.12, 0.30), width=500, height=400):
+def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
     """全電子密度を、淡色(低密度)から濃色(高密度)へのグラデーションになるよう
     3段階の等値面を重ねて表示する。
 
-    単一のisoval・単色だと「全体が同じような緑色」に見えて密度の高低が
-    伝わりにくいという指摘を受け、複数の等値面を透明度を変えて重ねる方式
-    (低密度側ほど淡く透明、高密度側ほど濃く不透明)に変更した。
+    軌道(render_orbital)とは異なり、電子密度は原子核付近で桁違いに大きく
+    分子表面付近では非常に小さいという、極端に広いダイナミックレンジを持つ。
+    そのため軌道と同じ「最大値に対する割合」で等値面を決めると、3段階とも
+    ほぼ同じ(核付近のごく小さな)範囲に収まってしまい、見た目上グラデーション
+    にならないことがある。電子密度の可視化では、原子単位(e/bohr^3)での
+    絶対値として 0.002 / 0.02 / 0.2 前後の値を使うのが一般的であるため
+    (0.002は分子表面(van der Waals表面相当)を表す値としてよく使われる)、
+    これらを既定値として採用する。
     """
     import py3Dmol
     from pyscf.tools import cubegen
@@ -241,16 +254,12 @@ def render_density(mol, mf, isoval_fractions=(0.04, 0.12, 0.30), width=500, heig
 
     tmpdir = tempfile.mkdtemp()
     cube_path = os.path.join(tmpdir, "density.cube")
-    grid = cubegen.density(mol, cube_path, dm)
-    if grid is not None:
-        max_abs = float(np.max(np.abs(np.asarray(grid))))
-    else:
-        max_abs = _max_abs_from_cube_file(cube_path)
+    cubegen.density(mol, cube_path, dm)
 
     with open(cube_path, "r", encoding="utf-8") as f:
         cube_data = f.read()
 
-    # (割合, 色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
+    # (色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
     # → オレンジ → 濃い赤(高密度・原子核付近)の順。
     colors = ["#fff2b2", "#ff9900", "#cc0000"]
     opacities = [0.18, 0.45, 0.85]
@@ -258,8 +267,7 @@ def render_density(mol, mf, isoval_fractions=(0.04, 0.12, 0.30), width=500, heig
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_data, "cube")
     view.setStyle({"stick": {}})
-    for fraction, color, opacity in zip(isoval_fractions, colors, opacities):
-        isoval = max(max_abs * fraction, 1e-4)
+    for isoval, color, opacity in zip(isovals, colors, opacities):
         view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": color, "opacity": opacity})
     view.zoomTo()
     return view
