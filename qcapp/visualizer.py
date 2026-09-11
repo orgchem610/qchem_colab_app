@@ -45,7 +45,7 @@ def plot_energy_convergence(energies):
     return fig
 
 
-def energy_convergence_png(energies, width=230, height=135, scale=2):
+def energy_convergence_png(energies, width=700, height=400, scale=2):
     """plot_energy_convergence() の図を、PNG画像のバイト列に変換する。
 
     Google Colab上のipywidgets.Output()内では、plotlyの図をdisplay(fig)や
@@ -56,6 +56,13 @@ def energy_convergence_png(energies, width=230, height=135, scale=2):
     そこで、JavaScript実行に一切依存しない静的PNG画像に変換して埋め込む方式に
     変更した(kaleidoパッケージを使用)。対話性(ホバーでの数値表示等)は
     失われるが、確実に表示されることを優先している。
+
+    注意: widthとheightは、plotly自身にレイアウト(文字サイズ・余白・
+    目盛りの間隔等)を計算させるための「本来のグラフサイズ」であり、
+    この値を小さくするとグラフ全体は縮むがフォントサイズ等は縮まないため、
+    文字が重なる/はみ出るなどレイアウトが崩れる。画面上での表示サイズを
+    小さくしたい場合は、この関数の戻り値(PNGの生データ)はそのままに、
+    表示側(IPython.display.Image の width/height 引数)で縮小すること。
     """
     fig = plot_energy_convergence(energies)
     return fig.to_image(format="png", width=width, height=height, scale=scale)
@@ -272,10 +279,10 @@ def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
 
     # (色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
     # → オレンジ → 濃い赤(高密度・原子核付近)の順。
-    # 「薄すぎて分かりにくい」という指摘を受け、より濃い/彩度の高い色に変更した
-    # (原子(棒モデル)が完全に隠れないよう、不透明度は0.8程度を上限にしている)。
-    colors = ["#ffd400", "#ff6600", "#990000"]
-    opacities = [0.35, 0.55, 0.8]
+    # 「まだ薄い」という指摘を受け、さらに濃く/不透明度を上げた
+    # (原子(棒モデル)が完全に隠れないよう、不透明度は0.9程度を上限にしている)。
+    colors = ["#ffcc00", "#ff5500", "#880000"]
+    opacities = [0.55, 0.75, 0.92]
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(cube_data, "cube")
@@ -283,4 +290,32 @@ def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
     for isoval, color, opacity in zip(isovals, colors, opacities):
         view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": color, "opacity": opacity})
     view.zoomTo()
+    return view
+
+
+def add_atom_charge_spheres(view, mol, charges, base_radius=0.15, scale=0.35, opacity=0.55):
+    """原子ごとに、電荷の符号で色分けした半透明の球を重ねて表示する。
+
+    厳密には「全電子密度」は常に正の値であり符号を持たないため、
+    (全電子密度の等値面を正負で塗り分けることは物理的にできない)、
+    正負の符号を持つ量として代わりにMulliken電荷を使い、原子位置に
+    球を置くことで「正電荷=青、負電荷=赤」という色分けを実現している。
+    球の大きさは |電荷| にごく単純に比例させている。
+
+    なお、より厳密に「表面を電荷(静電ポテンシャル)で塗り分ける」には
+    pyscf.tools.cubegen.mep() で計算した静電ポテンシャルを、密度の等値面に
+    2つ目の物性値として重ね書きする手法(いわゆるESPマッピング)が本来の
+    やり方だが、3Dmol.js側の対応APIの詳細を実機検証できておらず信頼性に
+    不安があるため、今回は確実に動作するこの球表示で対応している。
+    """
+    coords = mol.atom_coords(unit="Angstrom")
+    for (_, chg), pos in zip(charges, coords):
+        color = "#2255ff" if chg >= 0 else "#ff2222"  # 正電荷=青、負電荷=赤
+        radius = base_radius + min(abs(chg), 1.5) * scale
+        view.addSphere({
+            "center": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
+            "radius": radius,
+            "color": color,
+            "opacity": opacity,
+        })
     return view

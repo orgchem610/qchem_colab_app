@@ -200,7 +200,10 @@ def build_app():
             clear_output(wait=True)
             try:
                 png_bytes = visualizer.energy_convergence_png(opt_result.energies)
-                display(Image(data=png_bytes))
+                # 画像自体は綺麗にレイアウトされたサイズ(700x400相当)で生成し、
+                # 表示サイズ(width/height)だけをここで縮小する
+                # (画像データ自体を小さくするとグラフ内の文字が崩れるため)。
+                display(Image(data=png_bytes, width=230, height=135))
             except Exception as e:
                 # kaleidoが使えない等の理由でPNG化に失敗した場合のフォールバック。
                 print(f"(静的画像への変換に失敗したため、HTML表示にフォールバックします: {e})")
@@ -262,9 +265,11 @@ def build_app():
             mf_final = state["mf_final"]
             charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
             display(widgets.HTML(
-                "<b>原子ごとのMulliken電荷</b>(3D図中の数値ラベルにも同じ値を表示しています)" +
+                "<b>原子ごとのMulliken電荷</b>"
+                "(3D図中の数値ラベル・球の色〔正=青/負=赤〕にも同じ値を反映しています)" +
                 visualizer.atomic_charges_table_html(charges)))
             view = visualizer.render_density(mol_final, mf_final)
+            visualizer.add_atom_charge_spheres(view, mol_final, charges)
             visualizer.add_atom_charge_labels(view, mol_final, charges)
             view.show()
 
