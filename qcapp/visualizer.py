@@ -250,28 +250,29 @@ def add_atom_charge_labels(view, mol, charges, font_size=12):
     return view
 
 
-def render_charges(mol, charges, width=500, height=400):
-    """構造(棒モデル)と、原子ごとの電荷ラベルだけを表示するシンプルなビュー。
+def render_charges(mol, charges, show_labels=True, width=500, height=400):
+    """構造(ball and stick)+ 電荷で色分けした半透明の球 + (任意で)数値ラベルを表示する。
 
-    以前は電子密度の等値面(render_density)や電荷を色分けした球
-    (add_atom_charge_spheres)も重ねて表示していたが、意図した通りの
-    グラデーション表示にするのが難しかったため、数値ラベルだけを表示する
-    シンプルな構成に変更した。render_density/add_atom_charge_spheres自体は
-    将来また使う可能性を考えて残してあるが、現在gui.pyからは呼び出していない。
+    球の色は、正電荷=青、中性付近=緑、負電荷=赤となるグラデーションで、
+    その分子の中での最大|電荷|を基準に正規化している(add_atom_charge_spheres参照)。
+    数値ラベルは show_labels=False で非表示にできる(原子数が多い分子では
+    ラベルが重なって見づらくなるための対応)。
     """
     import py3Dmol
 
     symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
     coords = mol.atom_coords(unit="Angstrom")
-    lines = [str(len(symbols)), "structure for atomic charge labeling"]
+    lines = [str(len(symbols)), "structure for atomic charge visualization"]
     for sym, pos in zip(symbols, coords):
         lines.append(f"{sym} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
     xyz_block = "\n".join(lines)
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(xyz_block, "xyz")
-    view.setStyle({"stick": {}, "sphere": {"scale": 0.25}})
-    add_atom_charge_labels(view, mol, charges)
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
+    add_atom_charge_spheres(view, mol, charges)
+    if show_labels:
+        add_atom_charge_labels(view, mol, charges)
     view.zoomTo()
     return view
 
@@ -321,16 +322,37 @@ def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
     return view
 
 
-def add_atom_charge_spheres(view, mol, charges, base_radius=0.15, scale=0.35, opacity=0.55):
-    """(現在gui.pyからは未使用。将来また使う可能性を考えて残している)
+def _charge_gradient_color(charge, max_abs_charge):
+    """電荷の値を、青(正)-緑(中性付近)-赤(負)のグラデーション色に変換する。
 
-    原子ごとに、電荷の符号で色分けした半透明の球を重ねて表示する。
+    その分子の中での最大|電荷|(max_abs_charge)を基準に -1〜+1 に正規化し、
+    0(中性)からの離れ具合に応じて緑から青(正)または赤(負)へ線形補間する。
+    """
+    neutral = (0x33, 0xcc, 0x33)   # 緑(中性付近)
+    positive = (0x22, 0x55, 0xff)  # 青(正電荷)
+    negative = (0xff, 0x22, 0x22)  # 赤(負電荷)
+
+    if max_abs_charge <= 1e-6:
+        t = 0.0
+    else:
+        t = max(-1.0, min(1.0, charge / max_abs_charge))
+
+    end = positive if t >= 0 else negative
+    frac = abs(t)
+    rgb = tuple(int(round(neutral[i] + (end[i] - neutral[i]) * frac)) for i in range(3))
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def add_atom_charge_spheres(view, mol, charges, base_radius=0.25, scale=0.25, opacity=0.85):
+    """原子ごとに、Mulliken電荷の値に応じたグラデーション色の半透明の球を重ねて表示する。
+
+    正電荷=青、中性付近=緑、負電荷=赤、というグラデーションになるよう
+    _charge_gradient_color() で色を決めている。球の大きさは |電荷| に応じて
+    (その分子内での最大|電荷|を基準に)変える。
 
     厳密には「全電子密度」は常に正の値であり符号を持たないため、
-    (全電子密度の等値面を正負で塗り分けることは物理的にできない)、
-    正負の符号を持つ量として代わりにMulliken電荷を使い、原子位置に
-    球を置くことで「正電荷=青、負電荷=赤」という色分けを実現している。
-    球の大きさは |電荷| にごく単純に比例させている。
+    電子密度そのものを正負で塗り分けることは物理的にできない。そのため、
+    正負の符号を持つ量として代わりにMulliken電荷を使っている。
 
     なお、より厳密に「表面を電荷(静電ポテンシャル)で塗り分ける」には
     pyscf.tools.cubegen.mep() で計算した静電ポテンシャルを、密度の等値面に
@@ -339,9 +361,10 @@ def add_atom_charge_spheres(view, mol, charges, base_radius=0.15, scale=0.35, op
     不安があるため、今回は確実に動作するこの球表示で対応している。
     """
     coords = mol.atom_coords(unit="Angstrom")
+    max_abs_charge = max((abs(c) for _, c in charges), default=0.0) or 1.0
     for (_, chg), pos in zip(charges, coords):
-        color = "#2255ff" if chg >= 0 else "#ff2222"  # 正電荷=青、負電荷=赤
-        radius = base_radius + min(abs(chg), 1.5) * scale
+        color = _charge_gradient_color(chg, max_abs_charge)
+        radius = base_radius + min(abs(chg), max_abs_charge) / max_abs_charge * scale
         view.addSphere({
             "center": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
             "radius": radius,

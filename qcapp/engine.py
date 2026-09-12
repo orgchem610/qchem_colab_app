@@ -120,16 +120,24 @@ def build_scf(mol, functional_key: str, try_gpu: bool = True):
     return mf, False, "CPU (通常のPySCF) で計算します。"
 
 
-def run_scf(mf, defaults: dict):
+def run_scf(mf, defaults: dict, dm0=None):
     """SCFを実行し、収束しなければ収束条件を緩めて1回だけ自動リトライする。
 
     それでも収束しない場合は SCFConvergenceError を、原因の当たりと
     対策を添えた日本語メッセージ付きで送出する。
+
+    dm0 : 初期密度行列(省略可)。構造最適化で得た(GPU計算等の)密度行列を
+          渡すと、全く同じ幾何構造でのSCF計算の初期値として使われ、
+          既定の初期値(原子の密度を単純に重ね合わせたもの)から始めるより
+          収束に必要なサイクル数を減らせることが期待できる。
     """
     scf_cfg = defaults["scf"]
     mf.conv_tol = scf_cfg["conv_tol"]
     mf.max_cycle = scf_cfg["max_cycle"]
-    mf.kernel()
+    if dm0 is not None:
+        mf.kernel(dm0=dm0)
+    else:
+        mf.kernel()
 
     if mf.converged:
         return mf

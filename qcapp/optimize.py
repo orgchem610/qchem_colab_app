@@ -34,6 +34,15 @@ class OptimizationResult:
         self.symbols = []
         self.converged = False
         self.elapsed_seconds = 0.0
+        self.dm0_guess = None     # 最終ステップの密度行列(CPU再計算の初期値用、取得できない場合はNone)
+
+
+def _to_numpy(arr):
+    """cupy配列(GPU4PySCF使用時)・numpy配列のどちらが来ても素直にnumpy配列にする。"""
+    import numpy as np
+    if hasattr(arr, "get"):  # cupy.ndarrayはCPUへ転送する.get()メソッドを持つ
+        return arr.get()
+    return np.asarray(arr)
 
 
 def _make_callback(result: "OptimizationResult"):
@@ -103,6 +112,16 @@ def run_geometry_optimization(mol, functional_key: str, defaults: dict, try_gpu:
         ) from e
     result.elapsed_seconds = time.perf_counter() - t0
     result.mol_final = mol_final
+
+    # CPU側での再計算(engine.pyでの分子軌道・電荷・振動数解析用のSCF)を
+    # 高速化するため、最後に使われた密度行列を初期値の候補として保持しておく。
+    # 同じ幾何構造でのSCFなので、既定の初期値(原子密度の重ね合わせ)より
+    # 収束が大幅に速くなることが期待できる。取得できなくても
+    # (=Noneのままでも)以降の処理には支障がない、あくまで高速化用のヒント。
+    try:
+        result.dm0_guess = _to_numpy(mf.make_rdm1())
+    except Exception:
+        result.dm0_guess = None
 
     # コールバックで最終ステップを取り損ねている場合に備え、
     # 最後に必ず「最終構造」を明示的に記録しておく(エネルギーは後段で

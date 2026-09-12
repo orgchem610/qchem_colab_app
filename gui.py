@@ -173,7 +173,10 @@ def build_app():
     mo_output = widgets.Output()
 
     density_button = widgets.Button(description="原子電荷を表示", disabled=True)
-    density_output = widgets.Output()
+    charge_table_output = widgets.Output()
+    charge_labels_checkbox = widgets.Checkbox(
+        value=True, description="図中の原子に電荷の数値ラベルも表示する", disabled=True)
+    charge_view_output = widgets.Output()
 
     viz_box = widgets.VBox([
         viz_header,
@@ -181,7 +184,8 @@ def build_app():
         widgets.HTML("<b>構造最適化の軌跡(アニメーション)</b>"), traj_output,
         widgets.HTML("<b>振動アニメーション</b>"), widgets.HBox([vib_mode_dd, vib_button]), vib_output,
         widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_output,
-        widgets.HTML("<b>原子電荷(Mulliken電荷)</b>"), density_button, density_output,
+        widgets.HTML("<b>原子電荷(Mulliken電荷)</b>"), density_button,
+        charge_table_output, charge_labels_checkbox, charge_view_output,
     ])
 
     # --- ④ ダウンロードエリア ------------------------------------------------
@@ -258,21 +262,37 @@ def build_app():
             view = visualizer.render_orbital(state["final_mol"], state["mf_final"], mo_dd.value)
             view.show()
 
-    def _on_density_button_clicked(_):
-        with density_output:
+    def _render_charge_view():
+        mol_final = state["final_mol"]
+        charges = state["charges"]
+        with charge_view_output:
             clear_output(wait=True)
-            mol_final = state["final_mol"]
-            mf_final = state["mf_final"]
-            charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
-            display(widgets.HTML(
-                "<b>原子ごとのMulliken電荷</b>(3D図中の数値ラベルにも同じ値を表示しています)" +
-                visualizer.atomic_charges_table_html(charges)))
-            view = visualizer.render_charges(mol_final, charges)
+            view = visualizer.render_charges(
+                mol_final, charges, show_labels=charge_labels_checkbox.value)
             view.show()
+
+    def _on_density_button_clicked(_):
+        mol_final = state["final_mol"]
+        mf_final = state["mf_final"]
+        charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
+        state["charges"] = charges
+        with charge_table_output:
+            clear_output(wait=True)
+            display(widgets.HTML(
+                "<b>原子ごとのMulliken電荷</b>"
+                "(球の色: 正電荷=青 ・ 中性付近=緑 ・ 負電荷=赤 のグラデーション)" +
+                visualizer.atomic_charges_table_html(charges)))
+        charge_labels_checkbox.disabled = False
+        _render_charge_view()
+
+    def _on_charge_labels_toggled(change):
+        if change["name"] == "value" and "charges" in state:
+            _render_charge_view()
 
     vib_button.on_click(_on_vib_button_clicked)
     mo_button.on_click(_on_mo_button_clicked)
     density_button.on_click(_on_density_button_clicked)
+    charge_labels_checkbox.observe(_on_charge_labels_toggled, names="value")
 
     # -------------------------------------------------------------------
     # ダウンロードリンクの用意
@@ -399,14 +419,33 @@ def build_app():
 
                 final_mol = opt_result.mol_final
                 final_mol.cart = True  # 念のため明示(GaussView/MacMolPlt互換のデカルト型d/f軌道)
+                natm = final_mol.natm
+                print(
+                    f"\n--- 最終構造でCPU上のSCFを再計算しています(原子数: {natm})---\n"
+                    "  (分子軌道・電荷・moldenファイル出力等はCPU版PySCFで統一的に扱うため、\n"
+                    "   構造最適化にGPUを使った場合でもこの再計算はCPU上で行っています。\n"
+                    "   構造最適化時の密度行列を初期値として使うことで、通常より速く\n"
+                    "   収束するはずですが、原子数が多いほど時間がかかります)"
+                )
+                t_cpu_scf_start = time.perf_counter()
                 mf_final, _, _ = engine.build_scf(final_mol, functional_key, try_gpu=False)
-                mf_final = engine.run_scf(mf_final, defaults)
+                mf_final = engine.run_scf(mf_final, defaults, dm0=opt_result.dm0_guess)
+                print(f"  CPU再計算 所要時間: {time.perf_counter() - t_cpu_scf_start:.1f} 秒")
 
                 freq_result = None
                 if do_freq:
+                    if natm >= 40:
+                        print(
+                            f"\n  [注意] 原子数が{natm}と多いため、振動数計算(Hessian計算)は\n"
+                            "  CPU上でかなりの時間(数十分〜数時間程度)がかかる可能性があります。\n"
+                            "  Colabの接続が長時間の無出力状態で切断されることがあるため、\n"
+                            "  途中経過が出ない間もこのタブを開いたままにしておいてください。"
+                        )
                     print("\n--- 振動数計算を開始します ---")
+                    t_freq_start = time.perf_counter()
                     freq_result = freq_module.run_frequency_analysis(mf_final, defaults)
-                    print(f"  振動数計算 所要時間: {freq_result.elapsed_seconds:.1f} 秒")
+                    print(f"  振動数計算 所要時間: {freq_result.elapsed_seconds:.1f} 秒"
+                          f"(実測の壁時計時間: {time.perf_counter() - t_freq_start:.1f} 秒)")
                     if freq_result.warning_message:
                         print(f"  [注意] {freq_result.warning_message}")
 
