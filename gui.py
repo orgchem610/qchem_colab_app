@@ -266,10 +266,12 @@ def build_app():
     def _render_charge_view():
         mol_final = state["final_mol"]
         charges = state["charges"]
+        esp_values = state.get("esp_values")
         with charge_view_output:
             clear_output(wait=True)
             view = visualizer.render_charges(
-                mol_final, charges, show_labels=charge_labels_checkbox.value)
+                mol_final, charges, esp_values=esp_values,
+                show_labels=charge_labels_checkbox.value)
             view.show()
 
     def _on_density_button_clicked(_):
@@ -277,11 +279,27 @@ def build_app():
         mf_final = state["mf_final"]
         charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
         state["charges"] = charges
+
+        # 球の色付けをESP(静電ポテンシャル)基準にする。計算に失敗した場合は
+        # 従来通りMulliken電荷基準の色分けにフォールバックする
+        # (ラベルの数値は成功・失敗にかかわらず常にMulliken電荷)。
+        esp_values = None
+        esp_note = ""
+        try:
+            esp_values = visualizer.compute_esp_at_atoms(mol_final, mf_final)
+        except Exception as e:
+            esp_note = f"(ESP計算に失敗したため、Mulliken電荷基準の色分けで表示しています: {e})"
+        state["esp_values"] = esp_values
+
         with charge_table_output:
             clear_output(wait=True)
+            color_desc = (
+                "球の色: 静電ポテンシャル(ESP)基準(低い=青・中間=緑・高い=赤)"
+                if esp_values is not None else
+                "球の色: Mulliken電荷基準(正電荷=青・中性付近=緑・負電荷=赤)"
+            )
             display(widgets.HTML(
-                "<b>原子ごとのMulliken電荷</b>"
-                "(球の色: 正電荷=青 ・ 中性付近=緑 ・ 負電荷=赤 のグラデーション)" +
+                f"<b>原子ごとのMulliken電荷</b>(ラベルの数値は常にこの値。{color_desc}){esp_note}" +
                 visualizer.atomic_charges_table_html(charges)))
         charge_labels_checkbox.disabled = False
         _render_charge_view()

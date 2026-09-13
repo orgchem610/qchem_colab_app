@@ -26,9 +26,11 @@ from qcapp.visualizer_pyscf import (  # noqa: F401
     get_homo_lumo_indices,
     render_orbital,
     compute_mulliken_charges,
+    compute_esp_at_atoms,
     atomic_charges_table_html,
     add_atom_charge_labels,
     add_atom_charge_spheres,
+    add_atom_esp_spheres,
     render_charges,
     render_density,
 )

@@ -107,6 +107,67 @@ def compute_mulliken_charges(mol, mf):
     return list(zip(symbols, [float(c) for c in atomic_charges]))
 
 
+def compute_esp_at_atoms(mol, mf, n_directions=6):
+    """各原子の「表面付近」における静電ポテンシャル(ESP)を計算する。
+
+    戻り値は [(元素記号, ESP値[Hartree/e]), ...] で、compute_mulliken_charges()
+    と同じ形式・同じ原子順序。
+
+    静電ポテンシャルは V(r) = Σ_A Z_A/|r-R_A| - ∫ρ(r')/|r-r'| dr' で定義され、
+    これは pyscf.tools.cubegen.mep() が実際に使っている式そのものである
+    (PySCF公式ソースコードで確認済み)。ただし mep() は格子(グリッド)上の値を
+    計算するもので、原子核の真上(r = R_A)では自分自身の核による項が
+    発散して評価できない。そのため、各原子の位置からファンデルワールス半径
+    だけ離れた点(その原子の「表面」に相当)を n_directions 方向でサンプリングし、
+    その平均値をその原子の代表的なESP値としている。
+
+    3Dmol.js側の不確実な「等値面に2つ目の物性値を重ねて色付けする」機能には
+    依存せず、既に動作確認済みの球表示(add_atom_charge_spheresと同じ仕組み)の
+    色だけをこの値で決める設計にしているため、以前検討した手法より実装・動作の
+    リスクが小さい。
+    """
+    from pyscf import df, gto, lib
+
+    dm = mf.make_rdm1()
+    if isinstance(dm, (tuple, list)):
+        dm = dm[0] + dm[1]  # UHFの場合はalpha+beta密度を合算
+    dm = np.asarray(dm)
+
+    # 6方向(±x, ±y, ±z)を既定とする。必要なら増減可能。
+    base_directions = np.array([
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+    ], dtype=float)
+    directions = base_directions[:n_directions] if n_directions <= 6 else base_directions
+
+    symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
+    all_sample_points = []
+    for i in range(mol.natm):
+        center = mol.atom_coord(i)  # Bohr単位(PySCF内部座標)
+        vdw_bohr = _VDW_RADII.get(symbols[i], _DEFAULT_VDW_RADIUS) / 0.529177210903
+        for d in directions:
+            all_sample_points.append(center + d * vdw_bohr)
+    coords = np.array(all_sample_points)
+
+    # 核による寄与(cubegen.mep()と同じ式)
+    vnuc = np.zeros(len(coords))
+    for i in range(mol.natm):
+        r = mol.atom_coord(i)
+        z = mol.atom_charge(i)
+        rp = r - coords
+        vnuc += z / np.linalg.norm(rp, axis=1)
+
+    # 電子密度による寄与(cubegen.mep()と同じ式)
+    vele = np.empty_like(vnuc)
+    for p0, p1 in lib.prange(0, vele.size, 600):
+        fakemol = gto.fakemol_for_charges(coords[p0:p1])
+        ints = df.incore.aux_e2(mol, fakemol)
+        vele[p0:p1] = np.einsum("ijp,ij->p", ints, dm)
+
+    mep_samples = (vnuc - vele).reshape(mol.natm, len(directions))
+    mep_per_atom = mep_samples.mean(axis=1)
+    return list(zip(symbols, [float(v) for v in mep_per_atom]))
+
+
 def atomic_charges_table_html(charges):
     """compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
     rows = "".join(
@@ -167,6 +228,56 @@ def _charge_gradient_color(charge, max_abs_charge):
     return "#{:02x}{:02x}{:02x}".format(*rgb)
 
 
+def _minmax_gradient_color(value, v_min, v_max):
+    """値を、青(低い)-緑(中間)-赤(高い)のグラデーション色に変換する。
+
+    _charge_gradient_color()とは異なり、0を中心とした対称な正規化ではなく、
+    実際の最小値・最大値の範囲で単純に0〜1に正規化する
+    (静電ポテンシャル(ESP)の値は0を挟んで対称とは限らないため)。
+    """
+    blue = (0x22, 0x55, 0xff)   # 低い
+    green = (0x33, 0xcc, 0x33)  # 中間
+    red = (0xff, 0x22, 0x22)    # 高い
+
+    if v_max - v_min <= 1e-12:
+        t = 0.5
+    else:
+        t = max(0.0, min(1.0, (value - v_min) / (v_max - v_min)))
+
+    if t < 0.5:
+        frac = t / 0.5
+        start, end = blue, green
+    else:
+        frac = (t - 0.5) / 0.5
+        start, end = green, red
+    rgb = tuple(int(round(start[i] + (end[i] - start[i]) * frac)) for i in range(3))
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def add_atom_esp_spheres(view, mol, esp_values, opacity=0.85, size_variation=0.2):
+    """原子ごとに、静電ポテンシャル(ESP)の値に応じたグラデーション色の
+    半透明の球を重ねて表示する(値が低いほど青、高いほど赤、中間は緑)。
+
+    球の大きさ・不透明度の考え方はadd_atom_charge_spheres()と同じ
+    (ファンデルワールス半径基準)。
+    """
+    coords = mol.atom_coords(unit="Angstrom")
+    values = [v for _, v in esp_values]
+    v_min, v_max = min(values), max(values)
+    for (sym, val), pos in zip(esp_values, coords):
+        color = _minmax_gradient_color(val, v_min, v_max)
+        vdw_radius = _VDW_RADII.get(sym, _DEFAULT_VDW_RADIUS)
+        frac = 0.5 if v_max - v_min <= 1e-12 else (val - v_min) / (v_max - v_min)
+        radius = vdw_radius * (1.0 - size_variation / 2 + size_variation * frac)
+        view.addSphere({
+            "center": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
+            "radius": radius,
+            "color": color,
+            "opacity": opacity,
+        })
+    return view
+
+
 def add_atom_charge_spheres(view, mol, charges, opacity=0.85, size_variation=0.2):
     """原子ごとに、Mulliken電荷の値に応じたグラデーション色の半透明の球を重ねて表示する。
 
@@ -202,13 +313,14 @@ def add_atom_charge_spheres(view, mol, charges, opacity=0.85, size_variation=0.2
     return view
 
 
-def render_charges(mol, charges, show_labels=True, width=500, height=400):
+def render_charges(mol, charges, esp_values=None, show_labels=True, width=500, height=400):
     """構造(ball and stick)+ 電荷で色分けした半透明の球 + (任意で)数値ラベルを表示する。
 
-    球の色は、正電荷=青、中性付近=緑、負電荷=赤となるグラデーションで、
-    その分子の中での最大|電荷|を基準に正規化している(add_atom_charge_spheres参照)。
-    数値ラベルは show_labels=False で非表示にできる(原子数が多い分子では
-    ラベルが重なって見づらくなるための対応)。
+    esp_values(compute_esp_at_atoms()の戻り値)が渡された場合は、球の色を
+    Mulliken電荷ではなく静電ポテンシャル(ESP、低い=青→中間=緑→高い=赤)で
+    決める。esp_valuesを渡さない場合はこれまで通りMulliken電荷で色を決める。
+    どちらの場合も、原子上の数値ラベル(show_labels=True時)は常にMulliken電荷
+    (charges引数)の値を表示する。
     """
     import py3Dmol
 
@@ -222,7 +334,10 @@ def render_charges(mol, charges, show_labels=True, width=500, height=400):
     view = py3Dmol.view(width=width, height=height)
     view.addModel(xyz_block, "xyz")
     view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
-    add_atom_charge_spheres(view, mol, charges)
+    if esp_values is not None:
+        add_atom_esp_spheres(view, mol, esp_values)
+    else:
+        add_atom_charge_spheres(view, mol, charges)
     if show_labels:
         add_atom_charge_labels(view, mol, charges)
     view.zoomTo()

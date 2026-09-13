@@ -71,5 +71,20 @@ class TestChargeGradientColor(unittest.TestCase):
         self.assertEqual(color, "#33cc33")
 
 
+class TestMinMaxGradientColor(unittest.TestCase):
+    def test_min_value_is_pure_blue(self):
+        self.assertEqual(visualizer_pyscf._minmax_gradient_color(-1.0, -1.0, 1.0), "#2255ff")
+
+    def test_max_value_is_pure_red(self):
+        self.assertEqual(visualizer_pyscf._minmax_gradient_color(1.0, -1.0, 1.0), "#ff2222")
+
+    def test_middle_value_is_green(self):
+        self.assertEqual(visualizer_pyscf._minmax_gradient_color(0.0, -1.0, 1.0), "#33cc33")
+
+    def test_flat_range_does_not_crash(self):
+        color = visualizer_pyscf._minmax_gradient_color(0.5, 0.5, 0.5)
+        self.assertEqual(color, "#33cc33")
+
+
 if __name__ == "__main__":
     unittest.main()
