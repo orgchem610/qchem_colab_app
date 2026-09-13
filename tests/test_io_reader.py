@@ -1,7 +1,7 @@
 """
 tests/test_io_reader.py
 ------------------------
-qcapp.io_reader の単体テスト。
+common.io_reader の単体テスト。
 
 このテストファイルは pyscf / ase をインポートしないため、
 PySCFがインストールされていない環境(このリポジトリの開発サンドボックス等)
@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import io_reader  # noqa: E402
+from common import io_reader  # noqa: E402
 
 
 def _write_tmp_xyz(content: str) -> str:

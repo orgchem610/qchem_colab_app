@@ -62,20 +62,58 @@ qchem_colab_app/
 │   ├── functionals.yaml      # 計算手法の選択肢(現在: HFのみ)
 │   ├── basis_sets.yaml       # 基底関数の選択肢(現在: 3-21Gのみ)
 │   └── defaults.yaml         # 電荷・多重度・収束条件などの既定値
-├── qcapp/
-│   ├── __init__.py           # バージョン番号, config/読み込み共通関数
-│   ├── io_reader.py          # .xyz読み込み・入力バリデーション
-│   ├── engine.py              # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
-│   ├── optimize.py            # geomeTRICによる構造最適化
-│   ├── freq.py                 # Hessian・振動数解析
-│   ├── writer_xyz.py           # xyz出力(単一構造・多フレーム)
-│   ├── writer_molden.py        # moldenファイル出力
-│   └── visualizer.py            # py3Dmol / plotly ビジュアライザー
+├── common/                    # 計算エンジンに依存しない共通モジュール(将来のuma_appとも共有)
+│   ├── io_reader.py             # .xyz読み込み・入力バリデーション
+│   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム)
+│   └── plot_common.py             # エネルギープロット・トラジェクトリ/振動アニメーション
+├── qcapp/                     # PySCFを計算エンジンとするab initio計算専用(uma_appからは呼ばない)
+│   ├── __init__.py               # バージョン番号, config/読み込み共通関数
+│   ├── engine.py                  # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
+│   ├── optimize.py                 # geomeTRICによる構造最適化
+│   ├── freq.py                      # Hessian・振動数解析
+│   ├── writer_molden.py              # moldenファイル出力
+│   ├── visualizer_pyscf.py            # 分子軌道・原子電荷等、PySCF固有の可視化
+│   └── visualizer.py                   # common+pyscf固有の可視化をまとめたファサード(gui.py用)
 ├── gui.py                     # ipywidgets によるGUI組み立て
 └── tests/
     ├── test_io_reader.py        # 入力読み込み・バリデーションの単体テスト
-    └── test_config.py            # 設定ファイルのスキーマテスト
+    ├── test_config.py            # 設定ファイルのスキーマテスト
+    └── test_visualizer.py         # 可視化のうちpyscf/py3Dmol非依存の部分の単体テスト
 ```
+
+### `common`/`qcapp`という2つのトップレベルパッケージに分けた理由
+
+UMA活用アプリ(`uma_app`、未実装)を今後追加するにあたり、「UMA版からも
+呼び出せる汎用的なコード」と「PySCF計算エンジンに固有のコード」を
+物理的に分離しておくための整理です。`common/`は引数がプレーンな
+Pythonの値(元素記号・座標・エネルギーの数列等)で完結しており、将来
+`uma_app`からもそのままimportして再利用できます。`qcapp/`(=PySCF専用)は
+PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えません。
+`common`と`qcapp`はどちらもリポジトリ直下の対等な(どちらが親でも子でもない)
+パッケージとして置いています。`qcapp/visualizer.py`は、この分割前と同じ
+`visualizer.関数名(...)`という呼び方を`gui.py`側で変えずに済むよう、
+`common`と`qcapp`固有の可視化関数をまとめて再エクスポートするだけの
+薄いファサードです。
+
+(以前のバージョンでは`common/`を`qcapp/`の中に入れる構成でお渡ししましたが、
+「`common`は`qcapp`専用の一部ではなく、`qcapp`と`uma_app`が対等に依存する
+共通基盤である」という位置づけをより素直に表せるよう、上記の構成に修正しました)
+
+### `gui.py`をルート直下に置いている理由(設計意図)
+
+`gui.py`は「`qcapp`パッケージが提供する部品(入出力・計算・可視化)を
+1つのColabアプリの画面として組み立てる」役割に特化した、**アプリの
+組み立て役(エントリーポイント)**であり、`qcapp`パッケージ自体が提供する
+再利用可能な部品(ライブラリ)とは性質が異なるため、意図的にパッケージの
+外に置いています。今後`gui_uma.py`を追加する際も、`gui.py`は`qcapp`と
+`common`から、`gui_uma.py`は`common`と`uma_app`から、それぞれ必要な部品を
+自由に組み合わせられます。仮に`gui.py`を`qcapp`の中に、`gui_uma.py`を
+`uma_app`の中に入れてしまうと、例えば`gui_uma.py`(`uma_app`側)が
+`common`の関数を再利用する際に「`uma_app`パッケージの中から`common`
+パッケージを参照する」という向きの依存が生まれます。これ自体は`common`が
+独立したトップレベルパッケージである今の構成なら実は問題にはなりませんが、
+「アプリの組み立て役」と「再利用可能な部品」という役割の違いを分かりやすく
+保つため、`gui.py`/`gui_uma.py`はルート直下に置くことにしています。
 
 ## 使い方
 
@@ -151,6 +189,95 @@ numpy等の基盤部分はそもそも変化しないため、実際に影響が
   pyscf_basis: "6-31g*"
   ecp: null
 ```
+
+### `purposes.yaml`(計算目的)の位置づけについて
+
+計算手法・基底関数とは異なり、TS(遷移状態)最適化のような**新しい計算目的**の
+追加には、`config/purposes.yaml`に1行足すだけでは済まず、新しいコード
+(新しい最適化関数・GUI要素等)が必ず必要になります。これは、手法・基底関数が
+「同じ計算パイプライン(Mole構築→SCF実行)の中のパラメータ違い」であるのに
+対し、計算目的は「実行される処理そのものが異なる」ためです。
+
+そのため、`purposes.yaml`の役割は「コード変更なしで機能を増やす」ことではなく、
+**「バックエンドの機能一覧と画面上の選択肢に食い違いが起きないようにする」
+という一貫性の保証**に変わります。この目的であれば、`purposes.yaml`を
+使い続ける意味は十分にあると考えます。以下、設定ファイルを使う場合・
+使わない場合、それぞれの実装方針です。
+
+**方針A: 設定ファイル(YAML)を使い、`handler`キーで実装と対応付ける**
+
+```yaml
+# config/purposes.yaml (将来のイメージ)
+- key: "geometry_optimization"
+  label: "構造最適化"
+  handler: "geometry_optimization"   # ← 対応するPython側のハンドラ名
+  supports_frequency: true
+- key: "ts"
+  label: "TS(遷移状態)最適化"
+  handler: "ts_optimization"
+  supports_frequency: true
+```
+```python
+# gui.py or 別モジュールで、handler名 → 実際の関数、の対応表を持つ
+PURPOSE_HANDLERS = {
+    "geometry_optimization": optimize.run_geometry_optimization,
+    "ts_optimization": optimize.run_ts_optimization,  # 実装時に追加
+}
+
+# 起動時に、YAMLに書かれている全purposeについてハンドラが
+# 登録されているかを検証する(片方だけ追加してもう片方を忘れる、という
+# 事故をここで検出する)
+def validate_purpose_handlers(purposes, handlers):
+    missing = [p["key"] for p in purposes if p["handler"] not in handlers]
+    if missing:
+        raise RuntimeError(f"ハンドラが未登録のpurposeがあります: {missing}")
+```
+新しい計算目的を追加する際は、①`purposes.yaml`にエントリを追記、②対応する
+関数を実装、③`PURPOSE_HANDLERS`に登録、の3点セットが必要ですが、
+どれか1つを忘れると`validate_purpose_handlers()`がノートブック起動時に
+エラーで教えてくれるため、「画面には選択肢があるのに実装がない」
+「実装したのに画面から選べない」という食い違いを機械的に防げます。
+
+**方針B: 設定ファイルを使わず、Pythonのデコレータで登録する**
+
+```python
+# optimize.py
+PURPOSE_REGISTRY = {}
+
+def register_purpose(key, label, supports_frequency=True):
+    def _decorator(func):
+        PURPOSE_REGISTRY[key] = {"label": label, "handler": func,
+                                  "supports_frequency": supports_frequency}
+        return func
+    return _decorator
+
+@register_purpose("geometry_optimization", label="構造最適化")
+def run_geometry_optimization(...):
+    ...
+
+@register_purpose("ts", label="TS(遷移状態)最適化")
+def run_ts_optimization(...):
+    ...
+```
+実装とメタデータ(ラベル・対応可否)が同じ場所に書かれるため、「実装だけ
+追加して登録を忘れる」という食い違いがそもそも起きにくいのが利点です。
+YAMLファイルを介さない分、非プログラマが選択肢一覧をぱっと確認しづらい
+(コードを読む必要がある)のが欠点です。
+
+**方針C: 設定ファイルは表示用ラベルのみとし、対応関係はテストで検証する**
+
+`purposes.yaml`は現状通り「ラベルのみ」の簡素な形に留め、`config/`の
+内容とコード側の対応関係が崩れていないかを`tests/`内の自動テストで
+継続的に確認する方針です。実装の手間は増えませんが、食い違いに気づけるのは
+テスト実行時(≒Colabで動かす前にご自身の手元で気づける)に限られ、
+方針Aのような実行時の即時検出はできません。
+
+**このプロジェクトでの推奨**: 現状は計算目的が1つ(構造最適化)しかなく
+過剰な設計になるため、今すぐ方針A/Bを導入する必要はないと考えます。
+次にTS最適化等、2つ目の計算目的を追加するタイミングで方針A(YAML+
+ハンドラ対応表+起動時検証)への移行をご提案します。理由は、`purposes.yaml`
+が持つ「非プログラマにも選択肢一覧が一目で分かる」という利点を保ちつつ、
+起動時の自動検証で一貫性を機械的に保証できるためです。
 
 ## バージョン管理・ブランチ運用の方針
 
@@ -289,6 +416,20 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
   対応関係が変わっている可能性があります。`ColabApp.ipynb` のSetup Section内、
   GPU4PySCFインストールセルのパッケージ名を読み替えてください。GPUが
   使えなくても、CPU実行として問題なく計算は継続されます。
+- **最終構造でのCPU再計算・振動数計算になぜGPUを使わないのか**:
+  GPU4PySCFの解析的Hessian・分子軌道(cubegen)・Mulliken電荷計算などの
+  対応状況は主にDFT向けに整備されており、現在のプロトタイプで使っているHFでの
+  対応状況や、GPU上のSCFオブジェクトをこれらの解析関数にそのまま渡せるかは
+  今回のリサーチでは確認しきれませんでした。無理にGPUを使わせようとして
+  失敗する(あるいは気づかないまま不正確な結果になる)リスクを避け、
+  確実に動作するCPU版に一度変換する設計にしています。GPUを使う場合の
+  デメリットとしては、Hessian計算はエネルギー計算よりメモリを多く使うため
+  Colab無料枠のGPU(T4, VRAM 約15GB)ではむしろメモリ不足になりやすいこと、
+  GPU側のこれらの機能はCPU版ほど枯れていない(実績が少ない)ことが挙げられます。
+  Hessian計算だけ試験的にGPUを使う(失敗したらCPUにフォールバックする)という
+  改善は可能だと考えていますが、可視化まわりで何度か実機でしか分からない
+  不具合が続いたこともあり、今回は見送っています。ご要望があれば次の対応で
+  試験的に実装します。
 - **SCFが収束しない**: `engine.run_scf()` がレベルシフト付きで自動的に
   1回リトライしますが、それでも収束しない場合は画面に日本語の原因・対策が
   表示されます。初期構造・電荷・スピン多重度・基底関数の設定を見直してください。
@@ -339,17 +480,74 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
 反映します)。UMAについては別途ライセンス条件が大きく異なる(個人情報を伴う
 利用許諾が必要)ため、後述の「UMA活用アプリの設計提案」で改めて扱っています。
 
-## 将来的な構成: UMA利用版との分離
+## 将来的な構成: UMA利用版の追加(設計案)
 
-UMA(ColabReactionが使用している機械学習原子間ポテンシャル)による予備最適化・
-振動数プレビュー機能は、この`ColabApp.ipynb`には組み込まず、**同じGitHubリポジトリ内に
-別のノートブック(例: `ColabApp_UMA.ipynb`)を新規作成する形**で追加する方針です。
-`config/` や `qcapp/` のロジックはリポジトリ単位で共通管理しつつ、Google Colab上では
+UMA(ColabReactionが使用している機械学習原子間ポテンシャル)による高速な構造最適化・
+TS探索・振動数予測は、この`ColabApp.ipynb`には組み込まず、**同じGitHubリポジトリ内に
+別のノートブック`ColabApp_UMA.ipynb`を新規作成する形**で追加する方針です。
+Google Colab上では
 `https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp.ipynb`
-(UMAなし版)と
+(UMAなし版、既存)と
 `https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp_UMA.ipynb`
-(UMA版)という別々のURLで開けるようにします。UMA固有のロジックは
-`qcapp/uma_engine.py`(新規)に、UMA版専用のGUI組み立ては`gui.py`を直接いじらず
-`gui_uma.py`(新規)に分離し、`gui.py`(UMAなし版)には手を入れない設計とすることで、
-1画面に選択肢が増えてごちゃつくことも、コードが複雑に絡み合うことも避けられます。
+(UMA版、新規)という別々のURLで開けるようにします。
 
+### ディレクトリ構成案
+
+```
+qchem_colab_app/
+├── ColabApp.ipynb              # 既存(変更なし)
+├── ColabApp_UMA.ipynb           # 新規追加
+├── config/                      # 既存(共通利用)
+├── common/                       # 既存。UMA版もここは再利用する
+├── qcapp/                         # 既存(ab initio計算専用、UMA版からは呼ばない)
+├── uma_app/                        # 新規: UMA関連を完全に分離
+│   ├── __init__.py
+│   ├── uma_engine.py                 # HFトークン管理・FAIRChemCalculatorの構築
+│   ├── uma_optimize.py                # ASE + UMAによる構造最適化
+│   ├── uma_ts.py                       # TS探索(Sella or ASE組み込みのdimer法。要検討)
+│   └── uma_freq.py                      # ASE Vibrations + UMAによる振動数予測
+├── gui.py                          # 既存(変更なし)
+├── gui_uma.py                        # 新規: UMA版GUI組み立て(commonとuma_appを利用)
+├── requirements.txt                  # 既存(変更なし)
+└── requirements-uma.txt               # 新規: fairchem-core等UMA専用の追加依存
+```
+
+`uma_app/`は`qcapp`(PySCF専用)には一切依存せず、`common`(構造の読み込み・検証・
+xyz出力・エネルギープロット・トラジェクトリ/振動アニメーション)のみを再利用します。
+`gui.py`/`gui_uma.py`をルート直下に置く設計意図は上記「`gui.py`をルート直下に
+置いている理由」を参照してください。
+
+### 想定ワークフロー
+
+1. 構造アップロード・検証(`common.io_reader`を再利用)
+2. Hugging Face Tokenの入力(ColabReactionと同じ方式。教員等の大人による代理セットアップを想定)
+3. 計算目的を選択: 構造最適化 / TS探索
+4. **振動数予測は独立の計算目的とはせず、「構造最適化の後処理として振動数予測も行う」
+   チェックボックス(既存アプリの「振動数計算も実行する」と同じ位置づけ)として提供**。
+   単独機能としての振動数予測は現時点では実装しない(将来的に必要になれば追加検討)。
+5. UMA(ASE経由)で計算実行。結果は既存アプリと同じ`.xyz`形式で出力し、
+   ColabReaction・既存ColabApp.ipynbの双方に受け渡し可能にする
+6. 画面には「これはUMAによる高速な予測値であり、厳密なDFT等の値ではない」旨を明記する
+
+### 技術的な構成要素
+
+| 用途 | 使うもの | 補足 |
+|---|---|---|
+| 構造最適化 | ASE + `fairchem-core`の`FAIRChemCalculator`(`task_name="omol"`) + ASEの最適化アルゴリズム(LBFGS等) | UMAは通常のASE Calculatorとして振る舞う |
+| TS探索 | 未確定。`Sella`(外部パッケージ)またはASE組み込みの`ase.mep.dimer`(Dimer法) | Sellaの方がMLIP+TS探索の定番として広く使われているが外部依存が増える。ASE本体のみで完結させる案も検討可能で、どちらを選んでも新規コードは必要 |
+| 振動数予測 | ASEの`ase.vibrations.Vibrations`(数値Hessian) | UMAの1回の評価が非常に高速なため、数値差分によるHessian計算でも数分程度で完了する見込み |
+
+### ライセンス上の注意点
+
+- `fairchem-core`(コード本体): MITライセンス。制約なし。
+- **UMAの学習済み重み**: FAIR Chemistryライセンス(Hugging Face上でゲート)。
+  調査の結果、**アプリの画面上やソースコード上に何らかの表示を行う法的義務は
+  見つかりませんでした**(Meta社のLlamaのような「Built with UMA」等の明記義務は
+  確認できませんでした)。必要な対応は、利用者ごとのHugging Faceアカウント作成・
+  モデルへのアクセス申請・アクセストークンの発行のみです。ただし、研究成果を
+  論文等で公表する場合は利用の明記が求められる点、契約への同意には準拠法上の
+  同意可能年齢に達している必要がある点は既にお伝えした通りで、変わりありません。
+  Hugging Face上の完全なライセンス文言は変更される可能性があるため、公開直前に
+  改めて確認することを推奨します。
+- `Sella`を採用する場合は、採用が決まり次第ライセンスを確認します。
+- `ASE`: LGPL-2.1。改変せず利用する分にはアプリ側のライセンスに影響しません。

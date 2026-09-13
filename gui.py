@@ -30,8 +30,9 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, Image
 
 from qcapp import load_yaml, __version__
-from qcapp import io_reader, engine, optimize, freq as freq_module
-from qcapp import writer_xyz, writer_molden, visualizer
+from common import io_reader, writer_xyz
+from qcapp import engine, optimize, freq as freq_module
+from qcapp import writer_molden, visualizer
 
 
 # -----------------------------------------------------------------------------
@@ -458,7 +459,8 @@ def build_app():
                 final_coords = [list(c) for c in final_mol.atom_coords(unit="Angstrom")]
 
                 final_xyz_path = os.path.join(out_dir, "final_structure_for_ColabReaction.xyz")
-                writer_xyz.write_final_structure(final_symbols, final_coords, final_xyz_path)
+                xyz_comment = f"Optimized by qchem_colab_app (v{__version__}, {functional_key}/{basis_key})"
+                writer_xyz.write_final_structure(final_symbols, final_coords, final_xyz_path, comment=xyz_comment)
 
                 traj_xyz_path = os.path.join(out_dir, "optimization_trajectory.xyz")
                 writer_xyz.write_trajectory(

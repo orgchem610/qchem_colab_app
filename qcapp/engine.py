@@ -20,7 +20,7 @@ GPU4PySCF がインストールされ、かつ実際に初期化に成功した�
 import warnings
 
 from qcapp import load_yaml
-from qcapp.io_reader import Structure
+from common.io_reader import Structure
 
 
 class SCFConvergenceError(RuntimeError):
