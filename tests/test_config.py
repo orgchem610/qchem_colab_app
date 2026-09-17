@@ -39,6 +39,14 @@ class TestFunctionalsYaml(unittest.TestCase):
         self.assertIn("hf", keys)
         self.assertEqual(keys["hf"]["engine"], "hf")
 
+    def test_b3lyp_is_registered_and_gaussian_compatible(self):
+        functionals = load_yaml("functionals.yaml")
+        keys = {f["key"]: f for f in functionals}
+        self.assertIn("b3lyp", keys)
+        self.assertEqual(keys["b3lyp"]["engine"], "dft")
+        # "b3lyp"ではなく明示的に"b3lypg"(Gaussian互換のVWN3版)であることを確認
+        self.assertEqual(keys["b3lyp"]["xc"], "b3lypg")
+
     def test_all_entries_have_required_fields(self):
         functionals = load_yaml("functionals.yaml")
         for item in functionals:
@@ -55,6 +63,13 @@ class TestBasisSetsYaml(unittest.TestCase):
         self.assertIn("main_group", basis_cfg)
         keys = [b["key"] for b in basis_cfg["main_group"]]
         self.assertIn("3-21g", keys)
+
+    def test_631_series_is_registered_in_main_group(self):
+        basis_cfg = load_yaml("basis_sets.yaml")
+        keys = {b["key"]: b for b in basis_cfg["main_group"]}
+        for key in ("6-31g", "6-31g*", "6-31g**"):
+            self.assertIn(key, keys)
+            self.assertEqual(keys[key]["pyscf_basis"], key)
 
     def test_transition_metal_ecp_category_exists_even_if_empty(self):
         basis_cfg = load_yaml("basis_sets.yaml")

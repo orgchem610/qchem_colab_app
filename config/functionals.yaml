@@ -7,16 +7,22 @@
 #   engine : "hf" または "dft" (engine.pyがこの値でRHF/UHFかRKS/UKSかを分岐します)
 #   xc     : engineが"dft"の場合に使う交換相関汎関数名(PySCFの記法)。HFの場合はnullのままでOK。
 #
-# B3LYPなど新しい手法を追加したいときは、engine: "dft" の項目を1つ書き足すだけです。
-# コード(engine.py)を変更する必要はありません。
+# 新しい手法を追加したいときは、engine: "dft" の項目を1つ書き足すだけです。
+# コード(engine.py)を変更する必要はありません(実際にB3LYP追加時もengine.pyは
+# 無変更で動作しました)。
 
 - label: "HF (Hartree-Fock)"
   key: "hf"
   engine: "hf"
   xc: null
 
-# ----- 今後追加予定(まだ実装していません。プレースホルダとして残しています) -----
-# - label: "B3LYP"
-#   key: "b3lyp"
-#   engine: "dft"
-#   xc: "b3lyp"
+- label: "B3LYP"
+  key: "b3lyp"
+  engine: "dft"
+  # "b3lyp"ではなく明示的に"b3lypg"を指定している。PySCFの"b3lyp"文字列は
+  # バージョン2.3以降Gaussianと同じVWN3(VWN-RPA)版がデフォルトになったが、
+  # それ以前のバージョンではVWN5版だった(=Gaussianの値と一致しない)という
+  # 経緯があるため、PySCFのバージョンに関わらず常にGaussian互換のVWN3版を
+  # 明示的に指定できる"b3lypg"を使う(pyscf/dft/libxc.py参照。
+  # 'B3LYPG'はGaussianが使うVWN3版を指すエイリアスとして常に固定されている)。
+  xc: "b3lypg"

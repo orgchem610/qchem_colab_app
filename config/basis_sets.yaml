@@ -19,16 +19,20 @@ main_group:
     key: "3-21g"
     pyscf_basis: "3-21g"
     ecp: null
+  - label: "6-31G"
+    key: "6-31g"
+    pyscf_basis: "6-31g"
+    ecp: null
+  - label: "6-31G*"
+    key: "6-31g*"
+    pyscf_basis: "6-31g*"
+    ecp: null
+  - label: "6-31G**"
+    key: "6-31g**"
+    pyscf_basis: "6-31g**"
+    ecp: null
 
 # ----- 今後追加予定(まだ実装していません。プレースホルダとして残しています) -----
-#  - label: "6-31G"
-#    key: "6-31g"
-#    pyscf_basis: "6-31g"
-#    ecp: null
-#  - label: "6-31G*"
-#    key: "6-31g*"
-#    pyscf_basis: "6-31g*"
-#    ecp: null
 #  - label: "6-31+G**"
 #    key: "6-31+g**"
 #    pyscf_basis: "6-31+g**"
