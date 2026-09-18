@@ -127,5 +127,32 @@ class TestTransitionMetalDetection(unittest.TestCase):
         self.assertTrue(io_reader.contains_transition_metal(structure))
 
 
+class TestReadStructureDispatch(unittest.TestCase):
+    """read_structure()の拡張子による振り分けロジックのテスト。
+    .com/.gjf/.pdbの実際の読み込み(ASEが必要)はこの開発環境では
+    検証できないため対象外(Google Colab上での実機確認が必要)。
+    """
+
+    def test_xyz_extension_uses_builtin_parser(self):
+        xyz = "1\ncomment\nHe 0.0 0.0 0.0\n"
+        path = _write_tmp_xyz(xyz)
+        structure = io_reader.read_structure(path)
+        self.assertEqual(structure.symbols, ["He"])
+
+    def test_mol_extension_gives_clear_unsupported_message(self):
+        with self.assertRaises(io_reader.StructureError) as ctx:
+            io_reader.read_structure("dummy.mol")
+        self.assertIn("RDKit", str(ctx.exception))
+
+    def test_sdf_extension_gives_clear_unsupported_message(self):
+        with self.assertRaises(io_reader.StructureError) as ctx:
+            io_reader.read_structure("dummy.sdf")
+        self.assertIn("RDKit", str(ctx.exception))
+
+    def test_totally_unknown_extension_raises(self):
+        with self.assertRaises(io_reader.StructureError):
+            io_reader.read_structure("dummy.docx")
+
+
 if __name__ == "__main__":
     unittest.main()

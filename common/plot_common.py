@@ -80,6 +80,64 @@ def energy_convergence_html(energies):
     return fig.to_html(include_plotlyjs=True, full_html=False)
 
 
+def render_single_structure(symbols, coords, width=500, height=400):
+    """1つの構造だけをball and stickで表示するviewを作る(アニメーションなし)。
+
+    エネルギープロット上の特定の点をクリックした際に、その点に対応する
+    構造だけを表示する用途を想定している。
+    """
+    import py3Dmol
+
+    lines = [str(len(symbols)), "single structure"]
+    for sym, pos in zip(symbols, coords):
+        lines.append(f"{sym} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
+    xyz_block = "\n".join(lines)
+
+    view = py3Dmol.view(width=width, height=height)
+    view.addModel(xyz_block, "xyz")
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
+    view.zoomTo()
+    return view
+
+
+def energy_convergence_figurewidget(energies, width=700, height=400):
+    """クリックで対応する構造を確認できる、対話的なplotly FigureWidgetを作る。
+
+    ColabReactionのエネルギーダイヤグラム(クリックした点に対応する構造を
+    表示する機能)を参考にしている。go.Figure(静的)ではなくgo.FigureWidgetを
+    使う理由: FigureWidgetはipywidgetsの標準的なウィジェットプロトコル
+    (Jupyter Comm)経由で描画・イベント通知される正規のウィジェットであり、
+    去るdisplay(fig)やfig.show()(mimetype経由の表示)とは異なる仕組みのため、
+    それらがColab上のipywidgets.Output()内で描画されなかった問題を
+    回避できる可能性がある(ただし実機未検証。README参照)。
+
+    戻り値のFigureWidgetに対して、呼び出し側で
+    `fig_widget.data[0].on_click(callback)` のようにクリックイベントの
+    コールバックを登録できる。
+    """
+    import plotly.graph_objects as go
+
+    fig = go.FigureWidget()
+    if not energies:
+        fig.update_layout(title="No energy history available")
+        return fig
+
+    e_final = energies[-1]
+    rel = [(e - e_final) * _HARTREE2KCAL for e in energies]
+    fig.add_scatter(
+        x=list(range(len(energies))), y=rel, mode="lines+markers",
+        name="Relative Energy", marker=dict(size=10),
+    )
+    fig.update_layout(
+        title="Energy Convergence (click a point to view that structure)",
+        xaxis_title="Optimization Step",
+        yaxis_title="Relative Energy (kcal/mol, vs. final structure)",
+        template="plotly_white",
+        width=width, height=height,
+    )
+    return fig
+
+
 def render_trajectory(symbols, coords_history, energies=None, width=500, height=400):
     """最適化トラジェクトリをpy3Dmolのアニメーションとして表示するviewを作る。"""
     import py3Dmol

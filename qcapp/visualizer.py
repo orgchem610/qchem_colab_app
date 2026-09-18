@@ -19,7 +19,9 @@ from common.plot_common import (  # noqa: F401
     plot_energy_convergence,
     energy_convergence_png,
     energy_convergence_html,
+    energy_convergence_figurewidget,
     render_trajectory,
+    render_single_structure,
     render_vibration,
 )
 from qcapp.visualizer_pyscf import (  # noqa: F401

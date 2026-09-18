@@ -38,6 +38,12 @@ geometric>=1.0,<2
 # --- 設定ファイル(yaml.safe_load等、ごく基本的な機能のみ使用) ---------------
 PyYAML>=6.0
 
+# 構造ファイルの読み込み(.xyz/.com/.gjf/.pdb)。ase.io.read()とAtomsオブジェクトの
+# 基本API(get_chemical_symbols/get_positions)はごく安定しているため下限のみ指定。
+# UMA活用アプリ(uma_app)でもASEはASE+FAIRChemCalculatorの土台として必須になる
+# ため、本アプリで採用しても依存関係全体としては増加にならない見込み。
+ase>=3.22
+
 # --- GUI(FileUpload.valueの型が7→8で変わっているため上限も指定) -----------
 ipywidgets>=8.1,<9
 

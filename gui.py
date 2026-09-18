@@ -49,27 +49,31 @@ def _dropdown_from_list(items, description, width="420px"):
     )
 
 
-def _extract_uploaded_bytes(upload_widget):
+def _extract_uploaded_file(upload_widget):
     """ipywidgets 7.x / 8.x どちらのFileUpload.valueの形にも対応して
-    アップロードされたファイルの中身(bytes)を取り出す。
+    アップロードされたファイルの中身(bytes)とファイル名を取り出す。
+
+    ファイル名(拡張子)は、.xyz以外の形式(.com/.gjf/.pdb)をASE経由で
+    読み込む際に、どの形式として扱うかを判定するために必要。
     """
     value = upload_widget.value
     if not value:
         raise io_reader.StructureError(
-            "構造ファイル(.xyz)がアップロードされていません。"
-            "「構造ファイル(.xyz)」のアップロード欄からファイルを選択してください。"
+            "構造ファイルがアップロードされていません。"
+            "「構造ファイル」のアップロード欄からファイルを選択(またはドラッグ&ドロップ)してください。"
         )
 
     # ipywidgets 8.x: tuple[dict] (各要素が name/type/size/content を持つ)
     if isinstance(value, (tuple, list)):
         first = value[0]
-        content = first["content"] if isinstance(first, dict) else first.content
-        return bytes(content)
+        if isinstance(first, dict):
+            return bytes(first["content"]), first["name"]
+        return bytes(first.content), first.name
 
     # ipywidgets 7.x: dict[filename] -> {"content": ..., ...}
     if isinstance(value, dict):
-        first = next(iter(value.values()))
-        return bytes(first["content"])
+        filename, first = next(iter(value.items()))
+        return bytes(first["content"]), filename
 
     raise RuntimeError(
         f"想定外の形式のFileUpload.valueを受け取りました(型: {type(value)})。"
@@ -112,14 +116,21 @@ def build_app():
     # --- ① 入力ウィジェット ---------------------------------------------------
     title = widgets.HTML(
         f"<h2>量子化学計算プロトタイプ (qchem_colab_app v{__version__})</h2>"
-        f"<p>現在対応している計算手法・基底関数は限定されています"
-        f"(HF / 3-21G のみ)。今後のバージョンで拡張予定です。</p>"
+        f"<p>対応している計算手法・基底関数は「① 構造ファイルと計算条件」の"
+        f"ドロップダウンからご確認ください。</p>"
     )
 
     upload = widgets.FileUpload(
-        accept=".xyz", multiple=False,
-        description="構造ファイル(.xyz)",
-        layout=widgets.Layout(width="300px"),
+        accept=".xyz,.com,.gjf,.pdb", multiple=False,
+        description="構造ファイル(.xyz/.com/.gjf/.pdb)",
+        layout=widgets.Layout(width="320px"),
+    )
+    upload_hint = widgets.HTML(
+        "<p style='color:#666'>ファイル選択ボタンの上に構造ファイルをドラッグ&"
+        "ドロップしてもアップロードできます(ブラウザ・ipywidgetsのバージョンに"
+        "よっては動作しない場合があります。その場合はボタンをクリックして"
+        "選択してください)。対応形式: .xyz, .com, .gjf, .pdb"
+        "(.mol/.sdfは現時点では未対応です)</p>"
     )
 
     purpose_dd = _dropdown_from_list(purposes, "計算目的")
@@ -147,6 +158,7 @@ def build_app():
         title,
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         upload,
+        upload_hint,
         purpose_dd, method_dd, basis_dd,
         widgets.HBox([charge_input, mult_input]),
         freq_checkbox,
@@ -161,6 +173,11 @@ def build_app():
     # --- ③ 可視化エリア ---------------------------------------------------
     viz_header = widgets.HTML("<h4>③ 可視化</h4>")
     energy_output = widgets.Output()
+    step_slider = widgets.IntSlider(
+        description="ステップ", min=0, max=0, value=0, disabled=True,
+        style={"description_width": "70px"}, layout=widgets.Layout(width="420px"),
+    )
+    step_view_output = widgets.Output()
     traj_output = widgets.Output()
 
     vib_mode_dd = widgets.Dropdown(description="振動モード", options=[], disabled=True,
@@ -181,7 +198,13 @@ def build_app():
 
     viz_box = widgets.VBox([
         viz_header,
-        widgets.HTML("<b>エネルギー収束</b>"), energy_output,
+        widgets.HTML(
+            "<b>エネルギー収束</b>"
+            "<p style='color:#666;margin:2px 0'>グラフ上の点をクリックすると、"
+            "対応する構造を下に表示します(お使いの環境でクリックが効かない場合は、"
+            "代わりにスライダーで同じことができます)。</p>"
+        ),
+        energy_output, step_slider, step_view_output,
         widgets.HTML("<b>構造最適化の軌跡(アニメーション)</b>"), traj_output,
         widgets.HTML("<b>振動アニメーション</b>"), widgets.HBox([vib_mode_dd, vib_button]), vib_output,
         widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_output,
@@ -199,21 +222,64 @@ def build_app():
     # -------------------------------------------------------------------
     # 可視化の描画
     # -------------------------------------------------------------------
+    def _show_structure_at_step(step_index):
+        opt_result = state["opt_result"]
+        step_index = max(0, min(step_index, len(opt_result.coords_history) - 1))
+        with step_view_output:
+            clear_output(wait=True)
+            e = opt_result.energies[step_index]
+            e_rel_kcal = (e - opt_result.energies[-1]) * 627.5094740631
+            print(f"ステップ {step_index}: 相対エネルギー {e_rel_kcal:+.2f} kcal/mol")
+            view = visualizer.render_single_structure(
+                opt_result.symbols, opt_result.coords_history[step_index])
+            view.show()
+
+    def _on_step_slider_changed(change):
+        if change["name"] == "value":
+            _show_structure_at_step(change["new"])
+
+    step_slider.observe(_on_step_slider_changed, names="value")
+
     def _render_energy_and_trajectory():
         opt_result = state["opt_result"]
+        n_steps = len(opt_result.energies)
+
         with energy_output:
             clear_output(wait=True)
             try:
-                png_bytes = visualizer.energy_convergence_png(opt_result.energies)
-                # 画像自体は綺麗にレイアウトされたサイズ(700x400相当)で生成し、
-                # 表示サイズ(width/height)だけをここで縮小する
-                # (画像データ自体を小さくするとグラフ内の文字が崩れるため)。
-                display(Image(data=png_bytes, width=460, height=270))
+                # ColabReactionのエネルギーダイヤグラム(クリックで対応する構造を
+                # 表示する機能)を参考に、対話的なFigureWidgetを試みる。
+                # 実機で未検証のため、失敗した場合は静的PNG画像に自動フォールバックする。
+                fig_widget = visualizer.energy_convergence_figurewidget(opt_result.energies)
+
+                def _on_point_click(trace, points, selector):
+                    if points.point_inds:
+                        _show_structure_at_step(points.point_inds[0])
+
+                fig_widget.data[0].on_click(_on_point_click)
+                display(fig_widget)
             except Exception as e:
-                # kaleidoが使えない等の理由でPNG化に失敗した場合のフォールバック。
-                print(f"(静的画像への変換に失敗したため、HTML表示にフォールバックします: {e})")
-                html_str = visualizer.energy_convergence_html(opt_result.energies)
-                display(HTML(html_str))
+                print(
+                    "(対話的なグラフの表示に失敗したため、静的画像で表示します。"
+                    f"下のスライダーで構造を切り替えられます。詳細: {e})"
+                )
+                try:
+                    png_bytes = visualizer.energy_convergence_png(opt_result.energies)
+                    # 画像自体は綺麗にレイアウトされたサイズ(700x400相当)で生成し、
+                    # 表示サイズ(width/height)だけをここで縮小する
+                    # (画像データ自体を小さくするとグラフ内の文字が崩れるため)。
+                    display(Image(data=png_bytes, width=460, height=270))
+                except Exception as e2:
+                    # kaleidoが使えない等の理由でPNG化にも失敗した場合の、さらなるフォールバック。
+                    print(f"(静的画像への変換にも失敗したため、HTML表示にフォールバックします: {e2})")
+                    html_str = visualizer.energy_convergence_html(opt_result.energies)
+                    display(HTML(html_str))
+
+        step_slider.max = max(n_steps - 1, 0)
+        step_slider.value = n_steps - 1
+        step_slider.disabled = (n_steps <= 1)
+        _show_structure_at_step(n_steps - 1)
+
         with traj_output:
             clear_output(wait=True)
             view = visualizer.render_trajectory(
@@ -381,13 +447,15 @@ def build_app():
                 do_freq = bool(freq_checkbox.value)
                 try_gpu = bool(gpu_checkbox.value)
 
-                content_bytes = _extract_uploaded_bytes(upload)
-                with tempfile.NamedTemporaryFile(suffix=".xyz", delete=False, mode="wb") as tf:
+                content_bytes, uploaded_filename = _extract_uploaded_file(upload)
+                file_ext = os.path.splitext(uploaded_filename)[1] or ".xyz"
+                with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False, mode="wb") as tf:
                     tf.write(content_bytes)
                     tmp_path = tf.name
 
-                structure = io_reader.read_xyz(tmp_path)
-                print(f"[入力構造] 原子数: {len(structure.symbols)}  組成: "
+                structure = io_reader.read_structure(tmp_path)
+                print(f"[入力構造] ファイル: {uploaded_filename}"
+                      f"  原子数: {len(structure.symbols)}  組成: "
                       f"{', '.join(sorted(set(structure.symbols)))}")
 
                 io_reader.validate_structure(

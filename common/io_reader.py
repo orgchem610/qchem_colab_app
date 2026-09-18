@@ -3,18 +3,20 @@ qcapp.io_reader
 ----------------
 構造ファイルの読み込みと、計算実行前の入力チェックをまとめたモジュール。
 
-【今回のプロトタイプのスコープ】
-    標準的な .xyz 形式のみをサポートします(外部ライブラリに依存しない
-    自前の最小パーサーです)。
-    .mol / .sdf / .pdb / .com / .gjf などへの対応は、このモジュールを
-    拡張するか、ASE/RDKit等の導入を検討する段階で追加してください。
-    read_structure() が返す Structure の形さえ変えなければ、
-    engine.py より後段のコードには影響しません。
+【対応形式】
+    .xyz は外部ライブラリに依存しない自前の最小パーサーで読み込む。
+    .com / .gjf (Gaussian入力) / .pdb は ASE(ase.io.read)経由で読み込む。
+    .mol / .sdf への対応にはRDKit等の追加ライブラリが必要になるため、
+    現時点では未対応(read_structure()が明示的なエラーメッセージを返す)。
+
+    どの形式で読み込んでも、返るのは同じ Structure なので、
+    engine.py より後段のコードは入力形式を意識しなくてよい。
 """
 
-from dataclasses import dataclass
 import math
+import os
 import re
+from dataclasses import dataclass
 
 # 元素記号 -> 原子番号 の対応表(H〜Xe程度まで用意)
 ATOMIC_NUMBERS = {
@@ -35,6 +37,23 @@ TRANSITION_METAL_SYMBOLS = set(
     + "Hf Ta W Re Os Ir Pt Au Hg".split()
 )
 
+# 拡張子 -> ASEに渡すformat名。ASEが標準対応している範囲のみ。
+_ASE_FORMAT_BY_EXTENSION = {
+    ".com": "gaussian-in",
+    ".gjf": "gaussian-in",
+    ".pdb": "proteindatabank",
+}
+
+# 現時点でread_structure()が受け付ける拡張子(エラーメッセージ表示用)
+SUPPORTED_EXTENSIONS = {".xyz"} | set(_ASE_FORMAT_BY_EXTENSION)
+
+# 対応を検討したが今回は見送った拡張子(なぜ.xyz等と同列に扱えないかを
+# エラーメッセージで説明するために使う)
+_KNOWN_UNSUPPORTED_EXTENSIONS = {
+    ".mol": "RDKit等の追加ライブラリが必要なため現時点では未対応です",
+    ".sdf": "RDKit等の追加ライブラリが必要なため現時点では未対応です",
+}
+
 
 class StructureError(ValueError):
     """構造・電荷・スピン多重度の入力に問題があるときの例外。
@@ -48,7 +67,7 @@ class StructureError(ValueError):
 class Structure:
     symbols: list   # 元素記号のリスト 例: ["O", "H", "H"]
     coords: list    # [[x, y, z], ...] 単位はÅ(オングストローム)
-    comment: str = ""  # xyzファイル2行目のコメント
+    comment: str = ""  # 元のファイルのコメント、またはファイル名
 
 
 def read_xyz(filepath: str) -> Structure:
@@ -108,6 +127,61 @@ def read_xyz(filepath: str) -> Structure:
         coords.append([x, y, z])
 
     return Structure(symbols=symbols, coords=coords, comment=comment)
+
+
+def _read_with_ase(filepath: str, ase_format: str) -> Structure:
+    """ASE(ase.io.read)を使って構造ファイルを読み込む(.com/.gjf/.pdb用)。"""
+    try:
+        from ase.io import read as ase_read
+    except ImportError as e:
+        raise StructureError(
+            "この形式の読み込みにはASEライブラリが必要ですが、インストールできていません。"
+            f"(内部エラー: {e})requirements.txtにaseが含まれているか確認してください。"
+        )
+
+    try:
+        atoms = ase_read(filepath, format=ase_format)
+    except Exception as e:
+        raise StructureError(
+            f"'{filepath}' を{ase_format}形式のファイルとして読み込めませんでした。"
+            f"ファイルの内容・拡張子が正しいか確認してください。(内部エラー: {e})"
+        )
+
+    symbols = [str(s) for s in atoms.get_chemical_symbols()]
+    coords = [list(pos) for pos in atoms.get_positions()]
+
+    unknown = sorted(set(s for s in symbols if s not in ATOMIC_NUMBERS))
+    if unknown:
+        raise StructureError(
+            f"'{filepath}' に対応していない元素記号が含まれています: {', '.join(unknown)}"
+        )
+
+    return Structure(symbols=symbols, coords=coords, comment=os.path.basename(filepath))
+
+
+def read_structure(filepath: str) -> Structure:
+    """拡張子に応じて適切な方法で構造ファイルを読み込む。
+
+    .xyz            : 自前のパーサー(read_xyz)
+    .com / .gjf     : ASE経由(Gaussian入力ファイルとして解釈)
+    .pdb            : ASE経由(Protein Data Bank形式として解釈)
+    .mol / .sdf     : 現時点では未対応(明確なエラーメッセージを返す)
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext == ".xyz":
+        return read_xyz(filepath)
+    if ext in _ASE_FORMAT_BY_EXTENSION:
+        return _read_with_ase(filepath, _ASE_FORMAT_BY_EXTENSION[ext])
+    if ext in _KNOWN_UNSUPPORTED_EXTENSIONS:
+        raise StructureError(
+            f"'{ext}'形式は{_KNOWN_UNSUPPORTED_EXTENSIONS[ext]}\n"
+            f"現在対応している形式: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+        )
+    raise StructureError(
+        f"'{ext}'は対応していないファイル形式です。\n"
+        f"現在対応している形式: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+    )
 
 
 def validate_structure(structure: Structure, min_distance: float = 0.4) -> None:
