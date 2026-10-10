@@ -30,6 +30,7 @@ Colab上で動作しない場合があったため)。Colab以外の環境では
 
 import html
 import os
+import subprocess
 import tempfile
 import time
 import traceback
@@ -46,6 +47,20 @@ from qcapp import writer_molden, visualizer
 # -----------------------------------------------------------------------------
 # 補助関数
 # -----------------------------------------------------------------------------
+
+def _gpu_runtime_detected():
+    """GPUランタイム(NVIDIA GPU)が割り当てられているかを nvidia-smi の成否で判定する。
+
+    ColabApp.ipynb の Setup Section と同じ判定方法。CPUのみのランタイムでは
+    nvidia-smi コマンド自体が存在せず FileNotFoundError になるため、
+    その場合はGPUなしと判定する。GPU4PySCFの導入に失敗している場合などは、
+    qcapp/engine.py が自動的にCPU実行へフォールバックする。
+    """
+    try:
+        return subprocess.run(["nvidia-smi"], capture_output=True, timeout=15).returncode == 0
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+
 
 def _dropdown_from_list(items, description, width="420px"):
     options = [(item["label"], item["key"]) for item in items]
@@ -203,11 +218,7 @@ def build_app():
     )
     freq_checkbox = widgets.Checkbox(
         value=defaults["gui_defaults"]["do_frequency"],
-        description="振動数計算も実行する(既定でON)",
-    )
-    gpu_checkbox = widgets.Checkbox(
-        value=defaults["gpu"]["try_gpu4pyscf"],
-        description="可能ならGPU(GPU4PySCF)を使う(未対応環境では自動的にCPUで実行されます)",
+        description="振動数計算も実行する",
     )
 
     input_box = widgets.VBox([
@@ -219,7 +230,6 @@ def build_app():
         purpose_dd, method_dd, basis_dd,
         widgets.HBox([charge_input, mult_input]),
         freq_checkbox,
-        gpu_checkbox,
     ])
 
     # --- ② 実行ボタン・ログ ------------------------------------------------
@@ -531,7 +541,7 @@ def build_app():
                 basis_key = basis_dd.value
                 functional_key = method_dd.value
                 do_freq = bool(freq_checkbox.value)
-                try_gpu = bool(gpu_checkbox.value)
+                try_gpu = _gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
 
                 content_bytes, uploaded_filename = _extract_uploaded_file(
                     upload, state.get("dropped_file"))
@@ -560,6 +570,9 @@ def build_app():
                 mol = engine.build_mole(structure, charge, multiplicity, basis_key)
 
                 print("\n--- 構造最適化を開始します ---")
+                print("  GPUランタイム: " + (
+                    "検出されました(GPU4PySCFでの計算を試みます)" if try_gpu
+                    else "検出されませんでした(CPUで計算します)"))
                 opt_result = optimize.run_geometry_optimization(
                     mol, functional_key, defaults, try_gpu=try_gpu)
                 print(f"  {opt_result.gpu_message}")
