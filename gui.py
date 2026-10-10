@@ -12,7 +12,7 @@ GUI一式を組み立てるモジュール。
     - 画面はおおまかに次の4ブロックに分かれる:
         ① 入力(構造ファイルのドラッグ&ドロップ/選択・計算条件)
         ② 実行ボタンとログ出力
-        ③ 可視化(エネルギー推移[点をクリックで対応する構造を表示]・軌跡・
+        ③ 可視化(エネルギー推移[点をクリックで対応する構造を表示]・
            振動アニメーション・MO・原子電荷)
         ④ ダウンロード(最終構造xyz・トラジェクトリxyz・moldenファイル)
 
@@ -236,7 +236,6 @@ def build_app():
         style={"description_width": "70px"}, layout=widgets.Layout(width="420px"),
     )
     step_view_output = widgets.Output()
-    traj_output = widgets.Output()
 
     vib_mode_dd = widgets.Dropdown(description="振動モード", options=[], disabled=True,
                                     style={"description_width": "140px"}, layout=widgets.Layout(width="420px"))
@@ -263,7 +262,6 @@ def build_app():
             "代わりにスライダーで同じことができます)。</p>"
         ),
         energy_output, plot_status, step_slider, step_view_output,
-        widgets.HTML("<b>構造最適化の軌跡(アニメーション)</b>"), traj_output,
         widgets.HTML("<b>振動アニメーション</b>"), widgets.HBox([vib_mode_dd, vib_button]), vib_output,
         widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_output,
         widgets.HTML("<b>原子電荷(Mulliken電荷)</b>"), density_button,
@@ -343,7 +341,7 @@ def build_app():
 
     plot_callback = colab_widgets.register_callback(_on_plot_clicked, prefix="qchem_plot")
 
-    def _render_energy_and_trajectory():
+    def _render_energy_and_structure():
         opt_result = state["opt_result"]
         # エネルギーと座標が対になっている点だけを扱う。PySCF/geomeTRICの
         # callback実装の差で片方だけが1点多く記録されても、対応関係を崩さない。
@@ -373,12 +371,6 @@ def build_app():
         if step_slider.value == previous_value:
             # スライダーの値が変わらなかった場合は observer が走らないため、ここで構造を表示する
             _show_structure_at_step(last)
-
-        with traj_output:
-            clear_output(wait=True)
-            view = visualizer.render_trajectory(
-                opt_result.symbols, opt_result.coords_history, opt_result.energies)
-            view.show()
 
     def _setup_vibration_controls():
         freq_result = state.get("freq_result")
@@ -642,7 +634,7 @@ def build_app():
 
                 print("\n計算が完了しました。下の「③ 可視化」「④ ダウンロード」をご確認ください。")
 
-                _render_energy_and_trajectory()
+                _render_energy_and_structure()
                 _setup_vibration_controls()
                 _setup_mo_controls()
                 _refresh_downloads()
