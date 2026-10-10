@@ -10,10 +10,17 @@ GUI一式を組み立てるモジュール。
       委譲する(GUIと計算ロジックを分離し、どちらか一方だけを
       差し替えやすくするため)。
     - 画面はおおまかに次の4ブロックに分かれる:
-        ① 入力(構造アップロード・計算条件)
+        ① 入力(構造ファイルのドラッグ&ドロップ/選択・計算条件)
         ② 実行ボタンとログ出力
-        ③ 可視化(エネルギー推移・軌跡・振動アニメーション・MO・原子電荷)
+        ③ 可視化(エネルギー推移[点をクリックで対応する構造を表示]・軌跡・
+           振動アニメーション・MO・原子電荷)
         ④ ダウンロード(最終構造xyz・トラジェクトリxyz・moldenファイル)
+
+ドラッグ&ドロップと、エネルギーグラフの点のクリックは、いずれも
+common/colab_widgets.py の「ブラウザ側JavaScript → Colabのコールバック →
+Python」の仕組みで実現している(ipywidgets.FileUploadやPlotlyのFigureWidgetは
+Colab上で動作しない場合があったため)。Colab以外の環境では、ドロップ領域を出さず
+通常のファイル選択ボタンとスライダーだけで動作する。
 
 使い方(ColabApp.ipynbから):
     import gui
@@ -21,16 +28,17 @@ GUI一式を組み立てるモジュール。
     display(app)
 """
 
+import html
 import os
 import tempfile
 import time
 import traceback
 
 import ipywidgets as widgets
-from IPython.display import display, clear_output, HTML, Image
+from IPython.display import display, clear_output, HTML, JSON
 
 from qcapp import load_yaml, __version__
-from common import io_reader, writer_xyz
+from common import io_reader, writer_xyz, colab_widgets
 from qcapp import engine, optimize, freq as freq_module
 from qcapp import writer_molden, visualizer
 
@@ -49,18 +57,25 @@ def _dropdown_from_list(items, description, width="420px"):
     )
 
 
-def _extract_uploaded_file(upload_widget):
-    """ipywidgets 7.x / 8.x どちらのFileUpload.valueの形にも対応して
-    アップロードされたファイルの中身(bytes)とファイル名を取り出す。
+def _extract_uploaded_file(upload_widget, dropped_file=None):
+    """アップロードされたファイルの中身(bytes)とファイル名を取り出す。
+
+    dropped_file({"name":..., "content":...})が渡された場合は、ドラッグ&ドロップ
+    領域で受け取ったファイルを優先する。そうでなければ、ipywidgets 7.x / 8.x
+    どちらのFileUpload.valueの形にも対応して取り出す。
 
     ファイル名(拡張子)は、.xyz以外の形式(.com/.gjf/.pdb)をASE経由で
     読み込む際に、どの形式として扱うかを判定するために必要。
     """
+    if dropped_file is not None:
+        return bytes(dropped_file["content"]), dropped_file["name"]
+
     value = upload_widget.value
     if not value:
         raise io_reader.StructureError(
             "構造ファイルがアップロードされていません。"
-            "「構造ファイル」のアップロード欄からファイルを選択(またはドラッグ&ドロップ)してください。"
+            "ドロップ領域にファイルをドラッグ&ドロップするか、「ファイルを選択」ボタンから"
+            "ファイルを選択してください。"
         )
 
     # ipywidgets 8.x: tuple[dict] (各要素が name/type/size/content を持つ)
@@ -120,17 +135,58 @@ def build_app():
         f"ドロップダウンからご確認ください。</p>"
     )
 
+    state = {}  # 受け取ったファイル・計算結果をウィジェット間で共有するための入れ物
+
+    # ドラッグ&ドロップ領域(Colabのみ)。ドロップされたファイルは state["dropped_file"] に入る。
+    drop_status = widgets.HTML(
+        "<span style='color:#666'>ファイルはまだ選択されていません。</span>")
+
+    def _on_file_dropped(payload):
+        """JavaScript(ドロップ領域)から呼ばれる。ファイルを検証して state に保存する。"""
+        try:
+            name, content = colab_widgets.parse_dropped_payload(payload)
+            state["dropped_file"] = {"name": name, "content": content}
+            drop_status.value = (
+                f"<span style='color:#167a2e'>✓ {html.escape(name)} を受け取りました"
+                f"({len(content):,} バイト)。</span>")
+        except ValueError as e:
+            state.pop("dropped_file", None)
+            drop_status.value = (
+                "<span style='color:#b42318'>ドロップされたファイルを受け取れませんでした: "
+                f"{html.escape(str(e))}</span>")
+        return JSON({"ok": True})
+
+    drop_callback = colab_widgets.register_callback(_on_file_dropped, prefix="qchem_drop")
+    drop_zone_output = widgets.Output()
+    if drop_callback is not None:
+        # JavaScriptを含むHTMLは、ipywidgets.HTMLのvalueではなく
+        # Output内でdisplay(HTML(...))して表示する(scriptが実行されるため)。
+        with drop_zone_output:
+            display(HTML(colab_widgets.build_drop_zone_html(drop_callback)))
+
     upload = widgets.FileUpload(
         accept=".xyz,.com,.gjf,.pdb", multiple=False,
         description="構造ファイル(.xyz/.com/.gjf/.pdb)",
         layout=widgets.Layout(width="320px"),
     )
+
+    def _on_upload_changed(change):
+        # ボタンで選び直した場合は、そちらを優先する(最後に選んだファイルを使う)
+        if change["name"] == "value" and change["new"]:
+            state.pop("dropped_file", None)
+            drop_status.value = (
+                "<span style='color:#666'>「構造ファイル」ボタンで選んだファイルを使用します。</span>")
+
+    upload.observe(_on_upload_changed, names="value")
+
+    if drop_callback is not None:
+        hint_text = ("上の枠にファイルをドラッグ＆ドロップするか、下のボタンで選択してください。"
+                     "両方を使った場合は、最後に選んだファイルが使われます。")
+    else:
+        hint_text = "ボタンをクリックして構造ファイルを選択してください。"
     upload_hint = widgets.HTML(
-        "<p style='color:#666'>ファイル選択ボタンの上に構造ファイルをドラッグ&"
-        "ドロップしてもアップロードできます(ブラウザ・ipywidgetsのバージョンに"
-        "よっては動作しない場合があります。その場合はボタンをクリックして"
-        "選択してください)。対応形式: .xyz, .com, .gjf, .pdb"
-        "(.mol/.sdfは現時点では未対応です)</p>"
+        f"<p style='color:#666'>{hint_text}"
+        "対応形式: .xyz, .com, .gjf, .pdb(.mol/.sdfは現時点では未対応です)</p>"
     )
 
     purpose_dd = _dropdown_from_list(purposes, "計算目的")
@@ -157,6 +213,7 @@ def build_app():
     input_box = widgets.VBox([
         title,
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
+        *([drop_zone_output, drop_status] if drop_callback is not None else []),
         upload,
         upload_hint,
         purpose_dd, method_dd, basis_dd,
@@ -173,6 +230,7 @@ def build_app():
     # --- ③ 可視化エリア ---------------------------------------------------
     viz_header = widgets.HTML("<h4>③ 可視化</h4>")
     energy_output = widgets.Output()
+    plot_status = widgets.HTML()  # グラフのクリック処理でPython側に問題が起きたときのメッセージ用
     step_slider = widgets.IntSlider(
         description="ステップ", min=0, max=0, value=0, disabled=True,
         style={"description_width": "70px"}, layout=widgets.Layout(width="420px"),
@@ -204,7 +262,7 @@ def build_app():
             "対応する構造を下に表示します(お使いの環境でクリックが効かない場合は、"
             "代わりにスライダーで同じことができます)。</p>"
         ),
-        energy_output, step_slider, step_view_output,
+        energy_output, plot_status, step_slider, step_view_output,
         widgets.HTML("<b>構造最適化の軌跡(アニメーション)</b>"), traj_output,
         widgets.HTML("<b>振動アニメーション</b>"), widgets.HBox([vib_mode_dd, vib_button]), vib_output,
         widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_output,
@@ -217,68 +275,104 @@ def build_app():
     download_output = widgets.Output()
     download_box = widgets.VBox([download_header, download_output])
 
-    state = {}  # 計算結果をウィジェット間で共有するための入れ物
-
     # -------------------------------------------------------------------
     # 可視化の描画
     # -------------------------------------------------------------------
     def _show_structure_at_step(step_index):
         opt_result = state["opt_result"]
-        step_index = max(0, min(step_index, len(opt_result.coords_history) - 1))
+        # グラフに載せているのは「エネルギーと座標が対になっている点」だけ(n_steps個)。
+        n_steps = state.get("n_steps") or len(opt_result.coords_history)
+        step_index = max(0, min(int(step_index), n_steps - 1))
         with step_view_output:
             clear_output(wait=True)
             e = opt_result.energies[step_index]
-            e_rel_kcal = (e - opt_result.energies[-1]) * 627.5094740631
+            e_rel_kcal = (e - opt_result.energies[n_steps - 1]) * colab_widgets.HARTREE_TO_KCAL_MOL
             print(f"ステップ {step_index}: 相対エネルギー {e_rel_kcal:+.2f} kcal/mol")
             view = visualizer.render_single_structure(
                 opt_result.symbols, opt_result.coords_history[step_index])
             view.show()
 
-    def _on_step_slider_changed(change):
-        if change["name"] == "value":
-            _show_structure_at_step(change["new"])
+    def _draw_energy_plot(selected_index):
+        """エネルギー収束グラフ(点をクリックできるSVG)を描き直す。
 
-    step_slider.observe(_on_step_slider_changed, names="value")
-
-    def _render_energy_and_trajectory():
+        selected_index の点が赤い菱形で強調される。点をクリックすると
+        JavaScriptが plot_callback(= _on_plot_clicked)を呼び、対応する構造が
+        下に表示される(Colab以外ではクリックは効かず、スライダーで切り替える)。
+        """
         opt_result = state["opt_result"]
-        n_steps = len(opt_result.energies)
-
+        energies = list(opt_result.energies[:state["n_steps"]])
         with energy_output:
             clear_output(wait=True)
             try:
-                # ColabReactionのエネルギーダイヤグラム(クリックで対応する構造を
-                # 表示する機能)を参考に、対話的なFigureWidgetを試みる。
-                # 実機で未検証のため、失敗した場合は静的PNG画像に自動フォールバックする。
-                fig_widget = visualizer.energy_convergence_figurewidget(opt_result.energies)
-
-                def _on_point_click(trace, points, selector):
-                    if points.point_inds:
-                        _show_structure_at_step(points.point_inds[0])
-
-                fig_widget.data[0].on_click(_on_point_click)
-                display(fig_widget)
+                display(HTML(colab_widgets.build_energy_plot_html(
+                    energies, selected_index=selected_index, callback_name=plot_callback)))
             except Exception as e:
-                print(
-                    "(対話的なグラフの表示に失敗したため、静的画像で表示します。"
-                    f"下のスライダーで構造を切り替えられます。詳細: {e})"
-                )
-                try:
-                    png_bytes = visualizer.energy_convergence_png(opt_result.energies)
-                    # 画像自体は綺麗にレイアウトされたサイズ(700x400相当)で生成し、
-                    # 表示サイズ(width/height)だけをここで縮小する
-                    # (画像データ自体を小さくするとグラフ内の文字が崩れるため)。
-                    display(Image(data=png_bytes, width=460, height=270))
-                except Exception as e2:
-                    # kaleidoが使えない等の理由でPNG化にも失敗した場合の、さらなるフォールバック。
-                    print(f"(静的画像への変換にも失敗したため、HTML表示にフォールバックします: {e2})")
-                    html_str = visualizer.energy_convergence_html(opt_result.energies)
-                    display(HTML(html_str))
+                print(f"(グラフを描画できませんでした。下のスライダーで構造を切り替えられます。詳細: {e})")
 
-        step_slider.max = max(n_steps - 1, 0)
-        step_slider.value = n_steps - 1
+    def _on_step_slider_changed(change):
+        if change["name"] != "value":
+            return
+        _show_structure_at_step(change["new"])
+        # 点のクリックが原因の変更では、JavaScript側が既に赤い菱形を動かしているため描き直さない
+        if not state.get("suppress_plot_redraw"):
+            _draw_energy_plot(change["new"])
+
+    step_slider.observe(_on_step_slider_changed, names="value")
+
+    def _on_plot_clicked(index):
+        """JavaScript(グラフ上の点のクリック)から呼ばれる。点の番号 index の構造を表示する。"""
+        try:
+            n_steps = state.get("n_steps", 0)
+            if "opt_result" not in state or n_steps <= 0:
+                return JSON({"ok": False})
+            index = max(0, min(int(index), n_steps - 1))
+            plot_status.value = ""
+            state["suppress_plot_redraw"] = True
+            try:
+                if step_slider.value != index:
+                    step_slider.value = index  # → _on_step_slider_changed が構造を表示する
+                else:
+                    _show_structure_at_step(index)
+            finally:
+                state["suppress_plot_redraw"] = False
+        except Exception as e:
+            plot_status.value = (
+                "<span style='color:#b42318'>構造の表示に失敗しました。"
+                f"スライダーをご利用ください。詳細: {html.escape(str(e))}</span>")
+        return JSON({"ok": True})
+
+    plot_callback = colab_widgets.register_callback(_on_plot_clicked, prefix="qchem_plot")
+
+    def _render_energy_and_trajectory():
+        opt_result = state["opt_result"]
+        # エネルギーと座標が対になっている点だけを扱う。PySCF/geomeTRICの
+        # callback実装の差で片方だけが1点多く記録されても、対応関係を崩さない。
+        n_steps = min(len(opt_result.energies), len(opt_result.coords_history))
+        state["n_steps"] = n_steps
+        plot_status.value = ""
+
+        if n_steps == 0:
+            with energy_output:
+                clear_output(wait=True)
+                print("エネルギーと構造の履歴が記録されていないため、グラフを表示できません。")
+            step_slider.disabled = True
+            return
+
+        last = n_steps - 1
+        # スライダーを動かすと observer が走る(構造を表示する)。グラフの描き直しは
+        # 最後に1回だけ行うため、ここではグラフの再描画だけ止めておく。
+        previous_value = step_slider.value
+        state["suppress_plot_redraw"] = True
+        try:
+            step_slider.max = last
+            step_slider.value = last
+        finally:
+            state["suppress_plot_redraw"] = False
         step_slider.disabled = (n_steps <= 1)
-        _show_structure_at_step(n_steps - 1)
+        _draw_energy_plot(last)
+        if step_slider.value == previous_value:
+            # スライダーの値が変わらなかった場合は observer が走らないため、ここで構造を表示する
+            _show_structure_at_step(last)
 
         with traj_output:
             clear_output(wait=True)
@@ -447,7 +541,8 @@ def build_app():
                 do_freq = bool(freq_checkbox.value)
                 try_gpu = bool(gpu_checkbox.value)
 
-                content_bytes, uploaded_filename = _extract_uploaded_file(upload)
+                content_bytes, uploaded_filename = _extract_uploaded_file(
+                    upload, state.get("dropped_file"))
                 file_ext = os.path.splitext(uploaded_filename)[1] or ".xyz"
                 with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False, mode="wb") as tf:
                     tf.write(content_bytes)

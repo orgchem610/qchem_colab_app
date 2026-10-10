@@ -13,3 +13,6 @@ __pycache__/
 # 生成されるが、コミットはしない)。依存関係が落ち着いてきたら、
 # 動作確認済みの内容を再度Git管理に戻すことを検討する。
 requirements-lock.txt
+.venv/
+.pytest_cache/
+references/
