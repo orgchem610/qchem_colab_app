@@ -17,12 +17,18 @@ UMAの学習済みモデル(facebook/UMA)は、Hugging Face上で利用条件へ
 「ゲート付きリポジトリ」。モデルを使う人自身がHugging Faceのアカウントを作り、
 利用条件に同意し、アクセストークンを発行する必要がある。このアプリは
 モデルファイルを同梱・再配布せず、利用者のColab上でHugging Faceから直接取得する。
-トークンはノートブックのセルに書き込まず、入力欄(getpass)かColabのシークレットで渡すこと。
+トークンはノートブックのセルに書き込まず、ノートブック冒頭の入力セル(getpass)か
+Colabのシークレットで受け取り、環境変数 HF_TOKEN(Hugging Face公式の標準の受け渡し方法)
+にだけ設定する。このモジュールは、トークンの入力方法を知らず、環境変数 HF_TOKEN だけを
+見る(login_from_environment)。そのため、入力セルの作りを変えても、このモジュールや
+gui_uma.py を変更する必要がない。GUIの入力欄(ipywidgets)でトークンを受け取る方式は、
+入力値がウィジェットの状態として保持され、保存されるノートブックに残りうるため採用しない。
 """
 
 import os
 
 MODEL_REPO_ID = "facebook/UMA"
+HF_TOKEN_ENV = "HF_TOKEN"        # トークンの受け渡しに使う環境変数名(Hugging Face公式の標準)
 LICENSE_FILENAME = "LICENSE"   # アクセス確認用に取得する小さなファイル(約6.5 kB)
 
 
@@ -45,7 +51,8 @@ def login_with_token(token):
     token = (token or "").strip()
     if not token:
         raise UmaSetupError(
-            "Hugging Faceのトークンが空です。トークン入力セルをもう一度実行し、"
+            "Hugging Faceのトークンが空です。ノートブック冒頭の"
+            "「Hugging Faceのアクセストークンを入力する」のセルをもう一度実行し、"
             "発行したトークン(hf_ で始まる文字列)を入力してください。")
     os.environ["HF_TOKEN"] = token
     try:
@@ -60,6 +67,22 @@ def login_with_token(token):
     except TypeError:
         # huggingface_hubの版によっては add_to_git_credential 引数を受け付けない場合がある
         login(token=token)
+
+
+def login_from_environment():
+    """環境変数 HF_TOKEN のトークンで、Hugging Faceにログインする。
+
+    ノートブック冒頭の入力セルは、受け取ったトークンを環境変数 HF_TOKEN にだけ設定する。
+    この関数がそれを読み取ってログインする(トークンは、この関数の中の一時的な
+    ローカル変数としてのみ扱い、モジュールの変数やファイルには保持しない)。
+    """
+    token = os.environ.get(HF_TOKEN_ENV, "")
+    if not token.strip():
+        raise UmaSetupError(
+            "Hugging Faceのトークンが設定されていません。"
+            "ノートブック冒頭の「Hugging Faceのアクセストークンを入力する」のセルを"
+            "実行してください。")
+    login_with_token(token)
 
 
 def has_hf_token():
@@ -86,7 +109,8 @@ def explain_hf_error(error):
             "アクセス申請を完了していること(承認まで時間がかかる場合があります)\n"
             "  2. 申請したのと同じHugging Faceアカウントでトークンを発行していること\n"
             "  3. トークンの権限に「Read」が含まれていること\n"
-            "  4. トークンを間違って入力していないこと(トークン入力セルをやり直してください)\n"
+            "  4. トークンを間違って入力していないこと(ノートブック冒頭のトークン入力セルを、"
+            "「FORCE_REENTER」にチェックを入れて実行し直してください)\n"
             + detail)
     if name in ("LocalEntryNotFoundError", "ConnectionError", "Timeout", "ConnectTimeout",
                 "ReadTimeout", "OfflineModeIsEnabled") or status in (500, 502, 503, 504):
@@ -106,7 +130,8 @@ def check_model_access():
     if not has_hf_token():
         raise UmaSetupError(
             "Hugging Faceのトークンが設定されていません。"
-            "ノートブックの「3. Hugging Faceトークンの入力」のセルを実行してください。")
+            "ノートブック冒頭の「Hugging Faceのアクセストークンを入力する」のセルを"
+            "実行してください。")
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as e:

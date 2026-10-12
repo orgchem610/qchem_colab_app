@@ -67,6 +67,41 @@ class TestTokenHandling(unittest.TestCase):
             self.assertTrue(uma_engine.has_hf_token())
 
 
+class TestLoginFromEnvironment(unittest.TestCase):
+    def test_missing_token_in_environment_raises_a_helpful_error(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("HF_TOKEN", None)
+            with self.assertRaises(uma_engine.UmaSetupError) as ctx:
+                uma_engine.login_from_environment()
+        self.assertIn("冒頭", str(ctx.exception))
+
+    def test_blank_token_in_environment_is_rejected(self):
+        with mock.patch.dict(os.environ, {"HF_TOKEN": "   "}):
+            with self.assertRaises(uma_engine.UmaSetupError):
+                uma_engine.login_from_environment()
+
+    def test_token_from_environment_is_passed_to_the_login_function(self):
+        with mock.patch.dict(os.environ, {"HF_TOKEN": "hf_dummy_value"}):
+            with mock.patch.object(uma_engine, "login_with_token") as fake_login:
+                uma_engine.login_from_environment()
+        fake_login.assert_called_once_with("hf_dummy_value")
+
+    def test_token_is_not_kept_in_any_module_level_variable(self):
+        token = "hf_must_not_be_kept_anywhere"
+        with mock.patch.dict(os.environ, {"HF_TOKEN": token}):
+            with mock.patch.object(uma_engine, "login_with_token"):
+                uma_engine.login_from_environment()
+        kept = [name for name, value in vars(uma_engine).items()
+                if isinstance(value, str) and token in value]
+        self.assertEqual(kept, [])
+
+    def test_error_messages_never_contain_the_token(self):
+        token = "hf_secret_in_error_test"
+        with mock.patch.dict(os.environ, {"HF_TOKEN": token}):
+            message = uma_engine.explain_hf_error(GatedRepoError("gated"))
+        self.assertNotIn(token, message)
+
+
 class TestDevice(unittest.TestCase):
     def test_cpu_description_mentions_the_slowness(self):
         self.assertIn("時間がかかります", uma_engine.describe_device("cpu"))
