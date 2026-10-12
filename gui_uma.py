@@ -46,7 +46,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, JSON
 
 from uma_app import load_yaml, __version__
-from uma_app import uma_engine, uma_optimize, uma_freq, uma_notice, uma_report
+from uma_app import uma_engine, uma_optimize, uma_freq, uma_notice, uma_report, uma_inputs
 from common import io_reader, writer_xyz, plot_common, colab_widgets
 
 
@@ -179,10 +179,45 @@ def build_app():
     if gui_defaults.get("model") in [m["key"] for m in models]:
         model_dd.value = gui_defaults["model"]
 
-    charge_input = widgets.IntText(
-        value=gui_defaults["charge"], description="電荷",
+    # 電荷は、正の値を「+1」のように符号付きで表示するため、数値ウィジェット(IntText)ではなく
+    # 文字の入力欄(Text)にしている。入力は「1」でも「+1」でもよく、Enterキーを押すか
+    # 欄の外をクリックすると、「+1」の形に整えて表示し直す(0と負の値はそのまま表示)。
+    # 整数として読み取れない入力は、直前の値に戻してメッセージを出す。
+    charge_state = {"value": int(gui_defaults["charge"]), "updating": False}
+    charge_input = widgets.Text(
+        value=uma_inputs.format_charge(charge_state["value"]), description="電荷",
+        continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
         style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
     )
+    charge_message = widgets.HTML()
+    charge_minus_button = widgets.Button(description="−1", layout=widgets.Layout(width="48px"))
+    charge_plus_button = widgets.Button(description="+1", layout=widgets.Layout(width="48px"))
+
+    def _on_charge_changed(change):
+        if change["name"] != "value" or charge_state["updating"]:
+            return
+        try:
+            charge_state["value"] = uma_inputs.parse_charge(change["new"])
+            charge_message.value = ""
+        except uma_inputs.ChargeInputError as e:
+            charge_message.value = f"<span style='color:#b42318'>{html.escape(str(e))}</span>"
+        # 読み取れた場合は「+1」の形に整え、読み取れなかった場合は直前の値に戻す
+        shown = uma_inputs.format_charge(charge_state["value"])
+        if charge_input.value != shown:
+            charge_state["updating"] = True
+            try:
+                charge_input.value = shown
+            finally:
+                charge_state["updating"] = False
+
+    charge_input.observe(_on_charge_changed, names="value")
+
+    def _step_charge(delta):
+        charge_message.value = ""
+        charge_input.value = uma_inputs.format_charge(charge_state["value"] + delta)
+
+    charge_minus_button.on_click(lambda _: _step_charge(-1))
+    charge_plus_button.on_click(lambda _: _step_charge(+1))
     mult_input = widgets.IntText(
         value=gui_defaults["multiplicity"], description="スピン多重度",
         style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
@@ -201,7 +236,8 @@ def build_app():
         upload,
         upload_hint,
         model_dd,
-        widgets.HBox([charge_input, mult_input]),
+        widgets.HBox([charge_input, charge_minus_button, charge_plus_button, mult_input]),
+        charge_message,
         freq_checkbox,
     ])
 
@@ -375,13 +411,6 @@ def build_app():
     # -------------------------------------------------------------------
     # ダウンロード
     # -------------------------------------------------------------------
-    def _sanitize_filename_stem(raw: str) -> str:
-        """ファイル名として使えない文字を除去する。空ならデフォルトの'result'にする。"""
-        import re
-        stem = (raw or "").strip()
-        stem = re.sub(r'[\\/:*?"<>|]', "", stem)
-        return stem or "result"
-
     def _refresh_downloads():
         with download_output:
             clear_output(wait=True)
@@ -412,7 +441,10 @@ def build_app():
             ]
 
             # ファイル名入力欄は1つだけ用意し、全てのボタンで共有する。
+            # 既定値は「入力ファイル名_result」(例: water.xyz → water_result)。
+            # 空にした場合は、プレースホルダーと同じ「result」になる。
             name_input = widgets.Text(
+                value=uma_inputs.default_download_stem(state.get("input_filename")),
                 placeholder="result",
                 description="ファイル名",
                 style={"description_width": "70px"},
@@ -425,7 +457,7 @@ def build_app():
 
                 def _make_handler(src_path=src_path, suffix=suffix):
                     def _handler(_):
-                        stem = _sanitize_filename_stem(name_input.value)
+                        stem = uma_inputs.sanitize_filename_stem(name_input.value)
                         filename = f"{stem}{suffix}"
                         tmp_dir = tempfile.mkdtemp(prefix="qchem_uma_dl_")
                         dst_path = os.path.join(tmp_dir, filename)
@@ -464,7 +496,7 @@ def build_app():
                         "(上の注意書きを読み、Hugging Face上でUMAの利用条件に同意済みであることを"
                         "確認するためのチェックです。)")
 
-                charge = int(charge_input.value)
+                charge = charge_state["value"]
                 multiplicity = int(mult_input.value)
                 model_key = model_dd.value
                 do_freq = bool(freq_checkbox.value)
@@ -576,6 +608,7 @@ def build_app():
 
                 state.update(dict(
                     structure=structure, opt_result=opt_result, freq_result=freq_result,
+                    input_filename=uploaded_filename,
                     final_symbols=final_symbols, final_coords=final_coords,
                     out_dir=out_dir, final_xyz_path=final_xyz_path,
                     traj_xyz_path=traj_xyz_path, log_path=log_path,
