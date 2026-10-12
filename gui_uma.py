@@ -15,6 +15,13 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     - 振動数計算は、構造最適化の後処理として行う(PySCF版と同じ位置づけ)。
     - Hugging Faceのトークンは、このGUIでは扱わない(ノートブックの専用セルで設定する)。
 
+【ipywidgetsの版について】
+    Colabのランタイムにはipywidgets 7.7.1が入っており、Colab標準のGUI表示の仕組みは7.x向け
+    (8.xに更新すると、GUI部品が表示されず「コードスニペット」のパネルが開くだけになる)。
+    このファイルは7.x・8.xのどちらでも動くように書いてあり、requirements-uma.txt では
+    ipywidgetsの版を指定していない。8.xが入っている場合の対処は ColabApp_UMA.ipynb の
+    「II-0」のセルを参照。
+
 【PySCF版と共通の部品】
     ドラッグ&ドロップ領域・クリックできるエネルギーグラフ(common/colab_widgets.py)、
     構造・振動の表示(common/plot_common.py)、構造ファイルの読み込み・検証(common/io_reader.py)、

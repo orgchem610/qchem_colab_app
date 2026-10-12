@@ -68,6 +68,32 @@ class TestUmaModels(unittest.TestCase):
         self.assertNotIn("uma-s-1", [m["key"] for m in self.models])
 
 
+class TestRequirementsUma(unittest.TestCase):
+    """requirements-uma.txt の方針(コメントに理由あり)が崩れていないかの確認。"""
+
+    @staticmethod
+    def _names():
+        import re
+        path = os.path.join(os.path.dirname(__file__), "..", "requirements-uma.txt")
+        with open(path, encoding="utf-8") as f:
+            lines = [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
+        return [re.split(r"[<>=!~\[ ]", ln)[0].lower() for ln in lines]
+
+    def test_core_packages_are_listed(self):
+        names = self._names()
+        for required in ("fairchem-core", "ase", "huggingface_hub", "pyyaml", "py3dmol"):
+            self.assertIn(required, names)
+
+    def test_ipywidgets_is_not_pinned(self):
+        # ipywidgets 8.x にすると、Colab標準のGUI表示の仕組み(7.x向け)で画面部品が
+        # 表示されなくなるため、指定しない(理由は requirements-uma.txt のコメント参照)。
+        self.assertNotIn("ipywidgets", self._names())
+
+    def test_torch_is_not_listed(self):
+        # torchはColab標準のものを使い、fairchem-coreのインストールに任せる
+        self.assertNotIn("torch", self._names())
+
+
 class TestMissingFile(unittest.TestCase):
     def test_missing_yaml_raises_a_helpful_error(self):
         with self.assertRaises(FileNotFoundError) as ctx:

@@ -55,7 +55,11 @@ def login_with_token(token):
             "huggingface_hub がインストールされていません。"
             "「2. 依存ライブラリのインストール」のセルを実行してください。"
             f"(内部エラー: {e})") from e
-    login(token=token, add_to_git_credential=False)
+    try:
+        login(token=token, add_to_git_credential=False)
+    except TypeError:
+        # huggingface_hubの版によっては add_to_git_credential 引数を受け付けない場合がある
+        login(token=token)
 
 
 def has_hf_token():
