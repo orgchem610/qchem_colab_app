@@ -16,34 +16,33 @@ from uma_app import uma_notice, uma_report  # noqa: E402
 
 
 class TestNotice(unittest.TestCase):
-    def test_html_links_to_license_model_card_and_paper(self):
-        html_text = uma_notice.notice_html()
-        for url in (uma_notice.LICENSE_URL, uma_notice.MODEL_CARD_URL,
-                    uma_notice.PAPER_URL, uma_notice.FAIRCHEM_URL):
-            self.assertIn(f"href='{url}'", html_text)
-
-    def test_html_states_the_nature_of_the_results_and_the_policy(self):
-        html_text = uma_notice.notice_html()
-        self.assertIn("高速な予測値", html_text)
-        self.assertIn("Acceptable Use Policy", html_text)
-        self.assertIn("論文", html_text)
-        self.assertIn("同意能力", html_text)
+    def test_primary_source_urls_are_the_expected_ones(self):
+        self.assertEqual(uma_notice.LICENSE_URL, "https://huggingface.co/facebook/UMA/blob/main/LICENSE")
+        self.assertEqual(uma_notice.MODEL_CARD_URL, "https://huggingface.co/facebook/UMA")
+        self.assertEqual(uma_notice.PAPER_URL, "https://arxiv.org/abs/2506.23971")
 
     def test_citation_matches_the_paper_named_on_the_model_card(self):
         self.assertIn("UMA: A Family of Universal Models for Atoms", uma_notice.CITATION)
         self.assertIn("2506.23971", uma_notice.CITATION)
         self.assertTrue(uma_notice.PAPER_URL.endswith("2506.23971"))
 
-    def test_plain_text_notice_contains_license_policy_and_citation(self):
+    def test_plain_text_notice_links_to_the_primary_sources(self):
         text = uma_notice.notice_text()
-        self.assertIn(uma_notice.UMA_LICENSE_NAME, text)
-        self.assertIn(uma_notice.LICENSE_URL, text)
-        self.assertIn(uma_notice.MODEL_CARD_URL, text)
-        self.assertIn(uma_notice.CITATION, text)
+        for expected in (uma_notice.UMA_LICENSE_NAME, uma_notice.LICENSE_URL,
+                         uma_notice.MODEL_CARD_URL, uma_notice.CITATION, uma_notice.PAPER_URL):
+            self.assertIn(expected, text)
 
-    def test_consent_label_mentions_license_and_policy(self):
-        self.assertIn("FAIR Chemistry License", uma_notice.CONSENT_LABEL)
-        self.assertIn("Acceptable Use Policy", uma_notice.CONSENT_LABEL)
+    def test_notice_asks_for_the_citation_without_adding_interpretation(self):
+        text = uma_notice.notice_text()
+        self.assertIn("以下の論文を引用してください", text)
+        # ライセンスの条文の解釈・助言にあたる語は含めない(一次情報を読んで利用者が判断する)
+        for interpretation in ("同意能力", "未成年", "義務", "予測値", "誤差"):
+            self.assertNotIn(interpretation, text)
+
+    def test_gui_only_notice_helpers_are_gone(self):
+        # GUIには表示しない(ノートブック冒頭にだけ表示する)方針のため、GUI用の関数・定数は持たない
+        for name in ("notice_html", "CONSENT_LABEL", "RESULT_NATURE"):
+            self.assertFalse(hasattr(uma_notice, name), name)
 
 
 def _opt_result(converged=True):

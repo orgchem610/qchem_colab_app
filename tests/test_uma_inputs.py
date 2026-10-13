@@ -1,7 +1,7 @@
 """
 tests/test_uma_inputs.py
 ------------------------
-uma_app.uma_inputs(電荷の入力・表示、ダウンロードの既定ファイル名)の単体テスト。
+uma_app.uma_inputs(電荷の入力・表示)の単体テスト。
 ipywidgetsには依存しない。
 """
 
@@ -56,42 +56,6 @@ class TestParseCharge(unittest.TestCase):
     def test_round_trip_with_format_charge(self):
         for value in range(-5, 6):
             self.assertEqual(uma_inputs.parse_charge(uma_inputs.format_charge(value)), value)
-
-
-class TestDefaultDownloadStem(unittest.TestCase):
-    def test_input_file_name_gets_a_result_suffix(self):
-        self.assertEqual(uma_inputs.default_download_stem("water.xyz"), "water_result")
-        self.assertEqual(uma_inputs.default_download_stem("ethanol.gjf"), "ethanol_result")
-
-    def test_only_the_last_extension_is_removed(self):
-        self.assertEqual(uma_inputs.default_download_stem("mol.v2.xyz"), "mol.v2_result")
-
-    def test_directory_part_is_removed(self):
-        self.assertEqual(uma_inputs.default_download_stem("C:\\Users\\me\\water.xyz"), "water_result")
-        self.assertEqual(uma_inputs.default_download_stem("../a/water.xyz"), "water_result")
-
-    def test_characters_not_allowed_in_file_names_are_removed(self):
-        self.assertEqual(uma_inputs.default_download_stem('a?b*c.xyz'), "abc_result")
-
-    def test_japanese_names_are_kept(self):
-        self.assertEqual(uma_inputs.default_download_stem("エタノール.xyz"), "エタノール_result")
-
-    def test_unusable_names_fall_back_to_result(self):
-        for bad in ("", None, ".xyz", "???.xyz"):
-            self.assertEqual(uma_inputs.default_download_stem(bad), "result")
-
-
-class TestSanitizeFilenameStem(unittest.TestCase):
-    def test_empty_input_falls_back_to_result(self):
-        self.assertEqual(uma_inputs.sanitize_filename_stem(""), "result")
-        self.assertEqual(uma_inputs.sanitize_filename_stem("   "), "result")
-        self.assertEqual(uma_inputs.sanitize_filename_stem(None), "result")
-
-    def test_forbidden_characters_are_removed(self):
-        self.assertEqual(uma_inputs.sanitize_filename_stem('my/file:name?'), "myfilename")
-
-    def test_normal_names_are_unchanged(self):
-        self.assertEqual(uma_inputs.sanitize_filename_stem("water_result"), "water_result")
 
 
 if __name__ == "__main__":

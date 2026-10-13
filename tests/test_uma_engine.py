@@ -73,7 +73,8 @@ class TestLoginFromEnvironment(unittest.TestCase):
             os.environ.pop("HF_TOKEN", None)
             with self.assertRaises(uma_engine.UmaSetupError) as ctx:
                 uma_engine.login_from_environment()
-        self.assertIn("冒頭", str(ctx.exception))
+        self.assertIn("2.", str(ctx.exception))
+        self.assertIn("トークン", str(ctx.exception))
 
     def test_blank_token_in_environment_is_rejected(self):
         with mock.patch.dict(os.environ, {"HF_TOKEN": "   "}):

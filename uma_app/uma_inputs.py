@@ -1,14 +1,14 @@
 """
 uma_app.uma_inputs
 ------------------
-GUIの入力欄まわりの、画面部品(ipywidgets)に依存しない小さな関数群。
+GUIの入力欄まわりの、画面部品(ipywidgets)に依存しない小さな関数群(UMA版にしかないもの)。
 単体テストできるよう、gui_uma.py から切り出してある。
 
     - 電荷の入力・表示(正の値は「+1」のように符号付きで表示する)
-    - ダウンロードするファイル名の既定値(「入力ファイル名_result」)
+
+(ダウンロードするファイル名の既定値など、PySCF版と共通の関数は common/gui_helpers.py にある)
 """
 
-import os
 import re
 import unicodedata
 
@@ -39,21 +39,3 @@ def parse_charge(text):
         raise ChargeInputError(
             "電荷は整数で入力してください(例: 0, 1, +1, -1)。直前の値に戻しました。")
     return int(match.group(1) + match.group(2))
-
-
-def sanitize_filename_stem(raw):
-    """ファイル名(拡張子なし)として使えない文字を除去する。空なら 'result' にする。"""
-    stem = re.sub(r'[\\/:*?"<>|]', "", (raw or "").strip())
-    return stem or "result"
-
-
-def default_download_stem(input_filename):
-    """ダウンロードするファイル名の既定値(拡張子なし)を、入力ファイル名から作る。
-
-    例: "water.xyz" -> "water_result"。入力ファイル名が使えない場合は "result"。
-    """
-    name = os.path.basename(str(input_filename or "").replace("\\", "/"))
-    # 「.xyz」のように拡張子しかない名前には、ファイル名の本体がないものとして扱う
-    stem = "" if re.fullmatch(r"\.[^.]*", name) else os.path.splitext(name)[0].lstrip(".")
-    stem = re.sub(r'[\\/:*?"<>|]', "", stem).strip()
-    return f"{stem}_result" if stem else "result"

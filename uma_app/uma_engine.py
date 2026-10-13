@@ -17,7 +17,7 @@ UMAの学習済みモデル(facebook/UMA)は、Hugging Face上で利用条件へ
 「ゲート付きリポジトリ」。モデルを使う人自身がHugging Faceのアカウントを作り、
 利用条件に同意し、アクセストークンを発行する必要がある。このアプリは
 モデルファイルを同梱・再配布せず、利用者のColab上でHugging Faceから直接取得する。
-トークンはノートブックのセルに書き込まず、ノートブック冒頭の入力セル(getpass)か
+トークンはノートブックのセルに書き込まず、ノートブックの「2.」のセル(getpass)か
 Colabのシークレットで受け取り、環境変数 HF_TOKEN(Hugging Face公式の標準の受け渡し方法)
 にだけ設定する。このモジュールは、トークンの入力方法を知らず、環境変数 HF_TOKEN だけを
 見る(login_from_environment)。そのため、入力セルの作りを変えても、このモジュールや
@@ -51,8 +51,8 @@ def login_with_token(token):
     token = (token or "").strip()
     if not token:
         raise UmaSetupError(
-            "Hugging Faceのトークンが空です。ノートブック冒頭の"
-            "「Hugging Faceのアクセストークンを入力する」のセルをもう一度実行し、"
+            "Hugging Faceのトークンが空です。ノートブックの"
+            "「2. Hugging Faceのトークンを入力し、UMAへのアクセスを確認する」のセルをもう一度実行し、"
             "発行したトークン(hf_ で始まる文字列)を入力してください。")
     os.environ["HF_TOKEN"] = token
     try:
@@ -60,7 +60,7 @@ def login_with_token(token):
     except ImportError as e:
         raise UmaSetupError(
             "huggingface_hub がインストールされていません。"
-            "「2. 依存ライブラリのインストール」のセルを実行してください。"
+            "「3. 依存ライブラリのインストール」のセルを実行してください。"
             f"(内部エラー: {e})") from e
     try:
         login(token=token, add_to_git_credential=False)
@@ -72,7 +72,7 @@ def login_with_token(token):
 def login_from_environment():
     """環境変数 HF_TOKEN のトークンで、Hugging Faceにログインする。
 
-    ノートブック冒頭の入力セルは、受け取ったトークンを環境変数 HF_TOKEN にだけ設定する。
+    ノートブックの「2.」のセルは、受け取ったトークンを環境変数 HF_TOKEN にだけ設定する。
     この関数がそれを読み取ってログインする(トークンは、この関数の中の一時的な
     ローカル変数としてのみ扱い、モジュールの変数やファイルには保持しない)。
     """
@@ -80,7 +80,7 @@ def login_from_environment():
     if not token.strip():
         raise UmaSetupError(
             "Hugging Faceのトークンが設定されていません。"
-            "ノートブック冒頭の「Hugging Faceのアクセストークンを入力する」のセルを"
+            "ノートブックの「2. Hugging Faceのトークンを入力し、UMAへのアクセスを確認する」のセルを"
             "実行してください。")
     login_with_token(token)
 
@@ -109,7 +109,7 @@ def explain_hf_error(error):
             "アクセス申請を完了していること(承認まで時間がかかる場合があります)\n"
             "  2. 申請したのと同じHugging Faceアカウントでトークンを発行していること\n"
             "  3. トークンの権限に「Read」が含まれていること\n"
-            "  4. トークンを間違って入力していないこと(ノートブック冒頭のトークン入力セルを、"
+            "  4. トークンを間違って入力していないこと(ノートブックの「2.」のセルを、"
             "「FORCE_REENTER」にチェックを入れて実行し直してください)\n"
             + detail)
     if name in ("LocalEntryNotFoundError", "ConnectionError", "Timeout", "ConnectTimeout",
@@ -130,14 +130,14 @@ def check_model_access():
     if not has_hf_token():
         raise UmaSetupError(
             "Hugging Faceのトークンが設定されていません。"
-            "ノートブック冒頭の「Hugging Faceのアクセストークンを入力する」のセルを"
+            "ノートブックの「2. Hugging Faceのトークンを入力し、UMAへのアクセスを確認する」のセルを"
             "実行してください。")
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as e:
         raise UmaSetupError(
             "huggingface_hub がインストールされていません。"
-            "「2. 依存ライブラリのインストール」のセルを実行してください。"
+            "「3. 依存ライブラリのインストール」のセルを実行してください。"
             f"(内部エラー: {e})") from e
     try:
         return hf_hub_download(repo_id=MODEL_REPO_ID, filename=LICENSE_FILENAME)
@@ -184,7 +184,7 @@ def load_predictor(model_name, device):
         except ImportError as e:
             raise UmaSetupError(
                 "fairchem-core がインストールされていません。"
-                "「2. 依存ライブラリのインストール」のセルを実行してください。"
+                "「3. 依存ライブラリのインストール」のセルを実行してください。"
                 f"(内部エラー: {e})") from e
         try:
             _PREDICTOR_CACHE[key] = pretrained_mlip.get_predict_unit(model_name, device=device)
