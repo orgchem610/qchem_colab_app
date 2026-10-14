@@ -1,0 +1,16 @@
+# config/uma_models.yaml
+#
+# GUIの「UMAモデル」ドロップダウンに表示される選択肢の一覧です。
+# key は fairchem の pretrained_mlip.get_predict_unit() に渡すモデル名です。
+# (モデル名・位置づけは facebookresearch/fairchem のREADMEに基づく。
+#  Hugging Face上のモデルカードに載っている旧版やアーカイブ版[uma-s-1 等]は
+#  既知の不具合があるため載せていません)
+#
+# 項目を追加するだけでGUIの選択肢が増えます。ただし、モデルごとに
+# 必要なfairchem-coreのバージョンが異なる場合があります。
+
+- label: "UMA small (uma-s-1p2p1) 推奨・最も高速"
+  key: "uma-s-1p2p1"
+
+- label: "UMA medium (uma-m-1p1) 高精度・低速・メモリ大"
+  key: "uma-m-1p1"

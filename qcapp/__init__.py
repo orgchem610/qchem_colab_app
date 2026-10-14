@@ -21,7 +21,7 @@ qcapp: PySCFを計算エンジンとするab initio量子化学計算のコア�
 from pathlib import Path
 import yaml
 
-__version__ = "0.1.17"  # 現在のGitタグと合わせて更新すること(更新を忘れやすいので要注意)
+__version__ = "0.2.0"  # 現在のGitタグと合わせて更新すること(更新を忘れやすいので要注意)
 
 # qchem_colab_app/ がプロジェクトのルート、config/ がその直下にある前提
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

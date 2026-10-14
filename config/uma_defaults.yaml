@@ -1,0 +1,28 @@
+# config/uma_defaults.yaml
+#
+# UMA版アプリ(uma_app / gui_uma.py)の既定値をまとめたファイルです。
+# PySCF版(defaults.yaml)とは独立しており、こちらを編集してもPySCF版には影響しません。
+
+gui_defaults:
+  charge: 0
+  multiplicity: 1          # スピン多重度。1=閉殻(不対電子なし)。UMAには「スピン」として渡される
+  do_frequency: true       # 構造最適化の後に振動数計算も行うか(PySCF版と同じ位置づけ)
+  model: "uma-s-1p2p1"     # uma_models.yaml の key のどれか
+
+uma:
+  task_name: "omol"        # UMAのタスク名。分子・ポリマーは "omol"(fairchemのREADMEに基づく)
+
+geometry_optimization:
+  optimizer: "LBFGS"       # ASEの最適化アルゴリズム名(LBFGS / BFGS / FIRE のいずれか)
+  # 力の最大値(各原子にかかる力の大きさの最大)がこの値以下になれば収束とみなす。
+  # 振動数計算で小さな虚振動が出にくいよう、ASEの既定(0.05)よりやや厳しくしている。
+  fmax_ev_per_angstrom: 0.01
+  max_steps: 500
+
+frequency:
+  displacement_angstrom: 0.01   # 数値微分(中心差分)で原子を動かす幅[Å]
+  warn_natoms: 60               # これ以上の原子数では振動数計算に時間がかかる旨を表示する
+  small_imaginary_cm1: 50       # 虚振動がこの値(cm^-1)以内なら「数値誤差・収束不足の可能性」と案内する
+
+validation:
+  min_interatomic_distance_angstrom: 0.4   # これより近い原子対があればエラー
