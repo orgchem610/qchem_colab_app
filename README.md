@@ -1,47 +1,63 @@
 # qchem_colab_app
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp.ipynb) PySCF版
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp_UMA.ipynb) UMA版
 
 **GitHubリポジトリ: https://github.com/orgchem610/qchem_colab_app**
 (今後、コードの変更・バージョン管理はこのリポジトリで一元管理します)
 
-Google Colab上で動作する量子化学計算プロトタイプです。Gaussian等のライセンスソフトを
+Google Colab上で動作する計算化学プロトタイプです。Gaussian等のライセンスソフトを
 利用できない方(高校生等)でも、ブラウザだけで構造最適化・振動数解析を実行できることを
 最終目標にしています。将来的には、本ツールで最適化した構造を
 [ColabReaction](https://github.com/BILAB/ColabReaction) にそのまま渡し、
 反応経路探索・TS(遷移状態)最適化へシームレスにつなげることを目指しています。
 
-**現在のバージョン(v0.1.15)は、計算手法 HF・B3LYP、基底関数
-3-21G・6-31G・6-31G*・6-31G** に対応したプロトタイプです。** 対応範囲は
-`config/` 以下のYAMLファイルを編集するだけで順次拡張していく設計になっており、
+**現在のバージョンは v0.2.0 です。** 2つのノートブックで構成されています。
+
+| ノートブック | 計算エンジン | 特徴 |
+|---|---|---|
+| `ColabApp.ipynb`(PySCF版) | PySCF(計算手法 HF・B3LYP、基底関数 3-21G・6-31G・6-31G*・6-31G**) | 量子化学計算。分子軌道・原子電荷・molden出力に対応。GPUランタイムでは、GPU4PySCFを自動で使用 |
+| `ColabApp_UMA.ipynb`(UMA版) | 機械学習ポテンシャル[UMA](https://huggingface.co/facebook/UMA)(ASE + fairchem-core) | 高速。T4 GPUを前提。**結果は機械学習による予測値で、量子化学計算そのものの値ではありません。** Hugging Faceのアクセス申請とトークンが必要 |
+
+2つのノートブックは独立しており、お互いに影響しません(`uma_app/`は、PySCF専用の`qcapp/`に依存しません)。
+PySCF版の対応範囲は、`config/` 以下のYAMLファイルを編集するだけで順次拡張していく設計になっており、
 実際にB3LYPと6-31G系列の追加は`engine.py`等のコードを一切変更せず、設定ファイルの
 追記のみで行えました(詳細は下記「拡張のしかた」参照)。
 
-## できること(v0.1.15)
+## できること
+
+### PySCF版(`ColabApp.ipynb`)
 
 - 初期構造のアップロード: `.xyz`(自前パーサー)に加え、`.com`/`.gjf`(Gaussian入力)・
   `.pdb`はASE経由で読み込み可能(`.mol`/`.sdf`は未対応。理由は下記参照)。
-  アップロード欄へのドラッグ&ドロップにも対応(未検証、後述)
-- エネルギー収束グラフ: 対話的なグラフ上の点をクリックすると、対応する構造を
-  表示(ColabReactionを参考に実装。未検証のため、クリックが効かない環境向けに
-  スライダーでも同じ操作ができるようにしている。詳細は下記トラブルシューティング参照)
+  入力欄へのファイルの**ドラッグ&ドロップ**にも対応(「ファイルを選択」ボタンでも選べます)
+- エネルギー収束グラフ: グラフ上の点を**クリック**すると、対応する構造とエネルギーを表示
+  (ColabReactionを参考に実装。クリックが効かない環境向けに、スライダーでも同じ操作ができます)
 - 電荷・スピン多重度を指定(スピン多重度・電荷の組み合わせが化学的に妥当かを自動チェック)
 - 構造最適化: 計算手法(HF, B3LYP)× 基底関数(3-21G, 6-31G, 6-31G*, 6-31G**)の
   組み合わせで実行可能。B3LYPは"b3lypg"(Gaussianと同じVWN3版の相関汎関数)を
   明示的に指定しており、Gaussianと同じ定義のB3LYPになるようにしている
 - 振動数解析(既定でON。ZPE・自由エネルギーの概算値も出力、虚振動があれば警告)
-- 可視化: エネルギー収束グラフ、最適化軌跡アニメーション、振動アニメーション、
+- 可視化: エネルギー収束グラフ、振動アニメーション、
   分子軌道(HOMO/LUMO周辺)、原子電荷の可視化(球の色はMulliken電荷基準のグラデーション:
   正電荷=青・中性付近=緑・負電荷=赤。数値ラベルの表示有無はチェックボックスで切り替え可能)
-  (すべてノートブック内、py3Dmol / plotly)
+  (すべてノートブック内、py3Dmol / 自前のSVGグラフ)。最適化の軌跡アニメーションは、
+  グラフの点から各ステップの構造を見られるようになったため、v0.1.17で廃止しました
+  (多フレームの`.xyz`としてダウンロードすることはできます)
 - 出力ファイル: 最終構造(`.xyz`, ColabReactionにそのままアップロード可能)、
   最適化トラジェクトリ(多フレーム`.xyz`)、`.molden`(構造+分子軌道。GaussView /
   Avogadro / Multiwfn 等で開けます。MacMolPlt向けにデカルト型基底関数(6D/10F)で
   出力しています)。ダウンロード時にファイル名を自由に指定可能
-- GPU4PySCFが利用可能な場合は自動でGPUを使用し、利用できない場合は自動的にCPUに
-  フォールバック
+- GPUランタイムが検出された場合は、GPU4PySCFを自動で使用し(GUIにチェックボックスはありません)、
+  利用できない場合は自動的にCPUにフォールバック
 
-## できないこと・既知の制約(v0.1.16時点)
+### UMA版(`ColabApp_UMA.ipynb`)
+
+詳細は、下記「UMA版」の節を参照してください。
+
+## できないこと・既知の制約(v0.2.0時点)
+
+### PySCF版
 
 - `.mol` / `.sdf` 形式の読み込みは未対応です。ASEはこれらのMDL系フォーマットに
   標準対応しておらず(結合次数の情報を持つ形式のため、座標主体のASEの守備範囲外)、
@@ -58,32 +74,50 @@ Google Colab上で動作する量子化学計算プロトタイプです。Gauss
   セッション中に終わらなかった実績があるため、大きな分子でB3LYP・6-31G**等を
   使う場合は、まず振動数計算をオフにして構造最適化のみで所要時間を確認する、
   基底関数を小さいものから試す、といった進め方を推奨します。
-- **開発環境の制約により、PySCF・GPU4PySCF等を実際にインストールして動作確認する
-  ことができていません**(サンドボックス環境からネットワークへアクセスできないため)。
-  pyscf/ase不要な部分(`config/`読み込み、入力バリデーション)は`tests/`で
-  実際にテスト済みですが、PySCFを呼び出す部分(`engine.py`/`optimize.py`/`freq.py`)は
-  Google Colab上で実際に動かして初めて検証できます。想定される調整点は下記
-  「トラブルシューティング」に記載しています。
+
+### UMA版
+
+- TS(遷移状態)探索、座標を固定した最適化(スキャン)は未実装です。
+- 構造ファイルの読み込みは`common/io_reader.py`を共有しているため、**H〜Xe**の元素のみ対応です。
+- 分子軌道・原子電荷・moldenの出力はありません。UMAが返すのはエネルギー・力・応力であり、
+  電子状態(波動関数・原子電荷)は出力しないためです。
+  (これらが必要な場合の運用は、下記「今後の予定・検討中の事項」を参照してください)
+
+### 開発・動作確認の進め方について
+
+コードの作成・単体テストは、ネットワークに接続できないサンドボックスで行っているため、
+PySCF・fairchem・Google Colab実機を使った動作は、そこでは確認できません。
+Colab上での動作(PySCFの呼び出し、UMAの推論、ドラッグ&ドロップ・グラフのクリックの
+JavaScript連携など)は、リリース前にColab実機で確認してから、タグを打つ運用にしています。
+単体テストで確認できる範囲は`tests/`にあります(実行方法は下記「ディレクトリ構成」参照)。
 
 ## ディレクトリ構成
 
 ```
 qchem_colab_app/
-├── ColabApp.ipynb          # ノートブック本体(Setup Section / Execution Section)
-├── README.md                # 本ファイル
-├── requirements.txt          # 依存パッケージのバージョン指定(初回インストール用の目安)
-├── requirements-lock.txt     # Colab実行時に自動生成される「動作確認済み」の正確な記録
-│                              # (依存関係が安定するまで、当面はGit管理対象外)
+├── ColabApp.ipynb              # PySCF版ノートブック(Setup Section / Execution Section)
+├── ColabApp_UMA.ipynb           # UMA版ノートブック(ランタイム 2026.07・T4 GPUが記録済み)
+├── README.md                     # 本ファイル
+├── THIRD_PARTY_NOTICES.md         # UMA版が利用する外部ソフトウェア・データのライセンスへのリンク
+├── requirements.txt               # PySCF版の依存パッケージのバージョン指定(初回インストール用の目安)
+├── requirements-uma.txt            # UMA版の依存パッケージ(PySCFは使わない)
+├── requirements-lock.txt           # Colab実行時に自動生成される「動作確認済み」の正確な記録
+├── requirements-uma-lock.txt        #   (どちらも、依存関係が安定するまで当面はGit管理対象外)
 ├── .gitignore
 ├── config/
 │   ├── purposes.yaml         # 計算目的の選択肢(現在: 構造最適化のみ)
-│   ├── functionals.yaml      # 計算手法の選択肢(現在: HFのみ)
-│   ├── basis_sets.yaml       # 基底関数の選択肢(現在: 3-21Gのみ)
-│   └── defaults.yaml         # 電荷・多重度・収束条件などの既定値
-├── common/                    # 計算エンジンに依存しない共通モジュール(将来のuma_appとも共有)
-│   ├── io_reader.py             # .xyz読み込み・入力バリデーション
+│   ├── functionals.yaml      # 計算手法の選択肢(HF, B3LYP)
+│   ├── basis_sets.yaml       # 基底関数の選択肢(3-21G, 6-31G, 6-31G*, 6-31G**)
+│   ├── defaults.yaml         # 電荷・多重度・収束条件などの既定値(PySCF版)
+│   ├── uma_defaults.yaml     # UMA版の既定値(最適化の収束条件・振動数計算の刻み幅など)
+│   └── uma_models.yaml       # UMA版で選べるモデルの一覧
+├── common/                    # 計算エンジンに依存しない共通モジュール(PySCF版・UMA版の両方が使う)
+│   ├── io_reader.py             # 構造ファイルの読み込み・入力バリデーション
 │   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム)
-│   └── plot_common.py             # エネルギープロット・トラジェクトリ/振動アニメーション
+│   ├── plot_common.py             # 構造・振動アニメーションの3D表示(py3Dmol)
+│   ├── colab_widgets.py            # ブラウザ側JavaScript ↔ Colabのコールバック(ドロップ領域・クリックできるSVGグラフ)
+│   ├── gui_helpers.py               # GUI用の補助関数(アップロードされたファイルの取り出し・ダウンロード名)
+│   └── gui_parts.py                  # GUI共通の画面部品(ファイル入力・グラフ+構造表示・振動・ダウンロード)
 ├── qcapp/                     # PySCFを計算エンジンとするab initio計算専用(uma_appからは呼ばない)
 │   ├── __init__.py               # バージョン番号, config/読み込み共通関数
 │   ├── engine.py                  # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
@@ -92,40 +126,68 @@ qchem_colab_app/
 │   ├── writer_molden.py              # moldenファイル出力
 │   ├── visualizer_pyscf.py            # 分子軌道・原子電荷等、PySCF固有の可視化
 │   └── visualizer.py                   # common+pyscf固有の可視化をまとめたファサード(gui.py用)
-├── gui.py                     # ipywidgets によるGUI組み立て
+├── uma_app/                   # UMA(機械学習ポテンシャル)専用(qcappには依存しない)
+│   ├── __init__.py               # バージョン番号, config/読み込み共通関数
+│   ├── uma_engine.py              # Hugging Faceのトークン・アクセス確認、モデルの読み込み、ASEのAtoms/Calculator
+│   ├── uma_optimize.py             # ASE(LBFGS等)+UMAによる構造最適化
+│   ├── uma_freq.py                  # 数値Hessianによる振動数解析(並進・回転を除去)
+│   ├── uma_inputs.py                 # 電荷の入力・表示(「+1」の形)
+│   ├── uma_notice.py                  # UMAのライセンス・引用の一次情報へのリンク
+│   ├── uma_report.py                   # 計算ログの組み立て
+│   └── README.md                        # UMA版の詳細・トラブルシューティング
+├── gui.py                     # PySCF版のGUI組み立て(ipywidgets)
+├── gui_uma.py                  # UMA版のGUI組み立て(ipywidgets)
 └── tests/
-    ├── test_io_reader.py        # 入力読み込み・バリデーションの単体テスト
-    ├── test_config.py            # 設定ファイルのスキーマテスト
-    └── test_visualizer.py         # 可視化のうちpyscf/py3Dmol非依存の部分の単体テスト
+    ├── test_io_reader.py / test_config.py / test_visualizer.py   # 入力・設定・可視化(PySCF非依存部分)
+    ├── test_colab_widgets.py       # ドロップ領域・クリックできるグラフ(JavaScriptを含むHTMLの生成)
+    ├── test_gui_helpers.py          # ファイルの取り出し・ダウンロード名
+    ├── test_gui_parts.py             # 共通の画面部品(ipywidgets・Colabの代用品を使用)
+    ├── fake_gui_env.py                # test_gui_parts.py用の、ipywidgets・Colabの代用品
+    ├── test_uma_*.py                   # UMA版(振動数の数値計算・最適化・ログ・設定・ノートブックの構成など)
+    ├── test_requirements.py             # requirements*.txtの方針(ipywidgetsを指定しない、など)
+    └── test_version_sync.py / test_readme.py   # バージョン番号の一致・本ファイルとの整合
 ```
 
-### `common`/`qcapp`という2つのトップレベルパッケージに分けた理由
+テストは、次のコマンドで実行できます(ASEが入っていない環境では、ASEを使う一部のテストはスキップされます)。
 
-UMA活用アプリ(`uma_app`、未実装)を今後追加するにあたり、「UMA版からも
-呼び出せる汎用的なコード」と「PySCF計算エンジンに固有のコード」を
+```
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
+### `common`/`qcapp`/`uma_app`という3つのトップレベルパッケージに分けた理由
+
+「PySCF版・UMA版の両方から呼び出せる汎用的なコード」と「各計算エンジンに固有のコード」を
 物理的に分離しておくための整理です。`common/`は引数がプレーンな
-Pythonの値(元素記号・座標・エネルギーの数列等)で完結しており、将来
-`uma_app`からもそのままimportして再利用できます。`qcapp/`(=PySCF専用)は
-PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えません。
-`common`と`qcapp`はどちらもリポジトリ直下の対等な(どちらが親でも子でもない)
+Pythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の
+どちらからもそのままimportして再利用しています。`qcapp/`(=PySCF専用)は
+PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えません。`uma_app/`
+(=UMA専用)は`qcapp`を一切importしません(PySCFがインストールされていない環境でも
+動くようにするため)。
+`common`・`qcapp`・`uma_app`はいずれもリポジトリ直下の対等な(どれが親でも子でもない)
 パッケージとして置いています。`qcapp/visualizer.py`は、この分割前と同じ
 `visualizer.関数名(...)`という呼び方を`gui.py`側で変えずに済むよう、
 `common`と`qcapp`固有の可視化関数をまとめて再エクスポートするだけの
 薄いファサードです。
 
+GUIの画面部品も、同じ考え方で整理しています。構造ファイルの入力・エネルギーグラフと構造表示・
+振動アニメーション・ダウンロードは、PySCF版とUMA版で同じ動作のため、`common/gui_parts.py`に
+共通の部品として切り出しました(v0.2.0)。各部品は、計算エンジンのモジュールをimportせず、
+エネルギー・座標・振動数などのプレーンな値だけを受け取ります。エンジンごとに違う部分
+(構造表示の見出しに足す情報など)は、部品に関数を渡して差し替えます。
+
 (以前のバージョンでは`common/`を`qcapp/`の中に入れる構成でお渡ししましたが、
 「`common`は`qcapp`専用の一部ではなく、`qcapp`と`uma_app`が対等に依存する
 共通基盤である」という位置づけをより素直に表せるよう、上記の構成に修正しました)
 
-### `gui.py`をルート直下に置いている理由(設計意図)
+### `gui.py`/`gui_uma.py`をルート直下に置いている理由(設計意図)
 
 `gui.py`は「`qcapp`パッケージが提供する部品(入出力・計算・可視化)を
 1つのColabアプリの画面として組み立てる」役割に特化した、**アプリの
 組み立て役(エントリーポイント)**であり、`qcapp`パッケージ自体が提供する
 再利用可能な部品(ライブラリ)とは性質が異なるため、意図的にパッケージの
-外に置いています。今後`gui_uma.py`を追加する際も、`gui.py`は`qcapp`と
-`common`から、`gui_uma.py`は`common`と`uma_app`から、それぞれ必要な部品を
-自由に組み合わせられます。仮に`gui.py`を`qcapp`の中に、`gui_uma.py`を
+外に置いています。UMA版の`gui_uma.py`も同じ考え方です。`gui.py`は`qcapp`と
+`common`から、`gui_uma.py`は`uma_app`と`common`から、それぞれ必要な部品を
+自由に組み合わせています。仮に`gui.py`を`qcapp`の中に、`gui_uma.py`を
 `uma_app`の中に入れてしまうと、例えば`gui_uma.py`(`uma_app`側)が
 `common`の関数を再利用する際に「`uma_app`パッケージの中から`common`
 パッケージを参照する」という向きの依存が生まれます。これ自体は`common`が
@@ -135,30 +197,100 @@ PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使�
 
 ## 使い方
 
-Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセルに詳しく
-書いてあります。ノートブックを開き、上から順にセルを実行してください。
-初めてJupyter/Colabを使う方向けの手順は、本リポジトリを共有した際のメッセージも
-あわせてご確認ください。
+Colab上での具体的な操作手順は、各ノートブック内のMarkdownセルに詳しく
+書いてあります。ノートブックを開き、上から順にセルを実行してください
+(UMA版は、メニューの「ランタイム」→「すべてのセルを実行」で、操作画面が表示されるまで
+自動で進みます)。初めてJupyter/Colabを使う方向けの手順は、本リポジトリを共有した際の
+メッセージもあわせてご確認ください。
 
 ### ランタイム設定を毎回選び直さずに済ませる方法
 
-「ハードウェアアクセラレータ(GPU/CPU)」の選択は、`.ipynb`ファイル自体の
-メタデータ(`"accelerator": "GPU"` 等)として保存されます。一度選んで保存
-(Colabは自動保存されます)し、そのままGitHubにpushしておけば、次に誰かが
-同じノートブックをGitHub経由で開いたときも、その設定が引き継がれた状態で
-接続されます(毎回手動で選び直す必要はありません)。ただし、このリポジトリを
-高校生等の不特定多数に公開する用途を考えると、常にGPUを要求する設定にして
-しまうと、GPUを使う必要のない小さな分子のテストでも共有の限られたGPU割り当てを
-消費してしまいます。そのため、公開用の`ColabApp.ipynb`自体は「ハードウェア
-アクセラレータ: なし(CPU)」のままにしておき、GPUで検証したいときだけご自身の
-作業中に手動で切り替える、という運用を推奨します。
+「ハードウェアアクセラレータ(GPU/CPU)」と「ランタイムバージョン」の選択は、
+どちらも`.ipynb`ファイル自体のメタデータとして保存されます(Colabが書き込みます)。
 
-一方、「ランタイムバージョン」(Python本体等を固定する機能)についても
-同様に保存・引き継がれるかどうかは、今回明確な裏付けが取れませんでした。
-恐縮ですが、シークレットウィンドウや別アカウントでノートブックを開き直して
-選択が引き継がれているかをご自身でご確認いただけますでしょうか。もし
-引き継がれない場合は、ノートブックの先頭に「まずこの設定をしてください」という
-案内をMarkdownセルで明記しておくのが確実です。
+```json
+"metadata": {
+  "accelerator": "GPU",
+  "colab": {
+    "gpuType": "T4",
+    "runtime_attributes": { "runtime_version": "2026.07" }
+  }
+}
+```
+
+`ColabApp_UMA.ipynb`は、UMAがGPUで高速に動作するため、**T4 GPU・ランタイムバージョン 2026.07**
+を記録しています(ノートブック冒頭に、現在の環境が想定どおりかを確認するセルもあります)。
+一方、PySCF版の`ColabApp.ipynb`は、このリポジトリを高校生等の不特定多数に公開する用途を考えると、
+常にGPUを要求する設定にしてしまうと、GPUを使う必要のない小さな分子のテストでも
+共有の限られたGPU割り当てを消費してしまうため、「ハードウェアアクセラレータ: なし(CPU)」の
+ままにしておき、GPUで検証したいときだけ手動で切り替える運用を推奨します
+(GPUランタイムに切り替えれば、GPU4PySCFを自動で使用します)。
+
+## UMA版(`ColabApp_UMA.ipynb`)
+
+機械学習ポテンシャル**UMA**(Meta FAIR Chemistry)を計算エンジンとして、構造最適化と振動数解析を
+高速に行うノートブックです。**結果は機械学習による予測値であり、量子化学計算そのものの値では
+ありません。** 構成・設計上の判断・トラブルシューティングの詳細は、
+[`uma_app/README.md`](uma_app/README.md)にあります。
+
+### できること
+
+- 構造ファイル(`.xyz`/`.com`/`.gjf`/`.pdb`)のドラッグ&ドロップ(または選択)、UMAモデル
+  (`uma-s-1p2p1`(既定)、`uma-m-1p1`)・電荷・スピン多重度の指定。電荷は、正の値を「+1」の形で表示し、
+  入力は「1」でも「+1」でも構いません(「−1」「+1」のボタンもあります)
+- 構造最適化(ASEのLBFGS。収束条件は力の最大値 ≤ 0.01 eV/Å、最大500ステップ。`config/uma_defaults.yaml`で変更可)。
+  最大ステップ数までに収束しなかった場合も、途中経過の構造を表示します
+- 振動数解析(任意): 力の中心差分で数値Hessianを作り、並進・回転を除いた3N−6個(直線分子は3N−5個)の
+  振動モードを求めます。虚振動があれば警告し、ゼロ点エネルギーも出力します
+- 可視化: エネルギー収束グラフ(点のクリックでその構造を表示)、振動アニメーション
+- 出力: 最終構造(`.xyz`。ColabReactionやPySCF版にそのまま渡せます)、最適化トラジェクトリ(多フレーム`.xyz`)、
+  計算ログ(条件・最適化の履歴・振動数・UMAのライセンスと引用へのリンク)。
+  ダウンロードするファイル名の既定値は「入力ファイル名_result」です
+
+### 使い方
+
+1. (初回のみ)ノートブックの「事前準備」に従い、Hugging Faceのアカウント作成・UMAへのアクセス申請・
+   アクセストークンの発行を行います。Colabの「シークレット」に`HF_TOKEN`として保存しておくと、入力も不要になります。
+2. メニューの「ランタイム」→「すべてのセルを実行」を押します。
+3. シークレットに保存していない場合は、「2. Hugging Faceのトークンを入力し、UMAへのアクセスを確認する」の
+   セルに入力欄が表示されます。トークンを貼り付けてEnterキーを押してください(入力が必要なのは、この1回だけです)。
+4. 以降は自動で進みます(初回は、ライブラリのインストールに数分かかります)。最後に操作画面が表示されます。
+
+### Hugging Faceのトークンの扱い
+
+トークンは、ノートブックの「2.」のセル(`getpass`、またはColabのシークレット)で受け取り、
+環境変数`HF_TOKEN`(Hugging Face公式の標準の受け渡し方法)にだけ設定します。セルの変数には残さず、
+画面・ログ・保存されるノートブックにも書き込みません。`uma_engine.login_from_environment()`が
+環境変数を読み取ってログインするため、入力セルの作りを変えても、`uma_app`や`gui_uma.py`を
+変更する必要はありません(疎結合)。トークンの入力欄をGUI(ipywidgets)に置く方式は、
+入力値がウィジェットの状態として保持され、保存されるノートブックに残りうるため採用していません。
+
+### UMAのライセンスと引用について
+
+UMAの利用にあたっては、次の一次情報をご確認ください(ノートブックの冒頭にも、同じ内容を掲載しています)。
+
+- ライセンス(FAIR Chemistry License v1): https://huggingface.co/facebook/UMA/blob/main/LICENSE
+- Acceptable Use Policy・モデルカード: https://huggingface.co/facebook/UMA
+- 引用: UMAを利用した成果を発表する場合は、以下の論文を引用してください(モデルカードの記載)。
+  Wood, B. M. et al. *UMA: A Family of Universal Models for Atoms.* arXiv:2506.23971 (2025).
+  https://arxiv.org/abs/2506.23971
+- fairchem(コード、MITライセンス): https://github.com/facebookresearch/fairchem
+
+そのほかのライブラリのライセンスは、[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)を参照してください。
+
+## 今後の予定・検討中の事項
+
+- **UMA版のTS(遷移状態)探索**: 未実装。`Sella`(外部パッケージ)またはASE組み込みのDimer法のどちらで実装するかは未定です
+  (どちらを選んでも、新しいコードが必要です)。
+- **座標を固定した構造最適化(スキャン)**: ColabReactionの`ColabReaction.ipynb`には実装がなかったため、
+  必要になった時点で、UMA版・PySCF版のそれぞれについて検討します。
+- **UMA版で分子軌道・原子電荷を見たい場合**: UMAは電子状態を出力しないため、現時点では、UMA版の最終構造(`.xyz`)を
+  PySCF版に読み込ませて確認する運用が可能です。UMA版の画面から、UMAで最適化した構造に対してPySCFで
+  一点計算を行う追加機能は、案として検討中です(PySCFのインストールとCPUの計算時間が必要になり、
+  UMAとは別のレベルの電子状態になります)。
+- **PySCF版のノートブックへの対応**: ipywidgetsが8.x系に更新された場合に備えて、UMA版の「II-0」のセルと同様のセルを
+  `ColabApp.ipynb`にも追加することを検討しています。
+- **2つ目の計算目的を追加するとき**: 下記「設計方針メモ」のとおり、`config/purposes.yaml`の移行を検討します。
 
 ## requirements-lock.txtを軽量に保つ理由
 
@@ -171,8 +303,10 @@ Colab上での具体的な操作手順は `ColabApp.ipynb` 内のMarkdownセル�
 対策として、`ColabApp.ipynb`のSetup Section側で、`pip freeze`の結果から
 「`requirements.txt`に明示的に書かれているパッケージ」と「`gpu4pyscf`関連
 パッケージ」だけを抜き出して`requirements-lock.txt`を生成するように変更しました。
-これにより、ロックファイルは`requirements.txt`とほぼ同じ数(現在8個)の
-パッケージだけを含む軽量なものになります。
+これにより、ロックファイルは`requirements.txt`とほぼ同じ数(数個)の
+パッケージだけを含む軽量なものになります。UMA版(`ColabApp_UMA.ipynb`)も同じ方針で、
+`requirements-uma.txt`に書かれたパッケージだけを`requirements-uma-lock.txt`に記録します
+(どちらのロックファイルも、現在はGit管理の対象外です)。
 
 **トレードオフ**: この方式では、pyscfやgeometricなどが依存する間接的な
 パッケージ(例: h5py等)まではバージョンを固定していません。そのため、
@@ -414,6 +548,18 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
 必ず `git tag -a vX.Y.Z -m "変更点"` のメッセージを具体的に書き、GitHub上でもその
 タグから「Create a new release」→リリースノートに同内容を貼り付けてください。
 
+### バージョン番号(`__version__`)の更新
+
+`qcapp/__init__.py` と `uma_app/__init__.py` の `__version__` は、**リポジトリ全体のリリース番号
+(Gitタグ)と同じ値**にします。過去に、タグはv0.1.16なのに `__version__` が0.1.12のままだった
+更新漏れがあったため、新しいタグを打つ前に、次の3点を確認してください。
+
+1. 2つの `__version__` を、新しいバージョンに更新する(`tests/test_version_sync.py` が、2つの値の
+   一致を検査します)
+2. 本ファイル冒頭の「現在のバージョン」を更新する(`tests/test_readme.py` が、`__version__` との
+   一致を検査します)
+3. テストが通ることを確認する(`python3 -m unittest discover -s tests -p "test_*.py"`)
+
 ### ロールバックの方法
 
 - 「最新版に不具合があった場合にすぐ前の版へ戻す」には、
@@ -453,7 +599,9 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
   ColabのCUDAバージョンと `gpu4pyscf-cuda12x` / `gpu4pyscf-cuda11x` の
   対応関係が変わっている可能性があります。`ColabApp.ipynb` のSetup Section内、
   GPU4PySCFインストールセルのパッケージ名を読み替えてください。GPUが
-  使えなくても、CPU実行として問題なく計算は継続されます。
+  使えなくても、CPU実行として問題なく計算は継続されます。GPUを使うかどうかは、GPUランタイム
+  (`nvidia-smi`が成功するか)かどうかで**自動的に判定**します(以前あったGUIのチェックボックスは
+  v0.1.17で廃止しました。実行ログに「GPUランタイム: 検出されました/検出されませんでした」と表示されます)。
 - **最終構造でのCPU再計算・振動数計算になぜGPUを使わないのか**:
   GPU4PySCFの解析的Hessian・分子軌道(cubegen)・Mulliken電荷計算などの
   対応状況は主にDFT向けに整備されており、現在のプロトタイプで使っているHFでの
@@ -496,64 +644,79 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
   JavaScript実行に一切依存しない静的PNG画像(kaleido使用)に変換して埋め込む
   方式に変更した。kaleidoは1.0以降でAPIが刷新されplotly 6.1.1以降が必須になり
   現行のplotly 5.x系とは非互換のため、`kaleido==0.2.1`に固定している。
+  **その後、v0.1.17で、グラフを自前のSVGで描く方式に変更した**(点のクリックにも対応。詳細は
+  下記「GUI部品の実装メモ」)。現在のGUIはplotly・kaleidoを使っていないが、
+  `common/plot_common.py`の静的PNG出力関数のために`requirements.txt`には残している。
 - **電荷密度の等値面が単色にしか見えない**: 軌道(HOMO/LUMO)とは異なり、
   電子密度は原子核付近と分子表面付近とで値の桁が大きく異なるため、
   「最大値に対する割合」で等値面のしきい値を決める方式(軌道と同じ方式)
   だと3段階ともほぼ同じ範囲に収まってしまい、グラデーションに見えなかった。
   v0.1.6で、電子密度の可視化で慣習的に使われる絶対値
   (0.002 / 0.02 / 0.2 e/bohr^3 、原子単位)を既定値として使う方式に変更した。
+- **操作画面が表示されず、Colab右側の「コードスニペット」パネルが
+  (`enable_custom_widget_manager`で絞り込まれた状態で)開くだけになる**(UMA版のセットアップ中に
+  実際に発生): ipywidgetsが8.x系に更新されていることが原因と考えられます。Colab標準のGUI部品の
+  表示の仕組みはipywidgets 7.x向け(Colabのランタイムには7.7.1が入っています)で、8.xが読み込まれると
+  Colab公式の「カスタムウィジェットマネージャー」を有効にしない限り表示されません。
+  そのため、`requirements.txt`・`requirements-uma.txt`のどちらでもipywidgetsの版は指定せず、
+  Colab標準のものをそのまま使っています(`tests/test_requirements.py`が検査します)。
+  別のライブラリがipywidgetsを更新してしまった場合は、UMA版では「II-0」のセルが
+  `output.enable_custom_widget_manager()`を実行します(PySCF版のノートブックには、現時点では
+  同じセルを追加していません)。`common/gui_parts.py`・`common/gui_helpers.py`は、7.x・8.xの
+  どちらでも動くように書いてあります。
+- **UMA版のトラブルシューティング**(Hugging Faceのアクセス、`torch`の更新、GPUが使えない、など)は、
+  [`uma_app/README.md`](uma_app/README.md)にまとめています。
 
-## v0.1.16: ColabReactionを参考にしたGUI改修について
+## GUI部品の実装メモ(ドラッグ&ドロップ・グラフのクリック)
 
-### ColabReactionのソースコードを読めなかった件
+### 現在の方式
 
-`https://github.com/BILAB/ColabReaction` の実際のノートブック本体
-(`ColabReaction.ipynb`, 2760行)を読み込もうと複数の方法(GitHubの生ファイル
-表示、raw.githubusercontent.com、notebooks.githubusercontent.comのビューア)
-を試しましたが、いずれもアクセス制限(robots.txt)や、URLの技術的制約により
-実際のソースコードの中身を取得できませんでした。そのため、以下は
-リポジトリのREADME・User Guide PDF・関連論文(ACS JCIM誌)・requirements.txtから
-読み取れる情報をもとにした実装であり、実際のコードを1行1行確認した上での
-移植ではないことをご了承ください。確認できた事実:
-- ColabReactionはPanel(`pn.pane.Plotly`等)ベースのGUIで、これがエネルギー
-  ダイヤグラム上のクリックと3D構造表示を連動させる機能を実現していると考えられる
-- 依存関係に`plotly==6.3.0`, `py3Dmol==2.5.2`が含まれる
+ファイルの**ドラッグ&ドロップ**と、エネルギーグラフの**点のクリック**は、どちらも
+`common/colab_widgets.py`にある「ブラウザ側のJavaScript → Colabのコールバック → Python」という
+Colab公式の仕組み(`google.colab.output.register_callback`と`google.colab.kernel.invokeFunction`)で
+実現しています。外部のライブラリ(Plotly.js等)には依存しません。
+
+- **ドロップ領域**: ドロップされたファイルをJavaScriptが読み取り、Python側の関数に渡します
+  (拡張子・5 MBの上限は、JavaScript側とPython側の両方で確認します)。「ファイルを選択」ボタンも
+  残してあり、両方を使った場合は、最後に選んだファイルが使われます。
+- **エネルギーグラフ**: 素のSVGで描き、点をクリックすると、その点の番号がPython側に渡されて、
+  対応する構造が表示されます。選択中の点は赤い菱形で強調されます(ColabReactionと同じ体裁)。
+  グラフの点そのものは静的なSVGなので、クリックの連携が動かない環境でも必ず表示され、
+  スライダーで同じ操作ができます。
+- **Colab以外の環境**: ドロップ領域は出さず、通常のファイル選択ボタンとスライダーだけで動作します。
+
+JavaScriptを含むHTMLは、`ipywidgets.HTML`ウィジェットの`value`ではなく、`Output`ウィジェットの中で
+`display(HTML(...))`して表示する必要があります(`ipywidgets.HTML`では`script`が実行されないため)。
+
+### 以前の方式を採らなかった理由
+
+- `ipywidgets`純正の`FileUpload`のドラッグ&ドロップ: 環境によって、ドロップを受け付けない場合があったため。
+- Plotlyの`FigureWidget`によるクリック連動: Colab上で、グラフの枠だけが表示され、点が表示されない
+  事例があったため(原因は特定できていません)。
+- 静的PNG(kaleido)への変換: 点のクリックができないため。
+
+### 共通の画面部品
+
+PySCF版(`gui.py`)とUMA版(`gui_uma.py`)で共通の画面部品は、`common/gui_parts.py`にあります
+(`StructureFileInput`、`EnergyStructureViewer`、`VibrationViewer`、`DownloadPanel`)。
+ipywidgets 7.x・8.xのどちらでも動くように書いてあり、`tests/test_gui_parts.py`で、
+ipywidgetsやColabの代用品を使って、部品どうしのつなぎ方を検査しています
+(実際の見た目やJavaScriptの動作は、Colab実機での確認が必要です)。
+
+### ColabReactionの実装について
+
+エネルギーグラフのクリックによる構造表示やファイル入力は、`ColabReaction.ipynb`(Panelベースで、
+`pn.pane.Plotly`の`click_data`と`pn.widgets.FileDropper`を使用)を参考にしました。
+本プロジェクトはipywidgetsベースのため、Panelは使わず、上記の方式で実装しています。
 
 ### 依存ライブラリの増減
 
 | 変更 | ライブラリ | 増減 |
 |---|---|---|
-| エネルギープロットのクリック連動 | (追加なし。plotlyの`FigureWidget`機能を使用。plotly自体は既存の依存関係) | 増減なし |
-| ドラッグ&ドロップアップロード | (追加なし。ipywidgets純正の`FileUpload`ウィジェットのドラッグ&ドロップ対応を利用) | 増減なし |
+| ドラッグ&ドロップ・グラフのクリック | (追加なし。標準ライブラリと、Colab標準のJavaScript連携のみ) | 増減なし |
 | `.com`/`.gjf`/`.pdb`ファイルの読み込み | `ase` | **追加**(下限のみ指定、`requirements.txt`参照) |
 | (見送り)`.mol`/`.sdf`ファイルの読み込み | `rdkit` | 未追加。追加する場合はもう1つライブラリが増えるため、ご希望があれば別途対応します |
-
-ASEの追加について: 将来のUMA活用アプリでもASE(+FAIRChemCalculator)は
-必須になる見込みのため、プロジェクト全体で見れば依存関係の実質的な増加には
-あたらないと考えています。
-
-### エネルギープロットのクリック連動(実装上のリスクについて)
-
-これまでエネルギープロットの表示は3回作り直しており(v0.1.3〜v0.1.6)、
-最終的に「クリック等の対話的機能を諦めて静的PNG画像にする」ことで確実な表示を
-実現した経緯があります。クリックで構造を切り替える機能はこの対話性を
-再び必要とするため、`go.Figure`(静的)ではなく`go.FigureWidget`
-(ipywidgetsの正規のウィジェットプロトコルに乗る、対話的なグラフ)を試す
-実装にしました。これは以前失敗した方法(`display(fig)`や
-`display(HTML(fig.to_html()))`)とは異なる仕組みですが、実機で検証できていない
-ため、今回も動作しない可能性があります。そのため、**グラフの表示自体は
-try/exceptで静的PNG画像へのフォールバックを維持しつつ、クリックの有無に
-関わらず必ず使えるスライダーを追加**し、「クリックが効かなくても、
-スライダーで同じ操作ができる」設計にしています。
-
-### ドラッグ&ドロップアップロード(実装上のリスクについて)
-
-ipywidgets純正の`FileUpload`ウィジェット自体にドラッグ&ドロップの機能が
-含まれている可能性が高いと判断し、新規ライブラリを追加せずアップロード欄の
-説明文でドラッグ&ドロップを案内する形にしました。ただし、これも実機で
-検証できていません。動作しない場合は、これまで通りボタンをクリックして
-ファイルを選択してください(新規ライブラリを追加すれば独自のドロップゾーンを
-実装できますが、まずは追加ライブラリなしで様子を見る方針です)。
+| UMA版 | `fairchem-core`、`huggingface_hub`(`requirements-uma.txt`、PySCF版には影響しません) | UMA版のみ |
 
 ## 使用ライブラリ・引用について
 
@@ -574,80 +737,10 @@ ipywidgets純正の`FileUpload`ウィジェット自体にドラッグ&ドロッ
 | GPU4PySCF | PySCF本体と同じApache-2.0系列と見られます(個別のライセンス文言までは今回未確認) | |
 | ASE | GNU LGPL 2.1 | ライブラリとして(改変せず)利用する分にはアプリ側のライセンスに影響しません |
 | ipywidgets / plotly / py3Dmol / kaleido | いずれもBSD/MIT系の許諾的ライセンス | |
+| fairchem-core(UMA版) | MIT License | https://github.com/facebookresearch/fairchem |
+| UMAの学習済みモデル(UMA版) | FAIR Chemistry License v1 | ライセンス全文: https://huggingface.co/facebook/UMA/blob/main/LICENSE |
 
 **アプリ内の対応**: `README.md`にこの謝辞表を追加しました。あわせて、`ColabApp.ipynb`
 の冒頭のMarkdownセルにも簡潔な謝辞を追記することを推奨します(次回のセル修正時に
-反映します)。UMAについては別途ライセンス条件が大きく異なる(個人情報を伴う
-利用許諾が必要)ため、後述の「UMA活用アプリの設計提案」で改めて扱っています。
-
-## 将来的な構成: UMA利用版の追加(設計案)
-
-UMA(ColabReactionが使用している機械学習原子間ポテンシャル)による高速な構造最適化・
-TS探索・振動数予測は、この`ColabApp.ipynb`には組み込まず、**同じGitHubリポジトリ内に
-別のノートブック`ColabApp_UMA.ipynb`を新規作成する形**で追加する方針です。
-Google Colab上では
-`https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp.ipynb`
-(UMAなし版、既存)と
-`https://colab.research.google.com/github/orgchem610/qchem_colab_app/blob/main/ColabApp_UMA.ipynb`
-(UMA版、新規)という別々のURLで開けるようにします。
-
-### ディレクトリ構成案
-
-```
-qchem_colab_app/
-├── ColabApp.ipynb              # 既存(変更なし)
-├── ColabApp_UMA.ipynb           # 新規追加
-├── config/                      # 既存(共通利用)
-├── common/                       # 既存。UMA版もここは再利用する
-├── qcapp/                         # 既存(ab initio計算専用、UMA版からは呼ばない)
-├── uma_app/                        # 新規: UMA関連を完全に分離
-│   ├── __init__.py
-│   ├── uma_engine.py                 # HFトークン管理・FAIRChemCalculatorの構築
-│   ├── uma_optimize.py                # ASE + UMAによる構造最適化
-│   ├── uma_ts.py                       # TS探索(Sella or ASE組み込みのdimer法。要検討)
-│   └── uma_freq.py                      # ASE Vibrations + UMAによる振動数予測
-├── gui.py                          # 既存(変更なし)
-├── gui_uma.py                        # 新規: UMA版GUI組み立て(commonとuma_appを利用)
-├── requirements.txt                  # 既存(変更なし)
-└── requirements-uma.txt               # 新規: fairchem-core等UMA専用の追加依存
-```
-
-`uma_app/`は`qcapp`(PySCF専用)には一切依存せず、`common`(構造の読み込み・検証・
-xyz出力・エネルギープロット・トラジェクトリ/振動アニメーション)のみを再利用します。
-`gui.py`/`gui_uma.py`をルート直下に置く設計意図は上記「`gui.py`をルート直下に
-置いている理由」を参照してください。
-
-### 想定ワークフロー
-
-1. 構造アップロード・検証(`common.io_reader`を再利用)
-2. Hugging Face Tokenの入力(ColabReactionと同じ方式。教員等の大人による代理セットアップを想定)
-3. 計算目的を選択: 構造最適化 / TS探索
-4. **振動数予測は独立の計算目的とはせず、「構造最適化の後処理として振動数予測も行う」
-   チェックボックス(既存アプリの「振動数計算も実行する」と同じ位置づけ)として提供**。
-   単独機能としての振動数予測は現時点では実装しない(将来的に必要になれば追加検討)。
-5. UMA(ASE経由)で計算実行。結果は既存アプリと同じ`.xyz`形式で出力し、
-   ColabReaction・既存ColabApp.ipynbの双方に受け渡し可能にする
-6. 画面には「これはUMAによる高速な予測値であり、厳密なDFT等の値ではない」旨を明記する
-
-### 技術的な構成要素
-
-| 用途 | 使うもの | 補足 |
-|---|---|---|
-| 構造最適化 | ASE + `fairchem-core`の`FAIRChemCalculator`(`task_name="omol"`) + ASEの最適化アルゴリズム(LBFGS等) | UMAは通常のASE Calculatorとして振る舞う |
-| TS探索 | 未確定。`Sella`(外部パッケージ)またはASE組み込みの`ase.mep.dimer`(Dimer法) | Sellaの方がMLIP+TS探索の定番として広く使われているが外部依存が増える。ASE本体のみで完結させる案も検討可能で、どちらを選んでも新規コードは必要 |
-| 振動数予測 | ASEの`ase.vibrations.Vibrations`(数値Hessian) | UMAの1回の評価が非常に高速なため、数値差分によるHessian計算でも数分程度で完了する見込み |
-
-### ライセンス上の注意点
-
-- `fairchem-core`(コード本体): MITライセンス。制約なし。
-- **UMAの学習済み重み**: FAIR Chemistryライセンス(Hugging Face上でゲート)。
-  調査の結果、**アプリの画面上やソースコード上に何らかの表示を行う法的義務は
-  見つかりませんでした**(Meta社のLlamaのような「Built with UMA」等の明記義務は
-  確認できませんでした)。必要な対応は、利用者ごとのHugging Faceアカウント作成・
-  モデルへのアクセス申請・アクセストークンの発行のみです。ただし、研究成果を
-  論文等で公表する場合は利用の明記が求められる点、契約への同意には準拠法上の
-  同意可能年齢に達している必要がある点は既にお伝えした通りで、変わりありません。
-  Hugging Face上の完全なライセンス文言は変更される可能性があるため、公開直前に
-  改めて確認することを推奨します。
-- `Sella`を採用する場合は、採用が決まり次第ライセンスを確認します。
-- `ASE`: LGPL-2.1。改変せず利用する分にはアプリ側のライセンスに影響しません。
+反映します)。UMA(学習済みモデル)のライセンス・引用については、一次情報へのリンクを、
+下記「UMA版」の節と`THIRD_PARTY_NOTICES.md`に掲載しています。
