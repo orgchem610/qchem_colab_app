@@ -26,11 +26,12 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
 
 【PySCF版と共通の部品】(どちらも common/ にある)
     画面部品: 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・
-              振動アニメーション・ダウンロード(common/gui_parts.py)
-    補助関数: アップロードされたファイルの取り出し・ダウンロードのファイル名(common/gui_helpers.py)
+              振動アニメーション・ダウンロード・電荷の入力欄(common/gui_parts.py)
+    補助関数: アップロードされたファイルの取り出し・ダウンロードのファイル名・電荷の表示と読み取り
+              (common/gui_helpers.py)
     そのほか: 構造ファイルの読み込み・検証(common/io_reader.py)、xyz出力(common/writer_xyz.py)、
               構造・振動の3D表示(common/plot_common.py)
-    このファイルには、UMA版にしかない部分(モデルの選択、電荷の入力欄、UMAの呼び出し)だけを残している。
+    このファイルには、UMA版にしかない部分(モデルの選択、UMAの呼び出し)だけを残している。
 
 使い方(ColabApp_UMA.ipynbから):
     import gui_uma

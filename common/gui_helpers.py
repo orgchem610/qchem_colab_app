@@ -19,6 +19,9 @@ import unicodedata
 
 from common import io_reader
 
+# ファイル名に使えない文字(Windows等で禁止されている文字)
+_FORBIDDEN_FILENAME_CHARS = r'[\\/:*?"<>|]'
+
 
 def extract_uploaded_file(upload_widget, dropped_file=None):
     """アップロードされたファイルの中身(bytes)とファイル名を取り出す。
@@ -61,7 +64,7 @@ def extract_uploaded_file(upload_widget, dropped_file=None):
 
 def sanitize_filename_stem(raw):
     """ファイル名(拡張子なし)として使えない文字を除去する。空なら 'result' にする。"""
-    stem = re.sub(r'[\\/:*?"<>|]', "", (raw or "").strip())
+    stem = re.sub(_FORBIDDEN_FILENAME_CHARS, "", (raw or "").strip())
     return stem or "result"
 
 
@@ -73,7 +76,7 @@ def default_download_stem(input_filename):
     name = os.path.basename(str(input_filename or "").replace("\\", "/"))
     # 「.xyz」のように拡張子しかない名前には、ファイル名の本体がないものとして扱う
     stem = "" if re.fullmatch(r"\.[^.]*", name) else os.path.splitext(name)[0].lstrip(".")
-    stem = re.sub(r'[\\/:*?"<>|]', "", stem).strip()
+    stem = re.sub(_FORBIDDEN_FILENAME_CHARS, "", stem).strip()
     return f"{stem}_result" if stem else "result"
 
 

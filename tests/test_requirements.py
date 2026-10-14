@@ -42,14 +42,14 @@ class TestRequirementsUma(unittest.TestCase):
 
     def test_pyscf_only_packages_are_not_listed(self):
         names = _package_names("requirements-uma.txt")
-        for pyscf_only in ("pyscf", "geometric", "plotly", "kaleido"):
+        for pyscf_only in ("pyscf", "geometric"):
             self.assertNotIn(pyscf_only, names)
 
 
 class TestRequirementsPyscf(unittest.TestCase):
     def test_core_packages_are_listed(self):
         names = _package_names("requirements.txt")
-        for required in ("pyscf", "geometric", "pyyaml", "ase", "py3dmol", "plotly", "kaleido"):
+        for required in ("pyscf", "geometric", "pyyaml", "ase", "py3dmol"):
             self.assertIn(required, names)
 
 

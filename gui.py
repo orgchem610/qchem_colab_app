@@ -42,7 +42,7 @@ from IPython.display import display, clear_output
 from qcapp import load_yaml, __version__
 from common import io_reader, writer_xyz, gui_parts, gui_helpers
 from qcapp import engine, optimize, freq as freq_module
-from qcapp import writer_molden, visualizer
+from qcapp import writer_molden, visualizer_pyscf
 
 
 # -----------------------------------------------------------------------------
@@ -65,7 +65,7 @@ def _gpu_runtime_detected():
 
 def _homo_lumo_window(mf, half_width=2):
     """HOMOを中心に前後 half_width 個ずつの軌道インデックスとラベルを作る。"""
-    homo_idx, lumo_idx = visualizer.get_homo_lumo_indices(mf)
+    homo_idx, lumo_idx = visualizer_pyscf.get_homo_lumo_indices(mf)
     n_mo = mf.mo_energy.shape[-1] if hasattr(mf.mo_energy, "shape") else len(mf.mo_energy)
 
     options = []
@@ -182,7 +182,7 @@ def build_app():
     def _on_mo_button_clicked(_):
         with mo_output:
             clear_output(wait=True)
-            view = visualizer.render_orbital(state["final_mol"], state["mf_final"], mo_dd.value)
+            view = visualizer_pyscf.render_orbital(state["final_mol"], state["mf_final"], mo_dd.value)
             view.show()
 
     def _render_charge_view():
@@ -190,21 +190,21 @@ def build_app():
         charges = state["charges"]
         with charge_view_output:
             clear_output(wait=True)
-            view = visualizer.render_charges(
+            view = visualizer_pyscf.render_charges(
                 mol_final, charges, show_labels=charge_labels_checkbox.value)
             view.show()
 
     def _on_density_button_clicked(_):
         mol_final = state["final_mol"]
         mf_final = state["mf_final"]
-        charges = visualizer.compute_mulliken_charges(mol_final, mf_final)
+        charges = visualizer_pyscf.compute_mulliken_charges(mol_final, mf_final)
         state["charges"] = charges
         with charge_table_output:
             clear_output(wait=True)
             display(widgets.HTML(
                 "<b>原子ごとのMulliken電荷</b>"
                 "(球の色: 正電荷=青 ・ 中性付近=緑 ・ 負電荷=赤 のグラデーション)" +
-                visualizer.atomic_charges_table_html(charges)))
+                visualizer_pyscf.atomic_charges_table_html(charges)))
         charge_labels_checkbox.disabled = False
         _render_charge_view()
 
@@ -220,6 +220,16 @@ def build_app():
     # 実行ボタンのハンドラ(計算パイプライン本体)
     # -------------------------------------------------------------------
     def on_run_clicked(_):
+        # 計算中にもう一度押されても、二重に実行しない(UMA版 gui_uma.py と同じ)
+        if run_button.disabled:
+            return
+        run_button.disabled = True
+        try:
+            _run_pipeline()
+        finally:
+            run_button.disabled = False
+
+    def _run_pipeline():
         with log_output:
             clear_output(wait=True)
             t_total_start = time.perf_counter()
@@ -290,7 +300,7 @@ def build_app():
 
                 freq_result = None
                 if do_freq:
-                    if natm >= 40:
+                    if natm >= defaults["frequency"]["warn_natoms"]:
                         print(
                             f"\n  [注意] 原子数が{natm}と多いため、振動数計算(Hessian計算)は\n"
                             "  CPU上でかなりの時間(数十分〜数時間程度)がかかる可能性があります。\n"

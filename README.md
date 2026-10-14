@@ -125,8 +125,7 @@ qchem_colab_app/
 │   ├── optimize.py                 # geomeTRICによる構造最適化
 │   ├── freq.py                      # Hessian・振動数解析
 │   ├── writer_molden.py              # moldenファイル出力
-│   ├── visualizer_pyscf.py            # 分子軌道・原子電荷等、PySCF固有の可視化
-│   └── visualizer.py                   # common+pyscf固有の可視化をまとめたファサード(gui.py用)
+│   └── visualizer_pyscf.py            # 分子軌道・原子電荷等、PySCF固有の可視化
 ├── uma_app/                   # UMA(機械学習ポテンシャル)専用(qcappには依存しない)
 │   ├── __init__.py               # バージョン番号, config/読み込み共通関数
 │   ├── uma_engine.py              # Hugging Faceのトークン・アクセス確認、モデルの読み込み、ASEのAtoms/Calculator
@@ -165,10 +164,7 @@ PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使�
 (=UMA専用)は`qcapp`を一切importしません(PySCFがインストールされていない環境でも
 動くようにするため)。
 `common`・`qcapp`・`uma_app`はいずれもリポジトリ直下の対等な(どれが親でも子でもない)
-パッケージとして置いています。`qcapp/visualizer.py`は、この分割前と同じ
-`visualizer.関数名(...)`という呼び方を`gui.py`側で変えずに済むよう、
-`common`と`qcapp`固有の可視化関数をまとめて再エクスポートするだけの
-薄いファサードです。
+パッケージとして置いています。
 
 GUIの画面部品も、同じ考え方で整理しています。構造ファイルの入力・エネルギーグラフと構造表示・
 振動アニメーション・ダウンロードは、PySCF版とUMA版で同じ動作のため、`common/gui_parts.py`に
@@ -648,8 +644,8 @@ GitHubの **Releases** 機能(タグを選んで「Create a new release」から
   方式に変更した。kaleidoは1.0以降でAPIが刷新されplotly 6.1.1以降が必須になり
   現行のplotly 5.x系とは非互換のため、`kaleido==0.2.1`に固定している。
   **その後、v0.1.17で、グラフを自前のSVGで描く方式に変更した**(点のクリックにも対応。詳細は
-  下記「GUI部品の実装メモ」)。現在のGUIはplotly・kaleidoを使っていないが、
-  `common/plot_common.py`の静的PNG出力関数のために`requirements.txt`には残している。
+  下記「GUI部品の実装メモ」)。その後、v0.2.1で
+  `common/plot_common.py`のplotly・kaleido依存の関数を削除し、`requirements.txt`からも外した。
 - **電荷密度の等値面が単色にしか見えない**: 軌道(HOMO/LUMO)とは異なり、
   電子密度は原子核付近と分子表面付近とで値の桁が大きく異なるため、
   「最大値に対する割合」で等値面のしきい値を決める方式(軌道と同じ方式)
@@ -740,7 +736,7 @@ ipywidgetsやColabの代用品を使って、部品どうしのつなぎ方を�
 | geomeTRIC | BSD 3-Clause | ログに表示される引用依頼(Wang, L.-P.; Song, C.C. (2016) *J. Chem. Phys.* 144, 214108)は法的義務ではなく開発者からのお願いですが、実際に構造最適化アルゴリズムを使わせてもらっているため、研究等で使う場合は引用を推奨します |
 | GPU4PySCF | PySCF本体と同じApache-2.0系列と見られます(個別のライセンス文言までは今回未確認) | |
 | ASE | GNU LGPL 2.1 | ライブラリとして(改変せず)利用する分にはアプリ側のライセンスに影響しません |
-| ipywidgets / plotly / py3Dmol / kaleido | いずれもBSD/MIT系の許諾的ライセンス | |
+| ipywidgets / py3Dmol | いずれもBSD/MIT系の許諾的ライセンス | |
 | fairchem-core(UMA版) | MIT License | https://github.com/facebookresearch/fairchem |
 | UMAの学習済みモデル(UMA版) | FAIR Chemistry License v1 | ライセンス全文: https://huggingface.co/facebook/UMA/blob/main/LICENSE |
 
