@@ -10,6 +10,7 @@ gui.py(PySCF版)と gui_uma.py(UMA版)で共通の、画面部品(ipywidgets)を
     VibrationViewer       振動モードの選択とアニメーション表示
                           渡す結果: .frequencies_cm1 / .normal_modes を持つ任意のオブジェクト
     DownloadPanel         ダウンロードボタン(ファイル名の入力欄つき)
+    ChargeInput           電荷の入力欄(「+1」の形で表示。−1/+1ボタンつき)
 
 各部品は、画面に置くウィジェットを `.widget`(または `.widgets`)として公開し、
 計算が終わった後に show() / setup() を呼んで中身を更新する。計算の結果をどう得るかは
@@ -42,6 +43,68 @@ def dropdown_from_list(items, description, width="420px"):
         style={"description_width": "140px"},
         layout=widgets.Layout(width=width),
     )
+
+
+# -----------------------------------------------------------------------------
+# 電荷の入力
+# -----------------------------------------------------------------------------
+
+class ChargeInput:
+    """電荷の入力部品。正の値を「+1」のように符号付きで表示するため、数値ウィジェット(IntText)ではなく
+    文字の入力欄(Text)にして、−1/+1ボタンを添えている。
+
+    入力は「1」でも「+1」でもよく、Enterキーを押すか欄の外をクリックすると、「+1」の形に整えて
+    表示し直す(0と負の値はそのまま表示)。整数として読み取れない入力は、直前の値に戻してメッセージを出す。
+
+    controls : 入力欄と−1/+1ボタンを並べたHBox(スピン多重度の欄など、他の入力欄と同じ行に置ける)
+    message  : 入力エラーのメッセージ欄(controlsの下に置く)
+    value    : 現在の電荷(整数)
+    """
+
+    def __init__(self, value=0, description="電荷"):
+        self._value = int(value)
+        self._updating = False
+
+        self.text = widgets.Text(
+            value=gui_helpers.format_charge(self._value), description=description,
+            continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
+            style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
+        )
+        self.minus_button = widgets.Button(
+            description="−1", button_style="info", layout=widgets.Layout(width="48px"))
+        self.plus_button = widgets.Button(
+            description="+1", button_style="info", layout=widgets.Layout(width="48px"))
+        self.message = widgets.HTML()
+        self.controls = widgets.HBox([self.text, self.minus_button, self.plus_button])
+
+        self.text.observe(self._on_text_changed, names="value")
+        self.minus_button.on_click(lambda _: self._step(-1))
+        self.plus_button.on_click(lambda _: self._step(+1))
+
+    @property
+    def value(self):
+        return self._value
+
+    def _on_text_changed(self, change):
+        if change["name"] != "value" or self._updating:
+            return
+        try:
+            self._value = gui_helpers.parse_charge(change["new"])
+            self.message.value = ""
+        except gui_helpers.ChargeInputError as e:
+            self.message.value = f"<span style='color:#b42318'>{html.escape(str(e))}</span>"
+        # 読み取れた場合は「+1」の形に整え、読み取れなかった場合は直前の値に戻す
+        shown = gui_helpers.format_charge(self._value)
+        if self.text.value != shown:
+            self._updating = True
+            try:
+                self.text.value = shown
+            finally:
+                self._updating = False
+
+    def _step(self, delta):
+        self.message.value = ""
+        self.text.value = gui_helpers.format_charge(self._value + delta)
 
 
 # -----------------------------------------------------------------------------

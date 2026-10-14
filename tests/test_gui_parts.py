@@ -2,6 +2,7 @@
 tests/test_gui_parts.py
 -----------------------
 common/gui_parts.py(PySCF版 gui.py とUMA版 gui_uma.py で共通の画面部品)の単体テスト。
+電荷の入力部品(ChargeInput)も、ここで確認する。
 
 ipywidgets・Google Colab・py3Dmolの代わりに、tests/fake_gui_env.py の簡易な代用品を使う。
 ウィジェットの値の更新・observeの呼び出し・Outputへの表示・Colabのコールバックの登録といった
@@ -303,6 +304,60 @@ class TestDownloadPanelOutsideColab(_Base):
         self.assertIn("・最終構造: /tmp/a.xyz", out)
         self.assertIn("・molden: /tmp/b.molden", out)
         self.assertEqual(self.env.downloaded, [])
+
+
+class TestChargeInput(_Base):
+    def setUp(self):
+        super().setUp()
+        self.charge = self.gp.ChargeInput(value=0)
+
+    def _type(self, text):
+        self.charge.text.value = text
+
+    def test_initial_value_is_shown_with_a_plus_sign_only_when_positive(self):
+        self.assertEqual(self.gp.ChargeInput(value=0).text.value, "0")
+        self.assertEqual(self.gp.ChargeInput(value=1).text.value, "+1")
+        self.assertEqual(self.gp.ChargeInput(value=-2).text.value, "-2")
+        self.assertEqual(self.gp.ChargeInput(value=1).value, 1)
+
+    def test_typed_number_is_normalized_to_the_plus_sign_form(self):
+        self._type("1")
+        self.assertEqual((self.charge.value, self.charge.text.value), (1, "+1"))
+        self.assertEqual(self.charge.message.value, "")
+
+    def test_full_width_and_minus_forms_are_accepted(self):
+        self._type("－２")
+        self.assertEqual((self.charge.value, self.charge.text.value), (-2, "-2"))
+        self._type("＋３")
+        self.assertEqual((self.charge.value, self.charge.text.value), (3, "+3"))
+
+    def test_invalid_input_returns_to_the_previous_value_and_shows_a_message(self):
+        self._type("2")
+        self._type("abc")
+        self.assertEqual((self.charge.value, self.charge.text.value), (2, "+2"))
+        self.assertIn("整数", self.charge.message.value)
+
+    def test_a_valid_input_clears_the_error_message(self):
+        self._type("abc")
+        self._type("-1")
+        self.assertEqual(self.charge.message.value, "")
+
+    def test_plus_and_minus_buttons_step_the_charge(self):
+        self.charge.plus_button.click()
+        self.charge.plus_button.click()
+        self.assertEqual((self.charge.value, self.charge.text.value), (2, "+2"))
+        for _ in range(4):
+            self.charge.minus_button.click()
+        self.assertEqual((self.charge.value, self.charge.text.value), (-2, "-2"))
+
+    def test_buttons_clear_the_error_message(self):
+        self._type("abc")
+        self.charge.plus_button.click()
+        self.assertEqual(self.charge.message.value, "")
+
+    def test_controls_hold_the_text_and_both_buttons(self):
+        self.assertEqual(self.charge.controls.children,
+                         [self.charge.text, self.charge.minus_button, self.charge.plus_button])
 
 
 class TestDropdownFromList(_Base):

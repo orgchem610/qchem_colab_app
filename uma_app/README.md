@@ -15,13 +15,12 @@ PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お�
 | `uma_freq.py` | 数値微分によるHessianと、並進・回転を除いた調和振動数解析(純粋なnumpy) |
 | `uma_notice.py` | UMAのライセンス・引用の一次情報へのリンク(計算ログの末尾に記載。ノートブック冒頭の文面と同じ内容に保つ) |
 | `uma_report.py` | ダウンロード用ログの本文の組み立て |
-| `uma_inputs.py` | 電荷の入力・表示(正の値を「+1」の形で表示) |
 | `../gui_uma.py` | GUIの組み立て(PySCF版の `gui.py` に相当) |
 | `../config/uma_defaults.yaml`, `uma_models.yaml` | 既定値・選べるモデル(PySCF版の設定とは別ファイル) |
 | `../requirements-uma.txt` | UMA版の依存ライブラリ(PySCF版の `requirements.txt` とは別) |
 
 `common/`(構造の読み込み・検証、xyz出力、構造・振動の表示、ドラッグ&ドロップ、クリックできるグラフ、
-GUIの共通の画面部品 `gui_parts.py`)は
+GUIの共通の画面部品 `gui_parts.py`、電荷の入力欄(正の値を「+1」の形で表示)・電荷の表示と読み取りの関数 `gui_helpers.py`)は
 PySCF版と共有しています。`uma_app` は `qcapp` を一切importしません。
 
 ## 使い方

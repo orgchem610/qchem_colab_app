@@ -33,7 +33,8 @@ PySCF版の対応範囲は、`config/` 以下のYAMLファイルを編集する�
   入力欄へのファイルの**ドラッグ&ドロップ**にも対応(「ファイルを選択」ボタンでも選べます)
 - エネルギー収束グラフ: グラフ上の点を**クリック**すると、対応する構造とエネルギーを表示
   (ColabReactionを参考に実装。クリックが効かない環境向けに、スライダーでも同じ操作ができます)
-- 電荷・スピン多重度を指定(スピン多重度・電荷の組み合わせが化学的に妥当かを自動チェック)
+- 電荷・スピン多重度を指定(スピン多重度・電荷の組み合わせが化学的に妥当かを自動チェック)。
+  電荷は、正の値を「+1」の形で表示し、入力は「1」でも「+1」でも構いません(「−1」「+1」のボタンもあります。UMA版と共通)
 - 構造最適化: 計算手法(HF, B3LYP)× 基底関数(3-21G, 6-31G, 6-31G*, 6-31G**)の
   組み合わせで実行可能。B3LYPは"b3lypg"(Gaussianと同じVWN3版の相関汎関数)を
   明示的に指定しており、Gaussianと同じ定義のB3LYPになるようにしている
@@ -47,7 +48,7 @@ PySCF版の対応範囲は、`config/` 以下のYAMLファイルを編集する�
 - 出力ファイル: 最終構造(`.xyz`, ColabReactionにそのままアップロード可能)、
   最適化トラジェクトリ(多フレーム`.xyz`)、`.molden`(構造+分子軌道。GaussView /
   Avogadro / Multiwfn 等で開けます。MacMolPlt向けにデカルト型基底関数(6D/10F)で
-  出力しています)。ダウンロード時にファイル名を自由に指定可能
+  出力しています)。ダウンロード時にファイル名を自由に指定可能(既定値は、UMA版と同じ「入力ファイル名_result」)
 - GPUランタイムが検出された場合は、GPU4PySCFを自動で使用し(GUIにチェックボックスはありません)、
   利用できない場合は自動的にCPUにフォールバック
 
@@ -116,8 +117,8 @@ qchem_colab_app/
 │   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム)
 │   ├── plot_common.py             # 構造・振動アニメーションの3D表示(py3Dmol)
 │   ├── colab_widgets.py            # ブラウザ側JavaScript ↔ Colabのコールバック(ドロップ領域・クリックできるSVGグラフ)
-│   ├── gui_helpers.py               # GUI用の補助関数(アップロードされたファイルの取り出し・ダウンロード名)
-│   └── gui_parts.py                  # GUI共通の画面部品(ファイル入力・グラフ+構造表示・振動・ダウンロード)
+│   ├── gui_helpers.py               # GUI用の補助関数(アップロードされたファイルの取り出し・ダウンロード名・電荷の表示と読み取り)
+│   └── gui_parts.py                  # GUI共通の画面部品(ファイル入力・グラフ+構造表示・振動・ダウンロード・電荷入力)
 ├── qcapp/                     # PySCFを計算エンジンとするab initio計算専用(uma_appからは呼ばない)
 │   ├── __init__.py               # バージョン番号, config/読み込み共通関数
 │   ├── engine.py                  # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
@@ -131,7 +132,6 @@ qchem_colab_app/
 │   ├── uma_engine.py              # Hugging Faceのトークン・アクセス確認、モデルの読み込み、ASEのAtoms/Calculator
 │   ├── uma_optimize.py             # ASE(LBFGS等)+UMAによる構造最適化
 │   ├── uma_freq.py                  # 数値Hessianによる振動数解析(並進・回転を除去)
-│   ├── uma_inputs.py                 # 電荷の入力・表示(「+1」の形)
 │   ├── uma_notice.py                  # UMAのライセンス・引用の一次情報へのリンク
 │   ├── uma_report.py                   # 計算ログの組み立て
 │   └── README.md                        # UMA版の詳細・トラブルシューティング
@@ -140,8 +140,9 @@ qchem_colab_app/
 └── tests/
     ├── test_io_reader.py / test_config.py / test_visualizer.py   # 入力・設定・可視化(PySCF非依存部分)
     ├── test_colab_widgets.py       # ドロップ領域・クリックできるグラフ(JavaScriptを含むHTMLの生成)
-    ├── test_gui_helpers.py          # ファイルの取り出し・ダウンロード名
-    ├── test_gui_parts.py             # 共通の画面部品(ipywidgets・Colabの代用品を使用)
+    ├── test_gui_helpers.py          # ファイルの取り出し・ダウンロード名・電荷の表示と読み取り
+    ├── test_gui_parts.py             # 共通の画面部品(電荷入力を含む。ipywidgets・Colabの代用品を使用)
+    ├── test_notebooks_hidden_code.py  # 両ノートブックのコードセルが、既定でコード非表示になっているか
     ├── fake_gui_env.py                # test_gui_parts.py用の、ipywidgets・Colabの代用品
     ├── test_uma_*.py                   # UMA版(振動数の数値計算・最適化・ログ・設定・ノートブックの構成など)
     ├── test_requirements.py             # requirements*.txtの方針(ipywidgetsを指定しない、など)
@@ -199,6 +200,8 @@ GUIの画面部品も、同じ考え方で整理しています。構造ファ�
 
 Colab上での具体的な操作手順は、各ノートブック内のMarkdownセルに詳しく
 書いてあります。ノートブックを開き、上から順にセルを実行してください
+(各セルのコードは、既定では折りたたまれ、題名だけが表示されます。内容を確認したい場合は、
+題名の左の矢印や「コードを表示」をクリックすると開けます。ColabReactionと同じ方式です)
 (UMA版は、メニューの「ランタイム」→「すべてのセルを実行」で、操作画面が表示されるまで
 自動で進みます)。初めてJupyter/Colabを使う方向けの手順は、本リポジトリを共有した際の
 メッセージもあわせてご確認ください。
@@ -698,7 +701,8 @@ JavaScriptを含むHTMLは、`ipywidgets.HTML`ウィジェットの`value`では
 ### 共通の画面部品
 
 PySCF版(`gui.py`)とUMA版(`gui_uma.py`)で共通の画面部品は、`common/gui_parts.py`にあります
-(`StructureFileInput`、`EnergyStructureViewer`、`VibrationViewer`、`DownloadPanel`)。
+(`StructureFileInput`、`EnergyStructureViewer`、`VibrationViewer`、`DownloadPanel`、`ChargeInput`)。
+電荷の表示・読み取りの関数(`format_charge`、`parse_charge`)は、`common/gui_helpers.py`にあります。
 ipywidgets 7.x・8.xのどちらでも動くように書いてあり、`tests/test_gui_parts.py`で、
 ipywidgetsやColabの代用品を使って、部品どうしのつなぎ方を検査しています
 (実際の見た目やJavaScriptの動作は、Colab実機での確認が必要です)。

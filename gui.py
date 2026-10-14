@@ -17,7 +17,7 @@ GUI一式を組み立てるモジュール。
         ④ ダウンロード(最終構造xyz・トラジェクトリxyz・moldenファイル)
 
 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・振動アニメーション・
-ダウンロードの画面部品は、UMA版(gui_uma.py)と共通の common/gui_parts.py にある。
+ダウンロード・電荷入力の画面部品は、UMA版(gui_uma.py)と共通の common/gui_parts.py にある。
 これらは、ブラウザ側JavaScript → Colabのコールバック → Python の仕組み
 (common/colab_widgets.py)で実現している(ipywidgets.FileUploadやPlotlyのFigureWidgetは
 Colab上で動作しない場合があったため)。Colab以外の環境では、ドロップ領域を出さず
@@ -40,7 +40,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from qcapp import load_yaml, __version__
-from common import io_reader, writer_xyz, gui_parts
+from common import io_reader, writer_xyz, gui_parts, gui_helpers
 from qcapp import engine, optimize, freq as freq_module
 from qcapp import writer_molden, visualizer
 
@@ -112,10 +112,8 @@ def build_app():
     method_dd = gui_parts.dropdown_from_list(functionals, "計算手法")
     basis_dd = gui_parts.dropdown_from_list(basis_items, "基底関数")
 
-    charge_input = widgets.IntText(
-        value=defaults["gui_defaults"]["charge"], description="電荷",
-        style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
-    )
+    # 電荷の入力欄は、UMA版(gui_uma.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
+    charge_input = gui_parts.ChargeInput(value=defaults["gui_defaults"]["charge"])
     mult_input = widgets.IntText(
         value=defaults["gui_defaults"]["multiplicity"], description="スピン多重度",
         style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
@@ -130,7 +128,8 @@ def build_app():
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         *file_input.widgets,
         purpose_dd, method_dd, basis_dd,
-        widgets.HBox([charge_input, mult_input]),
+        widgets.HBox([charge_input.controls, mult_input]),
+        charge_input.message,
         freq_checkbox,
     ])
 
@@ -345,7 +344,7 @@ def build_app():
                      traj_xyz_path, "_traj.xyz", "トラジェクトリ"),
                     ("分子軌道・構造(molden)",
                      molden_path, ".molden", "molden"),
-                ])
+                ], default_stem=gui_helpers.default_download_stem(uploaded_filename))
 
             except (io_reader.StructureError, ValueError) as e:
                 print("\n❌ 入力内容にエラーがあります:")

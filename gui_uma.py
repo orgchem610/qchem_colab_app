@@ -38,7 +38,6 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     display(app)
 """
 
-import html
 import os
 import tempfile
 import time
@@ -48,7 +47,7 @@ import ipywidgets as widgets
 from IPython.display import clear_output
 
 from uma_app import load_yaml, __version__
-from uma_app import uma_engine, uma_optimize, uma_freq, uma_report, uma_inputs
+from uma_app import uma_engine, uma_optimize, uma_freq, uma_report
 from common import io_reader, writer_xyz, gui_parts, gui_helpers
 
 
@@ -76,47 +75,8 @@ def build_app():
     if gui_defaults.get("model") in [m["key"] for m in models]:
         model_dd.value = gui_defaults["model"]
 
-    # 電荷は、正の値を「+1」のように符号付きで表示するため、数値ウィジェット(IntText)ではなく
-    # 文字の入力欄(Text)にしている。入力は「1」でも「+1」でもよく、Enterキーを押すか
-    # 欄の外をクリックすると、「+1」の形に整えて表示し直す(0と負の値はそのまま表示)。
-    # 整数として読み取れない入力は、直前の値に戻してメッセージを出す。
-    charge_state = {"value": int(gui_defaults["charge"]), "updating": False}
-    charge_input = widgets.Text(
-        value=uma_inputs.format_charge(charge_state["value"]), description="電荷",
-        continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
-        style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
-    )
-    charge_message = widgets.HTML()
-    charge_minus_button = widgets.Button(description="−1", button_style="info",
-                                         layout=widgets.Layout(width="48px"))
-    charge_plus_button = widgets.Button(description="+1", button_style="info",
-                                        layout=widgets.Layout(width="48px"))
-
-    def _on_charge_changed(change):
-        if change["name"] != "value" or charge_state["updating"]:
-            return
-        try:
-            charge_state["value"] = uma_inputs.parse_charge(change["new"])
-            charge_message.value = ""
-        except uma_inputs.ChargeInputError as e:
-            charge_message.value = f"<span style='color:#b42318'>{html.escape(str(e))}</span>"
-        # 読み取れた場合は「+1」の形に整え、読み取れなかった場合は直前の値に戻す
-        shown = uma_inputs.format_charge(charge_state["value"])
-        if charge_input.value != shown:
-            charge_state["updating"] = True
-            try:
-                charge_input.value = shown
-            finally:
-                charge_state["updating"] = False
-
-    charge_input.observe(_on_charge_changed, names="value")
-
-    def _step_charge(delta):
-        charge_message.value = ""
-        charge_input.value = uma_inputs.format_charge(charge_state["value"] + delta)
-
-    charge_minus_button.on_click(lambda _: _step_charge(-1))
-    charge_plus_button.on_click(lambda _: _step_charge(+1))
+    # 電荷の入力欄は、PySCF版(gui.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
+    charge_input = gui_parts.ChargeInput(value=int(gui_defaults["charge"]))
     mult_input = widgets.IntText(
         value=gui_defaults["multiplicity"], description="スピン多重度",
         style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
@@ -131,8 +91,8 @@ def build_app():
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         *file_input.widgets,
         model_dd,
-        widgets.HBox([charge_input, charge_minus_button, charge_plus_button, mult_input]),
-        charge_message,
+        widgets.HBox([charge_input.controls, mult_input]),
+        charge_input.message,
         freq_checkbox,
     ])
 
@@ -176,7 +136,7 @@ def build_app():
             clear_output(wait=True)
             t_total_start = time.perf_counter()
             try:
-                charge = charge_state["value"]
+                charge = charge_input.value
                 multiplicity = int(mult_input.value)
                 model_key = model_dd.value
                 do_freq = bool(freq_checkbox.value)

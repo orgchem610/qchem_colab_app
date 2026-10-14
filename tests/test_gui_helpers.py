@@ -1,7 +1,7 @@
 """
 tests/test_gui_helpers.py
 -------------------------
-common.gui_helpers(アップロードされたファイルの取り出し・ダウンロードのファイル名)の単体テスト。
+common.gui_helpers(アップロードされたファイルの取り出し・ダウンロードのファイル名・電荷の表示と読み取り)の単体テスト。
 ipywidgetsには依存しない(FileUploadの値は、同じ形の辞書・オブジェクトで代用している)。
 """
 
@@ -84,6 +84,50 @@ class TestSanitizeFilenameStem(unittest.TestCase):
 
     def test_normal_names_are_unchanged(self):
         self.assertEqual(gui_helpers.sanitize_filename_stem("water_result"), "water_result")
+
+
+class TestFormatCharge(unittest.TestCase):
+    def test_positive_values_get_a_plus_sign(self):
+        self.assertEqual(gui_helpers.format_charge(1), "+1")
+        self.assertEqual(gui_helpers.format_charge(12), "+12")
+
+    def test_zero_and_negative_values_are_shown_as_they_are(self):
+        self.assertEqual(gui_helpers.format_charge(0), "0")
+        self.assertEqual(gui_helpers.format_charge(-1), "-1")
+        self.assertEqual(gui_helpers.format_charge(-3), "-3")
+
+
+class TestParseCharge(unittest.TestCase):
+    def test_plain_numbers_without_a_plus_sign(self):
+        self.assertEqual(gui_helpers.parse_charge("1"), 1)
+        self.assertEqual(gui_helpers.parse_charge("0"), 0)
+        self.assertEqual(gui_helpers.parse_charge("-2"), -2)
+
+    def test_explicit_plus_sign(self):
+        self.assertEqual(gui_helpers.parse_charge("+1"), 1)
+        self.assertEqual(gui_helpers.parse_charge("+0"), 0)
+
+    def test_surrounding_and_inner_spaces_are_ignored(self):
+        self.assertEqual(gui_helpers.parse_charge("  +1 "), 1)
+        self.assertEqual(gui_helpers.parse_charge("- 1"), -1)
+
+    def test_full_width_characters_are_accepted(self):
+        self.assertEqual(gui_helpers.parse_charge("１"), 1)
+        self.assertEqual(gui_helpers.parse_charge("＋２"), 2)
+        self.assertEqual(gui_helpers.parse_charge("－１"), -1)
+
+    def test_unicode_minus_sign_is_accepted(self):
+        self.assertEqual(gui_helpers.parse_charge("\u22121"), -1)
+
+    def test_invalid_input_raises_a_helpful_error(self):
+        for bad in ("", "+", "-", "abc", "1.5", "1e3", "++1", "1 2", None):
+            with self.assertRaises(gui_helpers.ChargeInputError) as ctx:
+                gui_helpers.parse_charge(bad)
+            self.assertIn("整数", str(ctx.exception))
+
+    def test_round_trip_with_format_charge(self):
+        for value in range(-5, 6):
+            self.assertEqual(gui_helpers.parse_charge(gui_helpers.format_charge(value)), value)
 
 
 if __name__ == "__main__":
