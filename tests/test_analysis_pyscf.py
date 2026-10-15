@@ -37,6 +37,16 @@ def _open_shell(n_alpha, n_beta, n_mo):
     return SimpleNamespace(mo_occ=np.array([occ_a, occ_b]), mo_energy=np.array([energy, energy]))
 
 
+def _name(label):
+    """表示名から、末尾のエネルギー(eV)の部分を除いたもの。"""
+    return label.split("  ")[0]
+
+
+def _names(choices):
+    """軌道番号 → 表示名(エネルギーの部分を除く)。"""
+    return {i: _name(label) for label, i in choices.options}
+
+
 def _labels(choices):
     return [label for label, _ in choices.options]
 
@@ -68,15 +78,20 @@ class TestOrbitalChoicesClosedShell(unittest.TestCase):
         self.choices = analysis_pyscf.orbital_choices(_mol(["O", "H", "H"]), _closed_shell(5, 13))
 
     def test_all_occupied_and_valence_virtual_orbitals_are_listed(self):
-        self.assertEqual([i for _, i in self.choices.options], [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(sorted(i for _, i in self.choices.options), [0, 1, 2, 3, 4, 5, 6])
+
+    def test_lowest_energy_orbital_comes_last_in_the_list(self):
+        self.assertEqual([i for _, i in self.choices.options], [6, 5, 4, 3, 2, 1, 0])
 
     def test_labels_mark_only_homo_and_lumo(self):
-        self.assertEqual(_labels(self.choices), [
-            "軌道0番", "軌道1番", "軌道2番", "軌道3番", "軌道4番(HOMO)", "軌道5番(LUMO)", "軌道6番"])
+        self.assertEqual(_names(self.choices), {
+            0: "軌道0番", 1: "軌道1番", 2: "軌道2番", 3: "軌道3番",
+            4: "軌道4番(HOMO)", 5: "軌道5番(LUMO)", 6: "軌道6番"})
 
     def test_default_is_the_highest_occupied_orbital(self):
         self.assertEqual(self.choices.default_index, 4)
         self.assertFalse(self.choices.open_shell)
+        self.assertIn(4, [i for _, i in self.choices.options])
 
     def test_no_homo_minus_one_style_labels(self):
         for label in _labels(self.choices):
@@ -86,10 +101,10 @@ class TestOrbitalChoicesClosedShell(unittest.TestCase):
     def test_degenerate_homo_and_lumo_are_all_marked(self):
         energies = [-1.0, -0.5, -0.5, 0.2, 0.2, 0.9, 1.0, 1.1]
         choices = analysis_pyscf.orbital_choices(_mol(["N", "H", "H", "H"]), _closed_shell(3, 8, energies))
-        labels = _labels(choices)
-        self.assertEqual(labels[0], "軌道0番")
-        self.assertEqual(labels[1:3], ["軌道1番(HOMO)", "軌道2番(HOMO)"])
-        self.assertEqual(labels[3:5], ["軌道3番(LUMO)", "軌道4番(LUMO)"])
+        names = _names(choices)
+        self.assertEqual(names[0], "軌道0番")
+        self.assertEqual((names[1], names[2]), ("軌道1番(HOMO)", "軌道2番(HOMO)"))
+        self.assertEqual((names[3], names[4]), ("軌道3番(LUMO)", "軌道4番(LUMO)"))
         self.assertEqual(choices.default_index, 2)
 
     def test_slightly_different_energies_are_not_degenerate(self):
@@ -101,18 +116,49 @@ class TestOrbitalChoicesClosedShell(unittest.TestCase):
 
     def test_list_stops_at_the_number_of_available_orbitals(self):
         choices = analysis_pyscf.orbital_choices(_mol(["O", "H", "H"]), _closed_shell(5, 6))
-        self.assertEqual([i for _, i in choices.options], [0, 1, 2, 3, 4, 5])
+        self.assertEqual(sorted(i for _, i in choices.options), [0, 1, 2, 3, 4, 5])
 
     def test_all_occupied_orbitals_are_listed_even_beyond_the_valence_count(self):
         # 価電子殻の軌道数(内殻0+価電子殻1=1)より、電子が入っている軌道が多い場合
         choices = analysis_pyscf.orbital_choices(_mol(["H"]), _closed_shell(3, 6))
-        self.assertEqual([i for _, i in choices.options], [0, 1, 2, 3])
+        self.assertEqual(sorted(i for _, i in choices.options), [0, 1, 2, 3])
         self.assertEqual(choices.default_index, 2)
 
     def test_mo_energy_may_be_a_plain_list(self):
         mf = _closed_shell(2, 8)
         mf.mo_energy = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
         self.assertEqual(analysis_pyscf.orbital_choices(_mol(["H", "H"]), mf).default_index, 1)
+
+
+class TestOrbitalEnergyDisplay(unittest.TestCase):
+    ENERGIES = [-20.5, -1.3, -0.7, -0.5, -0.4, 0.2, 0.5, 0.9, 1.1, 1.3, 1.4, 1.5, 1.6]
+
+    def setUp(self):
+        self.choices = analysis_pyscf.orbital_choices(
+            _mol(["O", "H", "H"]), _closed_shell(5, 13, self.ENERGIES))
+
+    def _label_of(self, index):
+        return next(label for label, i in self.choices.options if i == index)
+
+    def test_energy_in_ev_is_appended_to_each_label(self):
+        self.assertTrue(self._label_of(4).endswith("  -10.88 eV"))      # -0.4 Hartree
+        self.assertTrue(self._label_of(5).endswith("  +5.44 eV"))       # +0.2 Hartree
+
+    def test_conversion_uses_the_standard_hartree_to_ev_factor(self):
+        self.assertAlmostEqual(analysis_pyscf.HARTREE_TO_EV, 27.211386245988)
+        self.assertTrue(self._label_of(0).endswith("  -557.83 eV"))     # -20.5 Hartree
+
+    def test_energies_decrease_down_the_list(self):
+        values = [float(label.split("  ")[-1].replace(" eV", "")) for label, _ in self.choices.options]
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_open_shell_shows_the_alpha_orbital_energy(self):
+        mf = _open_shell(3, 2, 10)
+        energy_alpha = np.arange(10, dtype=float) * 0.1
+        mf.mo_energy = np.array([energy_alpha, energy_alpha + 5.0])      # βは大きくずらしてある
+        choices = analysis_pyscf.orbital_choices(_mol(["C", "H", "H", "H"]), mf)
+        label = next(label for label, i in choices.options if i == 2)
+        self.assertTrue(label.endswith("  +5.44 eV"))                    # 0.2 Hartree
 
 
 class TestOrbitalChoicesOpenShell(unittest.TestCase):
@@ -123,15 +169,15 @@ class TestOrbitalChoicesOpenShell(unittest.TestCase):
         self.assertTrue(choices.open_shell)
         self.assertEqual(choices.default_index, 12)
         labels = _labels(choices)
-        self.assertEqual([s for s in labels if "SOMO" in s], ["軌道12番(SOMO)"])
+        self.assertEqual([_name(s) for s in labels if "SOMO" in s], ["軌道12番(SOMO)"])
         self.assertTrue(all("HOMO" not in s and "LUMO" not in s for s in labels))
-        # 内殻3+価電子殻(4×3+1×6=18)=21番目(軌道20番)まで
-        self.assertEqual([i for _, i in choices.options], list(range(21)))
+        # 内殻3+価電子殻(4×3+1×6=18)=21番目(軌道20番)まで。エネルギーの低い軌道が最後
+        self.assertEqual([i for _, i in choices.options], list(range(20, -1, -1)))
 
     def test_triplet_marks_both_singly_occupied_orbitals(self):
         choices = analysis_pyscf.orbital_choices(_mol(["O", "O"]), _open_shell(9, 7, 20))
         somo = [i for label, i in choices.options if "SOMO" in label]
-        self.assertEqual(somo, [7, 8])
+        self.assertEqual(sorted(somo), [7, 8])
         self.assertEqual(choices.default_index, 8)
 
     def test_pair_of_arrays_is_also_accepted(self):
@@ -149,7 +195,7 @@ class TestOrbitalChoicesOpenShell(unittest.TestCase):
         choices = analysis_pyscf.orbital_choices(_mol(["C", "H", "H", "H"]), mf)
         self.assertTrue(choices.open_shell)
         self.assertEqual(choices.default_index, 2)
-        self.assertIn("軌道2番(SOMO)", _labels(choices))
+        self.assertIn("軌道2番(SOMO)", list(_names(choices).values()))
 
 
 class TestComputeMullikenCharges(unittest.TestCase):

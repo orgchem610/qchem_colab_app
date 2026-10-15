@@ -15,6 +15,9 @@ import numpy as np
 # 軌道エネルギーの差がこの値(Hartree)以内なら、縮退している(同じエネルギー)とみなす
 DEGENERACY_TOLERANCE_HARTREE = 1.0e-4
 
+# 軌道エネルギーの単位換算(1 Hartree = 27.211386245988 eV)
+HARTREE_TO_EV = 27.211386245988
+
 # 原子番号 1〜54(H〜Xe)の元素記号。軌道の数え上げ(valence_space_size)に使う。
 _ELEMENT_SYMBOLS = (
     "H", "He",
@@ -27,7 +30,8 @@ _ELEMENT_SYMBOLS = (
 )
 
 # 分子軌道の選択肢(orbital_choices の戻り値)
-#   options       : [(表示名, 軌道番号), ...]。ドロップダウンの選択肢としてそのまま使える
+#   options       : [(表示名, 軌道番号), ...]。ドロップダウンの選択肢としてそのまま使える。
+#                   エネルギーの低い軌道ほど下に並ぶ(軌道番号の大きい順)
 #   default_index : 最初に選んでおく軌道番号(電子が入っている軌道のうち、最も高いもの)
 #   open_shell    : 開殻(電子が1個だけ入っている軌道がある)かどうか
 OrbitalChoices = namedtuple("OrbitalChoices", "options default_index open_shell")
@@ -108,10 +112,14 @@ def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
         (最外殻の軌道かどうかは、軌道の数で近似している。大きな基底関数・拡散関数を
         含む基底では、エネルギーの低い空軌道に最外殻以外の軌道が混ざることがある。)
 
-    表示名は「軌道n番」を基本とし、次の場合だけ末尾に付ける。
+    表示名は「軌道n番」を基本とし、次の場合だけ、軌道番号のあとに付ける。
         閉殻: 最高被占軌道(HOMO)は「(HOMO)」、最低空軌道(LUMO)は「(LUMO)」。
               エネルギーが縮退している(差が degeneracy_tolerance 以内の)軌道には、すべてに付ける。
         開殻: 電子が1個だけ入っている軌道は、すべて「(SOMO)」。HOMO・LUMOは付けない。
+    表示名の末尾には、軌道エネルギーを eV 単位で併記する(例: 「軌道4番(HOMO)  -13.61 eV」。
+    開殻では、αスピンの軌道のエネルギー)。
+
+    選択肢は、エネルギーの低い軌道ほど下に並ぶ(軌道番号の大きい順)。
 
     最初に選んでおく軌道は、電子が入っている(αスピンの)軌道のうち、最も番号の大きいもの。
     """
@@ -149,7 +157,9 @@ def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
             label += "(HOMO)"
         elif i in lumo_set:
             label += "(LUMO)"
+        label += f"  {energy[i] * HARTREE_TO_EV:+.2f} eV"
         options.append((label, i))
+    options.reverse()   # エネルギーの低い軌道が、リストの下に来るようにする
     return OrbitalChoices(options, default_index, open_shell)
 
 
