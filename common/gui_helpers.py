@@ -8,6 +8,7 @@ ipywidgetsがなくても単体テストできるよう、画面部品(common/gu
     - load_uploaded_structure    : 取り出した構造ファイルの読み込みと、計算前の検証
     - sanitize_filename_stem     : ダウンロードするファイル名(拡張子なし)の整形
     - default_download_stem      : ファイル名の既定値(「入力ファイル名_result」)
+    - xyz_download_items         : 最終構造・トラジェクトリのダウンロード項目(DownloadPanel.show に渡す)
     - format_charge / parse_charge / ChargeInputError
                                  : 電荷の表示(正の値は「+1」の形)と、入力欄の文字列の読み取り
 
@@ -141,3 +142,18 @@ def parse_charge(text):
         raise ChargeInputError(
             "電荷は整数で入力してください(例: 0, 1, +1, -1)。直前の値に戻しました。")
     return int(match.group(1) + match.group(2))
+
+
+def xyz_download_items(final_xyz_path, trajectory_path):
+    """最終構造・最適化トラジェクトリの、ダウンロード項目を作る(PySCF版・UMA版で共通)。
+
+    戻り値は DownloadPanel.show() に渡す形式のリスト。各要素は
+    (説明, ファイルのパス, ダウンロード名の末尾, ボタンに表示する名前)。
+    エンジンごとに違う項目(moldenや計算ログなど)は、呼び出し側でこのリストに足す。
+    """
+    return [
+        ("最終構造(ColabReactionにそのままアップロード可能)",
+         final_xyz_path, ".xyz", "最終構造"),
+        ("最適化トラジェクトリ(多フレーム)",
+         trajectory_path, "_traj.xyz", "トラジェクトリ"),
+    ]

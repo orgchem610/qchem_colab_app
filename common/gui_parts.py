@@ -32,7 +32,7 @@ import tempfile
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, JSON
 
-from common import colab_widgets, gui_helpers, plot_common
+from common import colab_widgets, energy_plot, gui_helpers, plot_common
 
 
 def dropdown_from_list(items, description, width="420px"):
@@ -295,7 +295,7 @@ class EnergyStructureViewer:
         with self.step_view_output:
             clear_output(wait=True)
             e_rel_kcal = ((result.energies[step_index] - result.energies[n_steps - 1])
-                          * colab_widgets.HARTREE_TO_KCAL_MOL)
+                          * energy_plot.HARTREE_TO_KCAL_MOL)
             print(self._step_label(step_index, e_rel_kcal, result))
             view = plot_common.render_single_structure(
                 result.symbols, result.coords_history[step_index])
@@ -307,7 +307,7 @@ class EnergyStructureViewer:
         with self.energy_output:
             clear_output(wait=True)
             try:
-                display(HTML(colab_widgets.build_energy_plot_html(
+                display(HTML(energy_plot.build_energy_plot_html(
                     energies, selected_index=selected_index, callback_name=self._plot_callback)))
             except Exception as e:
                 print(f"(グラフを描画できませんでした。下のスライダーで構造を切り替えられます。詳細: {e})")

@@ -11,6 +11,9 @@ import os
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -36,6 +39,27 @@ class TestMaxAbsFromCubeFile(unittest.TestCase):
             f.write(_FAKE_CUBE)
         max_abs = visualizer_pyscf._max_abs_from_cube_file(path)
         self.assertAlmostEqual(max_abs, 0.5)
+
+
+class TestMoCoeffForCube(unittest.TestCase):
+    """cubeファイルを作るときに渡す軌道係数(1つの軌道の列)の取り出し。"""
+
+    def test_closed_shell_two_dimensional_coefficients(self):
+        coeff = np.arange(12.0).reshape(4, 3)            # (基底関数, 軌道)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=coeff), 1)
+        self.assertEqual(column.shape, (4,))
+        self.assertTrue(np.array_equal(column, coeff[:, 1]))
+
+    def test_open_shell_three_dimensional_array_uses_the_alpha_orbitals(self):
+        coeff = np.arange(24.0).reshape(2, 4, 3)         # (スピン, 基底関数, 軌道)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=coeff), 2)
+        self.assertEqual(column.shape, (4,))
+        self.assertTrue(np.array_equal(column, coeff[0][:, 2]))
+
+    def test_open_shell_pair_of_arrays_uses_the_alpha_orbitals(self):
+        alpha, beta = np.arange(12.0).reshape(4, 3), -np.arange(12.0).reshape(4, 3)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=(alpha, beta)), 0)
+        self.assertTrue(np.array_equal(column, alpha[:, 0]))
 
 
 class TestAtomicChargesTable(unittest.TestCase):

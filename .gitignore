@@ -19,3 +19,4 @@ requirements-uma-lock.txt
 .pytest_cache/
 references/
 DOCUMENT.md
+AGENTS.md

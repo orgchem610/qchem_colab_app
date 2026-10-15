@@ -35,8 +35,10 @@ _DEFAULT_VDW_RADIUS = 1.70
 
 def _mo_coeff_for_cube(mf, orbital_index):
     mo_coeff = mf.mo_coeff
-    if isinstance(mo_coeff, (tuple, list)):
-        mo_coeff = mo_coeff[0]  # UHFの場合はひとまずalphaチャンネルを使う
+    # 開殻(UHF/UKS)では、αとβの軌道係数をまとめた(2, 基底関数, 軌道)の3次元配列(または2つの配列の
+    # 組)になっている。軌道の選択肢(analysis_pyscf.orbital_choices)はαスピンの軌道なので、αを使う。
+    if isinstance(mo_coeff, (tuple, list)) or getattr(mo_coeff, "ndim", 2) == 3:
+        mo_coeff = mo_coeff[0]
     return mo_coeff[:, orbital_index]
 
 

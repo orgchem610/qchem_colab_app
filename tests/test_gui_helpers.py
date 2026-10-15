@@ -145,6 +145,20 @@ class TestDefaultDownloadStem(unittest.TestCase):
             self.assertEqual(gui_helpers.default_download_stem(bad), "result")
 
 
+class TestXyzDownloadItems(unittest.TestCase):
+    def test_two_items_in_the_form_expected_by_the_download_panel(self):
+        items = gui_helpers.xyz_download_items("/tmp/a.xyz", "/tmp/t.xyz")
+        self.assertEqual(len(items), 2)
+        for item in items:
+            self.assertEqual(len(item), 4)
+        self.assertEqual([i[1] for i in items], ["/tmp/a.xyz", "/tmp/t.xyz"])
+        self.assertEqual([i[2] for i in items], [".xyz", "_traj.xyz"])
+        self.assertEqual([i[3] for i in items], ["最終構造", "トラジェクトリ"])
+
+    def test_the_final_structure_is_described_as_ready_for_colabreaction(self):
+        self.assertIn("ColabReaction", gui_helpers.xyz_download_items("a", "b")[0][0])
+
+
 class TestSanitizeFilenameStem(unittest.TestCase):
     def test_empty_input_falls_back_to_result(self):
         self.assertEqual(gui_helpers.sanitize_filename_stem(""), "result")

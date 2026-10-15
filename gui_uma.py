@@ -213,15 +213,10 @@ def build_app():
                 print(f"\n=== 合計所要時間({label}): {total_elapsed:.1f} 秒 ===")
 
                 out_dir = tempfile.mkdtemp(prefix="qchem_uma_output_")
-                final_xyz_path = os.path.join(out_dir, "final_structure_for_ColabReaction.xyz")
                 xyz_comment = (f"Optimized by qchem_colab_app UMA "
                                f"(v{__version__}, {model_key}, {task_name})")
-                writer_xyz.write_final_structure(final_symbols, final_coords, final_xyz_path,
-                                                 comment=xyz_comment)
-
-                traj_xyz_path = os.path.join(out_dir, "optimization_trajectory.xyz")
-                writer_xyz.write_trajectory(
-                    opt_result.symbols, opt_result.coords_history, traj_xyz_path, opt_result.energies)
+                final_xyz_path, traj_xyz_path = writer_xyz.write_optimization_outputs(
+                    out_dir, final_symbols, final_coords, xyz_comment, opt_result)
 
                 log_path = os.path.join(out_dir, "calculation_log.txt")
                 with open(log_path, "w", encoding="utf-8") as f:
@@ -238,10 +233,7 @@ def build_app():
                 vib_viewer.setup(freq_result, final_symbols, final_coords)
                 downloads.show(
                     [
-                        ("最終構造(ColabReactionにそのままアップロード可能)",
-                         final_xyz_path, ".xyz", "最終構造"),
-                        ("最適化トラジェクトリ(多フレーム)",
-                         traj_xyz_path, "_traj.xyz", "トラジェクトリ"),
+                        *gui_helpers.xyz_download_items(final_xyz_path, traj_xyz_path),
                         ("計算ログ(条件・履歴・振動数・UMAに関する情報)",
                          log_path, "_log.txt", "計算ログ"),
                     ],

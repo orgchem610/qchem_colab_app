@@ -31,7 +31,6 @@ Colab上で動作しない場合があったため)。Colab以外の環境では
 """
 
 import os
-import subprocess
 import tempfile
 import time
 import traceback
@@ -43,24 +42,6 @@ from qcapp import load_yaml, __version__
 from common import io_reader, writer_xyz, gui_parts, gui_helpers
 from qcapp import engine, optimize, freq as freq_module
 from qcapp import writer_molden, visualizer_pyscf, analysis_pyscf
-
-
-# -----------------------------------------------------------------------------
-# 補助関数
-# -----------------------------------------------------------------------------
-
-def _gpu_runtime_detected():
-    """GPUランタイム(NVIDIA GPU)が割り当てられているかを nvidia-smi の成否で判定する。
-
-    ColabApp.ipynb の Setup Section と同じ判定方法。CPUのみのランタイムでは
-    nvidia-smi コマンド自体が存在せず FileNotFoundError になるため、
-    その場合はGPUなしと判定する。GPU4PySCFの導入に失敗している場合などは、
-    qcapp/engine.py が自動的にCPU実行へフォールバックする。
-    """
-    try:
-        return subprocess.run(["nvidia-smi"], capture_output=True, timeout=15).returncode == 0
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return False
 
 
 # -----------------------------------------------------------------------------
@@ -122,6 +103,7 @@ def build_app():
     mo_dd = widgets.Dropdown(description="分子軌道", options=[], disabled=True,
                               style={"description_width": "140px"}, layout=widgets.Layout(width="420px"))
     mo_button = widgets.Button(description="分子軌道を表示", disabled=True)
+    mo_note = widgets.HTML()
     mo_output = widgets.Output()
 
     density_button = widgets.Button(description="原子電荷を表示", disabled=True)
@@ -134,7 +116,7 @@ def build_app():
         viz_header,
         energy_viewer.widget,
         vib_viewer.widget,
-        widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_output,
+        widgets.HTML("<b>分子軌道</b>"), widgets.HBox([mo_dd, mo_button]), mo_note, mo_output,
         widgets.HTML("<b>原子電荷(Mulliken電荷)</b>"), density_button,
         charge_table_output, charge_labels_checkbox, charge_view_output,
     ])
@@ -148,9 +130,11 @@ def build_app():
     # -------------------------------------------------------------------
     def _setup_mo_controls():
         mf_final = state["mf_final"]
-        options, homo_idx = analysis_pyscf.homo_lumo_window(mf_final)
-        mo_dd.options = options
-        mo_dd.value = homo_idx
+        choices = analysis_pyscf.orbital_choices(state["final_mol"], mf_final)
+        mo_dd.options = choices.options
+        mo_dd.value = choices.default_index
+        mo_note.value = ("<small>開殻分子のため、αスピンの軌道を表示します"
+                         "(SOMO: 電子が1個だけ入っている軌道)。</small>") if choices.open_shell else ""
         mo_dd.disabled = False
         mo_button.disabled = False
         density_button.disabled = False
@@ -215,7 +199,7 @@ def build_app():
                 basis_key = basis_dd.value
                 functional_key = method_dd.value
                 do_freq = bool(freq_checkbox.value)
-                try_gpu = _gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
+                try_gpu = engine.gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
 
                 content_bytes, uploaded_filename = file_input.read()
                 structure = gui_helpers.load_uploaded_structure(
@@ -289,13 +273,9 @@ def build_app():
                 final_symbols = [final_mol.atom_symbol(i) for i in range(final_mol.natm)]
                 final_coords = [list(c) for c in final_mol.atom_coords(unit="Angstrom")]
 
-                final_xyz_path = os.path.join(out_dir, "final_structure_for_ColabReaction.xyz")
                 xyz_comment = f"Optimized by qchem_colab_app (v{__version__}, {functional_key}/{basis_key})"
-                writer_xyz.write_final_structure(final_symbols, final_coords, final_xyz_path, comment=xyz_comment)
-
-                traj_xyz_path = os.path.join(out_dir, "optimization_trajectory.xyz")
-                writer_xyz.write_trajectory(
-                    opt_result.symbols, opt_result.coords_history, traj_xyz_path, opt_result.energies)
+                final_xyz_path, traj_xyz_path = writer_xyz.write_optimization_outputs(
+                    out_dir, final_symbols, final_coords, xyz_comment, opt_result)
 
                 molden_path = os.path.join(out_dir, "final_structure.molden")
                 writer_molden.write_molden(mf_final, molden_path)
@@ -314,10 +294,7 @@ def build_app():
                 vib_viewer.setup(freq_result, final_symbols, final_coords)
                 _setup_mo_controls()
                 downloads.show([
-                    ("最終構造(ColabReactionにそのままアップロード可能)",
-                     final_xyz_path, ".xyz", "最終構造"),
-                    ("最適化トラジェクトリ(多フレーム)",
-                     traj_xyz_path, "_traj.xyz", "トラジェクトリ"),
+                    *gui_helpers.xyz_download_items(final_xyz_path, traj_xyz_path),
                     ("分子軌道・構造(molden)",
                      molden_path, ".molden", "molden"),
                 ], default_stem=gui_helpers.default_download_stem(uploaded_filename))

@@ -23,7 +23,7 @@ import types
 
 _MODULES = ("ipywidgets", "IPython", "IPython.display", "google", "google.colab",
             "google.colab.output", "google.colab.files")
-_REPO_MODULES = ("common.gui_parts", "common.colab_widgets")
+_REPO_MODULES = ("common.gui_parts", "common.colab_widgets", "common.energy_plot")
 
 
 class _Env:
