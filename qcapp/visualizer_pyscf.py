@@ -1,10 +1,11 @@
 """
 qcapp.visualizer_pyscf
 ------------------------------
-PySCFのMole/SCFオブジェクトに直接依存する可視化関数群。
+PySCFのMole/SCFオブジェクトに直接依存する可視化(描画・表示)の関数群。
 
-分子軌道(cubeファイル)・Mulliken電荷など、PySCF固有のデータ構造を
-扱うためここに置いている。UMA版では別の方法で同等の情報を得る必要があり、
+分子軌道(cubeファイル)・Mulliken電荷の色分けなど、PySCF固有のデータ構造を
+扱うためここに置いている。HOMO/LUMOの軌道番号やMulliken電荷の値を求める
+「解析」の関数は、描画とは役割が違うため qcapp/analysis_pyscf.py に分けてある。UMA版では別の方法で同等の情報を得る必要があり、
 これらの関数をそのまま再利用することはできない
 (common.plot_common側の関数とは対照的)。
 
@@ -30,17 +31,6 @@ _VDW_RADII = {
     "Br": 1.85, "I": 1.98,
 }
 _DEFAULT_VDW_RADIUS = 1.70
-
-
-def get_homo_lumo_indices(mf):
-    """収束済みSCFオブジェクトからHOMO/LUMOの軌道インデックスを求める(閉殻を想定)。"""
-    mo_occ = mf.mo_occ
-    if isinstance(mo_occ, (tuple, list)):
-        mo_occ = mo_occ[0]  # UHFの場合はひとまずalphaチャンネルを使う
-    occ_indices = np.nonzero(np.asarray(mo_occ) > 0)[0]
-    homo_idx = int(occ_indices[-1]) if len(occ_indices) else 0
-    lumo_idx = homo_idx + 1
-    return homo_idx, lumo_idx
 
 
 def _mo_coeff_for_cube(mf, orbital_index):
@@ -100,15 +90,8 @@ def render_orbital(mol, mf, orbital_index, isoval_fraction=0.12, width=500, heig
     return view
 
 
-def compute_mulliken_charges(mol, mf):
-    """Mulliken電荷を原子ごとに計算する。戻り値は [(元素記号, 電荷), ...]。"""
-    _, atomic_charges = mf.mulliken_pop(verbose=0)
-    symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
-    return list(zip(symbols, [float(c) for c in atomic_charges]))
-
-
 def atomic_charges_table_html(charges):
-    """compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
+    """analysis_pyscf.compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
     rows = "".join(
         f"<tr><td style='padding:2px 10px;text-align:right'>{i + 1}</td>"
         f"<td style='padding:2px 10px'>{sym}</td>"

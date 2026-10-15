@@ -9,6 +9,7 @@ import os
 import sys
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -48,6 +49,77 @@ class TestExtractUploadedFile(unittest.TestCase):
     def test_unexpected_value_type_is_reported(self):
         with self.assertRaises(RuntimeError):
             gui_helpers.extract_uploaded_file(SimpleNamespace(value="unexpected"))
+
+
+class TestLoadUploadedStructure(unittest.TestCase):
+    """io_reader の読み込み・検証関数は差し替えて、受け渡しの順序と後始末だけを確認する。"""
+
+    def setUp(self):
+        self.calls = []
+        self.seen = {}
+        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+
+        def read_structure(path):
+            self.seen["path"] = path
+            with open(path, "rb") as f:
+                self.seen["content"] = f.read()
+            self.calls.append("read")
+            return self.structure
+
+        patches = [
+            mock.patch.object(io_reader, "read_structure", read_structure, create=True),
+            mock.patch.object(io_reader, "validate_structure",
+                              lambda s, d: self.calls.append(("distance", d)), create=True),
+            mock.patch.object(io_reader, "validate_charge_and_multiplicity",
+                              lambda s, c, m: self.calls.append(("spin", c, m)), create=True),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.logs = []
+
+    def _load(self, name="water.xyz", content=b"abc"):
+        return gui_helpers.load_uploaded_structure(content, name, 1, 2, 0.4, log=self.logs.append)
+
+    def test_content_is_written_to_a_temporary_file_with_the_same_extension_and_removed_afterwards(self):
+        self._load("mol.gjf", b"data")
+        self.assertTrue(self.seen["path"].endswith(".gjf"))
+        self.assertEqual(self.seen["content"], b"data")
+        self.assertFalse(os.path.exists(self.seen["path"]))
+
+    def test_name_without_an_extension_is_treated_as_xyz(self):
+        self._load("water")
+        self.assertTrue(self.seen["path"].endswith(".xyz"))
+
+    def test_reading_comes_before_the_two_validations(self):
+        result = self._load()
+        self.assertIs(result, self.structure)
+        self.assertEqual(self.calls, ["read", ("distance", 0.4), ("spin", 1, 2)])
+
+    def test_summary_of_the_structure_is_logged(self):
+        self._load("water.xyz")
+        self.assertEqual(len(self.logs), 1)
+        self.assertIn("water.xyz", self.logs[0])
+        self.assertIn("原子数: 3", self.logs[0])
+        self.assertIn("H, O", self.logs[0])
+
+    def test_temporary_file_is_removed_even_when_reading_fails(self):
+        def failing_read(path):
+            self.seen["path"] = path
+            raise io_reader.StructureError("読めません")
+
+        with mock.patch.object(io_reader, "read_structure", failing_read, create=True):
+            with self.assertRaises(io_reader.StructureError):
+                self._load()
+        self.assertFalse(os.path.exists(self.seen["path"]))
+
+    def test_validation_errors_are_passed_on(self):
+        def failing(structure, distance):
+            raise io_reader.StructureError("近すぎます")
+
+        with mock.patch.object(io_reader, "validate_structure", failing, create=True):
+            with self.assertRaises(io_reader.StructureError):
+                self._load()
 
 
 class TestDefaultDownloadStem(unittest.TestCase):

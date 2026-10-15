@@ -26,9 +26,9 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
 
 【PySCF版と共通の部品】(どちらも common/ にある)
     画面部品: 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・
-              振動アニメーション・ダウンロード・電荷の入力欄(common/gui_parts.py)
-    補助関数: アップロードされたファイルの取り出し・ダウンロードのファイル名・電荷の表示と読み取り
-              (common/gui_helpers.py)
+              振動アニメーション・ダウンロード・電荷とスピン多重度の入力欄(common/gui_parts.py)
+    補助関数: アップロードされたファイルの取り出し・読み込みと検証・ダウンロードのファイル名・
+              電荷の表示と読み取り(common/gui_helpers.py)
     そのほか: 構造ファイルの読み込み・検証(common/io_reader.py)、xyz出力(common/writer_xyz.py)、
               構造・振動の3D表示(common/plot_common.py)
     このファイルには、UMA版にしかない部分(モデルの選択、UMAの呼び出し)だけを残している。
@@ -78,10 +78,7 @@ def build_app():
 
     # 電荷の入力欄は、PySCF版(gui.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
     charge_input = gui_parts.ChargeInput(value=int(gui_defaults["charge"]))
-    mult_input = widgets.IntText(
-        value=gui_defaults["multiplicity"], description="スピン多重度",
-        style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
-    )
+    mult_input = gui_parts.MultiplicityInput(value=gui_defaults["multiplicity"])
     freq_checkbox = widgets.Checkbox(
         value=gui_defaults["do_frequency"],
         description="振動数計算も実行する",
@@ -92,7 +89,7 @@ def build_app():
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         *file_input.widgets,
         model_dd,
-        widgets.HBox([charge_input.controls, mult_input]),
+        widgets.HBox([charge_input.controls, mult_input.widget]),
         charge_input.message,
         freq_checkbox,
     ])
@@ -143,19 +140,9 @@ def build_app():
                 do_freq = bool(freq_checkbox.value)
 
                 content_bytes, uploaded_filename = file_input.read()
-                file_ext = os.path.splitext(uploaded_filename)[1] or ".xyz"
-                with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False, mode="wb") as tf:
-                    tf.write(content_bytes)
-                    tmp_path = tf.name
-
-                structure = io_reader.read_structure(tmp_path)
-                print(f"[入力構造] ファイル: {uploaded_filename}"
-                      f"  原子数: {len(structure.symbols)}  組成: "
-                      f"{', '.join(sorted(set(structure.symbols)))}")
-
-                io_reader.validate_structure(
-                    structure, defaults["validation"]["min_interatomic_distance_angstrom"])
-                io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)
+                structure = gui_helpers.load_uploaded_structure(
+                    content_bytes, uploaded_filename, charge, multiplicity,
+                    defaults["validation"]["min_interatomic_distance_angstrom"])
 
                 print("\n--- Hugging Faceのアクセス権を確認しています ---")
                 uma_engine.check_model_access()

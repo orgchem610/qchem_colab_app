@@ -42,7 +42,7 @@ from IPython.display import display, clear_output
 from qcapp import load_yaml, __version__
 from common import io_reader, writer_xyz, gui_parts, gui_helpers
 from qcapp import engine, optimize, freq as freq_module
-from qcapp import writer_molden, visualizer_pyscf
+from qcapp import writer_molden, visualizer_pyscf, analysis_pyscf
 
 
 # -----------------------------------------------------------------------------
@@ -61,27 +61,6 @@ def _gpu_runtime_detected():
         return subprocess.run(["nvidia-smi"], capture_output=True, timeout=15).returncode == 0
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
-
-
-def _homo_lumo_window(mf, half_width=2):
-    """HOMOを中心に前後 half_width 個ずつの軌道インデックスとラベルを作る。"""
-    homo_idx, lumo_idx = visualizer_pyscf.get_homo_lumo_indices(mf)
-    n_mo = mf.mo_energy.shape[-1] if hasattr(mf.mo_energy, "shape") else len(mf.mo_energy)
-
-    options = []
-    for i in range(homo_idx - half_width + 1, lumo_idx + half_width):
-        if i < 0 or i >= n_mo:
-            continue
-        if i == homo_idx:
-            label = f"HOMO (軌道{i}番)"
-        elif i == lumo_idx:
-            label = f"LUMO (軌道{i}番)"
-        elif i < homo_idx:
-            label = f"HOMO-{homo_idx - i} (軌道{i}番)"
-        else:
-            label = f"LUMO+{i - lumo_idx} (軌道{i}番)"
-        options.append((label, i))
-    return options, homo_idx
 
 
 # -----------------------------------------------------------------------------
@@ -114,10 +93,7 @@ def build_app():
 
     # 電荷の入力欄は、UMA版(gui_uma.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
     charge_input = gui_parts.ChargeInput(value=defaults["gui_defaults"]["charge"])
-    mult_input = widgets.IntText(
-        value=defaults["gui_defaults"]["multiplicity"], description="スピン多重度",
-        style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
-    )
+    mult_input = gui_parts.MultiplicityInput(value=defaults["gui_defaults"]["multiplicity"])
     freq_checkbox = widgets.Checkbox(
         value=defaults["gui_defaults"]["do_frequency"],
         description="振動数計算も実行する",
@@ -128,7 +104,7 @@ def build_app():
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         *file_input.widgets,
         purpose_dd, method_dd, basis_dd,
-        widgets.HBox([charge_input.controls, mult_input]),
+        widgets.HBox([charge_input.controls, mult_input.widget]),
         charge_input.message,
         freq_checkbox,
     ])
@@ -172,7 +148,7 @@ def build_app():
     # -------------------------------------------------------------------
     def _setup_mo_controls():
         mf_final = state["mf_final"]
-        options, homo_idx = _homo_lumo_window(mf_final)
+        options, homo_idx = analysis_pyscf.homo_lumo_window(mf_final)
         mo_dd.options = options
         mo_dd.value = homo_idx
         mo_dd.disabled = False
@@ -197,7 +173,7 @@ def build_app():
     def _on_density_button_clicked(_):
         mol_final = state["final_mol"]
         mf_final = state["mf_final"]
-        charges = visualizer_pyscf.compute_mulliken_charges(mol_final, mf_final)
+        charges = analysis_pyscf.compute_mulliken_charges(mol_final, mf_final)
         state["charges"] = charges
         with charge_table_output:
             clear_output(wait=True)
@@ -242,19 +218,9 @@ def build_app():
                 try_gpu = _gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
 
                 content_bytes, uploaded_filename = file_input.read()
-                file_ext = os.path.splitext(uploaded_filename)[1] or ".xyz"
-                with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False, mode="wb") as tf:
-                    tf.write(content_bytes)
-                    tmp_path = tf.name
-
-                structure = io_reader.read_structure(tmp_path)
-                print(f"[入力構造] ファイル: {uploaded_filename}"
-                      f"  原子数: {len(structure.symbols)}  組成: "
-                      f"{', '.join(sorted(set(structure.symbols)))}")
-
-                io_reader.validate_structure(
-                    structure, defaults["validation"]["min_interatomic_distance_angstrom"])
-                io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)
+                structure = gui_helpers.load_uploaded_structure(
+                    content_bytes, uploaded_filename, charge, multiplicity,
+                    defaults["validation"]["min_interatomic_distance_angstrom"])
 
                 if io_reader.contains_transition_metal(structure):
                     raise io_reader.StructureError(

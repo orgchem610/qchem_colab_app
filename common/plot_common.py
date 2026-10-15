@@ -8,7 +8,7 @@ common.plot_common
 であること。これにより、将来UMAベースの計算エンジンを追加した際にも
 (qcapp側のコードに一切触れず)そのままインポートして再利用できる。
 
-py3Dmol(構造・軌跡・振動アニメーション)を用いている。
+py3Dmol(構造・振動アニメーション)を用いている。
 
 エネルギー収束グラフは、このモジュールではなく common/colab_widgets.py の
 build_energy_plot_html()(自前のSVG)で描いている。以前はここにplotly版の
@@ -35,24 +35,6 @@ def render_single_structure(symbols, coords, width=500, height=400):
     view.addModel(xyz_block, "xyz")
     view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
     view.zoomTo()
-    return view
-
-
-def render_trajectory(symbols, coords_history, energies=None, width=500, height=400):
-    """最適化トラジェクトリをpy3Dmolのアニメーションとして表示するviewを作る。"""
-    import py3Dmol
-    from common import writer_xyz
-
-    comments = None
-    if energies:
-        comments = [f"step {i}  E={e:.6f} Ha" for i, e in enumerate(energies)]
-    xyz_multi = writer_xyz.multiframe_xyz_string(symbols, coords_history, comments)
-
-    view = py3Dmol.view(width=width, height=height)
-    view.addModelsAsFrames(xyz_multi, "xyz")
-    view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
-    view.zoomTo()
-    view.animate({"loop": "forward", "reps": 0, "interval": 200})
     return view
 
 

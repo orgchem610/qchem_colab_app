@@ -121,6 +121,7 @@ qchem_colab_app/
 │   └── gui_parts.py                  # GUI共通の画面部品(ファイル入力・グラフ+構造表示・振動・ダウンロード・電荷入力)
 ├── qcapp/                     # PySCFを計算エンジンとするab initio計算専用(uma_appからは呼ばない)
 │   ├── __init__.py               # バージョン番号, config/読み込み共通関数
+│   ├── analysis_pyscf.py          # HOMO/LUMOの軌道番号・Mulliken電荷など、SCF結果からの情報の取り出し
 │   ├── engine.py                  # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
 │   ├── optimize.py                 # geomeTRICによる構造最適化
 │   ├── freq.py                      # Hessian・振動数解析

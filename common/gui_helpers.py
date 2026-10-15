@@ -5,6 +5,7 @@ GUI(gui.py / gui_uma.py)まわりの、画面部品(ipywidgets)に依存しな�
 ipywidgetsがなくても単体テストできるよう、画面部品(common/gui_parts.py)から分けてある。
 
     - extract_uploaded_file      : アップロード(またはドロップ)された構造ファイルの取り出し
+    - load_uploaded_structure    : 取り出した構造ファイルの読み込みと、計算前の検証
     - sanitize_filename_stem     : ダウンロードするファイル名(拡張子なし)の整形
     - default_download_stem      : ファイル名の既定値(「入力ファイル名_result」)
     - format_charge / parse_charge / ChargeInputError
@@ -15,6 +16,7 @@ ipywidgetsがなくても単体テストできるよう、画面部品(common/gu
 
 import os
 import re
+import tempfile
 import unicodedata
 
 from common import io_reader
@@ -60,6 +62,39 @@ def extract_uploaded_file(upload_widget, dropped_file=None):
         f"想定外の形式のFileUpload.valueを受け取りました(型: {type(value)})。"
         "ipywidgetsのバージョンを確認してください(7.x・8.xに対応しています)。"
     )
+
+
+def load_uploaded_structure(content, filename, charge, multiplicity, min_distance, log=print):
+    """アップロードされた構造ファイルの中身(bytes)を読み込み、計算できる構造かを検証して返す。
+
+    PySCF版・UMA版のどちらも、計算の前に同じ入力チェックを行う。
+        1. 構造ファイルを読み込む(拡張子で形式を判定するため、一時ファイルにも同じ拡張子を付ける。
+           拡張子がなければ .xyz とみなす。一時ファイルは読み込み後に削除する)
+        2. 読み込んだ構造の概要(ファイル名・原子数・組成)を log に出す
+        3. 原子どうしが近すぎないか(min_distance[Å]未満の原子対がないか)を検証する
+        4. 電荷とスピン多重度が、電子数と矛盾しないか検証する
+    読み込み・検証に失敗した場合は、io_reader.StructureError(または ValueError)を送出する。
+    それ以降の処理(遷移金属の判定など、エンジンごとに異なる確認)は、呼び出し側で行う。
+    """
+    extension = os.path.splitext(str(filename or ""))[1] or ".xyz"
+    fd, tmp_path = tempfile.mkstemp(suffix=extension)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+        structure = io_reader.read_structure(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+    log(f"[入力構造] ファイル: {filename}"
+        f"  原子数: {len(structure.symbols)}  組成: "
+        f"{', '.join(sorted(set(structure.symbols)))}")
+
+    io_reader.validate_structure(structure, min_distance)
+    io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)
+    return structure
 
 
 def sanitize_filename_stem(raw):

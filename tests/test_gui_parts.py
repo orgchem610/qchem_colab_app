@@ -360,6 +360,20 @@ class TestChargeInput(_Base):
                          [self.charge.text, self.charge.minus_button, self.charge.plus_button])
 
 
+class TestMultiplicityInput(_Base):
+    def test_initial_value_is_returned_as_an_integer(self):
+        self.assertEqual(self.gp.MultiplicityInput(value=3).value, 3)
+        self.assertEqual(self.gp.MultiplicityInput().value, 1)
+
+    def test_value_follows_the_input_widget(self):
+        mult = self.gp.MultiplicityInput(value=1)
+        mult.widget.value = 2
+        self.assertEqual(mult.value, 2)
+
+    def test_default_label_is_spin_multiplicity(self):
+        self.assertEqual(self.gp.MultiplicityInput().widget.description, "スピン多重度")
+
+
 class TestDropdownFromList(_Base):
     def test_labels_and_keys_become_options(self):
         dd = self.gp.dropdown_from_list([{"label": "HF", "key": "hf"}, {"label": "B3LYP", "key": "b3lyp"}], "計算手法")

@@ -11,6 +11,7 @@ gui.py(PySCF版)と gui_uma.py(UMA版)で共通の、画面部品(ipywidgets)を
                           渡す結果: .frequencies_cm1 / .normal_modes を持つ任意のオブジェクト
     DownloadPanel         ダウンロードボタン(ファイル名の入力欄つき)
     ChargeInput           電荷の入力欄(「+1」の形で表示。−1/+1ボタンつき)
+    MultiplicityInput     スピン多重度の入力欄(電荷の入力欄と同じ行に並べる)
 
 各部品は、画面に置くウィジェットを `.widget`(または `.widgets`)として公開し、
 計算が終わった後に show() / setup() を呼んで中身を更新する。計算の結果をどう得るかは
@@ -49,6 +50,11 @@ def dropdown_from_list(items, description, width="420px"):
 # 電荷の入力
 # -----------------------------------------------------------------------------
 
+# 計算条件の入力欄(電荷・スピン多重度)で共通の、見た目の寸法
+_LABEL_WIDTH = "140px"
+_INPUT_WIDTH = "220px"
+
+
 class ChargeInput:
     """電荷の入力部品。正の値を「+1」のように符号付きで表示するため、数値ウィジェット(IntText)ではなく
     文字の入力欄(Text)にして、−1/+1ボタンを添えている。
@@ -68,7 +74,7 @@ class ChargeInput:
         self.text = widgets.Text(
             value=gui_helpers.format_charge(self._value), description=description,
             continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
-            style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
+            style={"description_width": _LABEL_WIDTH}, layout=widgets.Layout(width=_INPUT_WIDTH),
         )
         self.minus_button = widgets.Button(
             description="−1", button_style="info", layout=widgets.Layout(width="48px"))
@@ -105,6 +111,28 @@ class ChargeInput:
     def _step(self, delta):
         self.message.value = ""
         self.text.value = gui_helpers.format_charge(self._value + delta)
+
+
+class MultiplicityInput:
+    """スピン多重度の入力部品(整数の入力欄)。
+
+    電荷の入力欄(ChargeInput)と同じ幅・同じ説明欄の幅にそろえてあり、同じ行に並べて使う。
+    値の範囲や、電子数との整合の確認は、この部品ではなく、計算前の検証
+    (common/gui_helpers.load_uploaded_structure → io_reader)で行う。
+
+    widget : 入力欄(ipywidgets.IntText)
+    value  : 現在のスピン多重度(整数)
+    """
+
+    def __init__(self, value=1, description="スピン多重度"):
+        self.widget = widgets.IntText(
+            value=int(value), description=description,
+            style={"description_width": _LABEL_WIDTH}, layout=widgets.Layout(width=_INPUT_WIDTH),
+        )
+
+    @property
+    def value(self):
+        return int(self.widget.value)
 
 
 # -----------------------------------------------------------------------------
