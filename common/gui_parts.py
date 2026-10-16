@@ -32,7 +32,7 @@ import tempfile
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, JSON
 
-from common import colab_widgets, energy_plot, gui_helpers, plot_common
+from common import colab_widgets, energy_plot, gui_input, gui_output, plot_common
 
 
 def dropdown_from_list(items, description, width="420px"):
@@ -72,7 +72,7 @@ class ChargeInput:
         self._updating = False
 
         self.text = widgets.Text(
-            value=gui_helpers.format_charge(self._value), description=description,
+            value=gui_input.format_charge(self._value), description=description,
             continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
             style={"description_width": _LABEL_WIDTH}, layout=widgets.Layout(width=_INPUT_WIDTH),
         )
@@ -95,12 +95,12 @@ class ChargeInput:
         if change["name"] != "value" or self._updating:
             return
         try:
-            self._value = gui_helpers.parse_charge(change["new"])
+            self._value = gui_input.parse_charge(change["new"])
             self.message.value = ""
-        except gui_helpers.ChargeInputError as e:
+        except gui_input.ChargeInputError as e:
             self.message.value = f"<span style='color:#b42318'>{html.escape(str(e))}</span>"
         # 読み取れた場合は「+1」の形に整え、読み取れなかった場合は直前の値に戻す
-        shown = gui_helpers.format_charge(self._value)
+        shown = gui_input.format_charge(self._value)
         if self.text.value != shown:
             self._updating = True
             try:
@@ -110,7 +110,7 @@ class ChargeInput:
 
     def _step(self, delta):
         self.message.value = ""
-        self.text.value = gui_helpers.format_charge(self._value + delta)
+        self.text.value = gui_input.format_charge(self._value + delta)
 
 
 class MultiplicityInput:
@@ -118,7 +118,7 @@ class MultiplicityInput:
 
     電荷の入力欄(ChargeInput)と同じ幅・同じ説明欄の幅にそろえてあり、同じ行に並べて使う。
     値の範囲や、電子数との整合の確認は、この部品ではなく、計算前の検証
-    (common/gui_helpers.load_uploaded_structure → io_reader)で行う。
+    (common/gui_input.load_uploaded_structure → io_reader)で行う。
 
     widget : 入力欄(ipywidgets.IntText)
     value  : 現在のスピン多重度(整数)
@@ -207,7 +207,7 @@ class StructureFileInput:
                 "<span style='color:#666'>「構造ファイル」ボタンで選んだファイルを使用します。</span>")
 
     def read(self):
-        return gui_helpers.extract_uploaded_file(self.upload, self._dropped_file)
+        return gui_input.extract_uploaded_file(self.upload, self._dropped_file)
 
 
 # -----------------------------------------------------------------------------
@@ -453,7 +453,7 @@ class DownloadPanel:
 
                 def _make_handler(src_path=src_path, suffix=suffix):
                     def _handler(_):
-                        stem = gui_helpers.sanitize_filename_stem(name_input.value)
+                        stem = gui_output.sanitize_filename_stem(name_input.value)
                         tmp_dir = tempfile.mkdtemp(prefix=self._tmp_prefix)
                         dst_path = os.path.join(tmp_dir, f"{stem}{suffix}")
                         shutil.copyfile(src_path, dst_path)

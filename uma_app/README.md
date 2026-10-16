@@ -20,7 +20,7 @@ PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お�
 | `../requirements-uma.txt` | UMA版の依存ライブラリ(PySCF版の `requirements.txt` とは別) |
 
 `common/`(構造の読み込み・検証、xyz出力、構造・振動の表示、ドラッグ&ドロップ、クリックできるグラフ、
-GUIの共通の画面部品 `gui_parts.py`、電荷の入力欄(正の値を「+1」の形で表示)・電荷の表示と読み取りの関数 `gui_helpers.py`)は
+GUIの共通の画面部品 `gui_parts.py`、電荷の入力欄(正の値を「+1」の形で表示)・電荷の表示と読み取りの関数 `gui_input.py`)は
 PySCF版と共有しています。`uma_app` は `qcapp` を一切importしません。
 
 ## 使い方

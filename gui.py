@@ -39,7 +39,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from qcapp import load_yaml, __version__
-from common import io_reader, writer_xyz, gui_parts, gui_helpers
+from common import io_reader, writer_xyz, gui_parts, gui_input, gui_output
 from qcapp import engine, optimize, freq as freq_module
 from qcapp import writer_molden, visualizer_pyscf, analysis_pyscf
 
@@ -202,7 +202,7 @@ def build_app():
                 try_gpu = engine.gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
 
                 content_bytes, uploaded_filename = file_input.read()
-                structure = gui_helpers.load_uploaded_structure(
+                structure = gui_input.load_uploaded_structure(
                     content_bytes, uploaded_filename, charge, multiplicity,
                     defaults["validation"]["min_interatomic_distance_angstrom"])
 
@@ -294,10 +294,10 @@ def build_app():
                 vib_viewer.setup(freq_result, final_symbols, final_coords)
                 _setup_mo_controls()
                 downloads.show([
-                    *gui_helpers.xyz_download_items(final_xyz_path, traj_xyz_path),
+                    *gui_output.xyz_download_items(final_xyz_path, traj_xyz_path),
                     ("分子軌道・構造(molden)",
                      molden_path, ".molden", "molden"),
-                ], default_stem=gui_helpers.default_download_stem(uploaded_filename))
+                ], default_stem=gui_output.default_download_stem(uploaded_filename))
 
             except (io_reader.StructureError, ValueError) as e:
                 print("\n❌ 入力内容にエラーがあります:")

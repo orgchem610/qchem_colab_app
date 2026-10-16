@@ -1,7 +1,7 @@
 """
-tests/test_gui_helpers.py
--------------------------
-common.gui_helpers(アップロードされたファイルの取り出し・ダウンロードのファイル名・電荷の表示と読み取り)の単体テスト。
+tests/test_gui_input.py
+-----------------------
+common.gui_input(アップロードされたファイルの取り出し・読み込みと検証・電荷の表示と読み取り)の単体テスト。
 ipywidgetsには依存しない(FileUploadの値は、同じ形の辞書・オブジェクトで代用している)。
 """
 
@@ -13,7 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import gui_helpers, io_reader  # noqa: E402
+from common import gui_input, io_reader  # noqa: E402
 
 
 class TestExtractUploadedFile(unittest.TestCase):
@@ -21,34 +21,34 @@ class TestExtractUploadedFile(unittest.TestCase):
 
     def test_dropped_file_has_priority_over_the_upload_button(self):
         upload = SimpleNamespace(value=({"name": "button.xyz", "content": b"x"},))
-        content, name = gui_helpers.extract_uploaded_file(
+        content, name = gui_input.extract_uploaded_file(
             upload, {"name": "dropped.xyz", "content": self.CONTENT})
         self.assertEqual((content, name), (self.CONTENT, "dropped.xyz"))
 
     def test_ipywidgets_8_value_is_a_tuple_of_dicts(self):
         upload = SimpleNamespace(value=({"name": "a.xyz", "content": memoryview(self.CONTENT)},))
-        content, name = gui_helpers.extract_uploaded_file(upload)
+        content, name = gui_input.extract_uploaded_file(upload)
         self.assertEqual((content, name), (self.CONTENT, "a.xyz"))
 
     def test_ipywidgets_8_value_can_be_objects_with_attributes(self):
         upload = SimpleNamespace(value=[SimpleNamespace(name="b.gjf", content=self.CONTENT)])
-        content, name = gui_helpers.extract_uploaded_file(upload)
+        content, name = gui_input.extract_uploaded_file(upload)
         self.assertEqual((content, name), (self.CONTENT, "b.gjf"))
 
     def test_ipywidgets_7_value_is_a_dict_keyed_by_file_name(self):
         upload = SimpleNamespace(value={"c.pdb": {"content": self.CONTENT, "metadata": {}}})
-        content, name = gui_helpers.extract_uploaded_file(upload)
+        content, name = gui_input.extract_uploaded_file(upload)
         self.assertEqual((content, name), (self.CONTENT, "c.pdb"))
 
     def test_nothing_selected_raises_a_helpful_error(self):
         for empty in ((), {}, None):
             with self.assertRaises(io_reader.StructureError) as ctx:
-                gui_helpers.extract_uploaded_file(SimpleNamespace(value=empty))
+                gui_input.extract_uploaded_file(SimpleNamespace(value=empty))
             self.assertIn("ドラッグ", str(ctx.exception))
 
     def test_unexpected_value_type_is_reported(self):
         with self.assertRaises(RuntimeError):
-            gui_helpers.extract_uploaded_file(SimpleNamespace(value="unexpected"))
+            gui_input.extract_uploaded_file(SimpleNamespace(value="unexpected"))
 
 
 class TestLoadUploadedStructure(unittest.TestCase):
@@ -79,7 +79,7 @@ class TestLoadUploadedStructure(unittest.TestCase):
         self.logs = []
 
     def _load(self, name="water.xyz", content=b"abc"):
-        return gui_helpers.load_uploaded_structure(content, name, 1, 2, 0.4, log=self.logs.append)
+        return gui_input.load_uploaded_structure(content, name, 1, 2, 0.4, log=self.logs.append)
 
     def test_content_is_written_to_a_temporary_file_with_the_same_extension_and_removed_afterwards(self):
         self._load("mol.gjf", b"data")
@@ -122,98 +122,48 @@ class TestLoadUploadedStructure(unittest.TestCase):
                 self._load()
 
 
-class TestDefaultDownloadStem(unittest.TestCase):
-    def test_input_file_name_gets_a_result_suffix(self):
-        self.assertEqual(gui_helpers.default_download_stem("water.xyz"), "water_result")
-        self.assertEqual(gui_helpers.default_download_stem("ethanol.gjf"), "ethanol_result")
-
-    def test_only_the_last_extension_is_removed(self):
-        self.assertEqual(gui_helpers.default_download_stem("mol.v2.xyz"), "mol.v2_result")
-
-    def test_directory_part_is_removed(self):
-        self.assertEqual(gui_helpers.default_download_stem("C:\\Users\\me\\water.xyz"), "water_result")
-        self.assertEqual(gui_helpers.default_download_stem("../a/water.xyz"), "water_result")
-
-    def test_characters_not_allowed_in_file_names_are_removed(self):
-        self.assertEqual(gui_helpers.default_download_stem('a?b*c.xyz'), "abc_result")
-
-    def test_japanese_names_are_kept(self):
-        self.assertEqual(gui_helpers.default_download_stem("エタノール.xyz"), "エタノール_result")
-
-    def test_unusable_names_fall_back_to_result(self):
-        for bad in ("", None, ".xyz", "???.xyz"):
-            self.assertEqual(gui_helpers.default_download_stem(bad), "result")
-
-
-class TestXyzDownloadItems(unittest.TestCase):
-    def test_two_items_in_the_form_expected_by_the_download_panel(self):
-        items = gui_helpers.xyz_download_items("/tmp/a.xyz", "/tmp/t.xyz")
-        self.assertEqual(len(items), 2)
-        for item in items:
-            self.assertEqual(len(item), 4)
-        self.assertEqual([i[1] for i in items], ["/tmp/a.xyz", "/tmp/t.xyz"])
-        self.assertEqual([i[2] for i in items], [".xyz", "_traj.xyz"])
-        self.assertEqual([i[3] for i in items], ["最終構造", "トラジェクトリ"])
-
-    def test_the_final_structure_is_described_as_ready_for_colabreaction(self):
-        self.assertIn("ColabReaction", gui_helpers.xyz_download_items("a", "b")[0][0])
-
-
-class TestSanitizeFilenameStem(unittest.TestCase):
-    def test_empty_input_falls_back_to_result(self):
-        self.assertEqual(gui_helpers.sanitize_filename_stem(""), "result")
-        self.assertEqual(gui_helpers.sanitize_filename_stem("   "), "result")
-        self.assertEqual(gui_helpers.sanitize_filename_stem(None), "result")
-
-    def test_forbidden_characters_are_removed(self):
-        self.assertEqual(gui_helpers.sanitize_filename_stem('my/file:name?'), "myfilename")
-
-    def test_normal_names_are_unchanged(self):
-        self.assertEqual(gui_helpers.sanitize_filename_stem("water_result"), "water_result")
-
-
 class TestFormatCharge(unittest.TestCase):
     def test_positive_values_get_a_plus_sign(self):
-        self.assertEqual(gui_helpers.format_charge(1), "+1")
-        self.assertEqual(gui_helpers.format_charge(12), "+12")
+        self.assertEqual(gui_input.format_charge(1), "+1")
+        self.assertEqual(gui_input.format_charge(12), "+12")
 
     def test_zero_and_negative_values_are_shown_as_they_are(self):
-        self.assertEqual(gui_helpers.format_charge(0), "0")
-        self.assertEqual(gui_helpers.format_charge(-1), "-1")
-        self.assertEqual(gui_helpers.format_charge(-3), "-3")
+        self.assertEqual(gui_input.format_charge(0), "0")
+        self.assertEqual(gui_input.format_charge(-1), "-1")
+        self.assertEqual(gui_input.format_charge(-3), "-3")
 
 
 class TestParseCharge(unittest.TestCase):
     def test_plain_numbers_without_a_plus_sign(self):
-        self.assertEqual(gui_helpers.parse_charge("1"), 1)
-        self.assertEqual(gui_helpers.parse_charge("0"), 0)
-        self.assertEqual(gui_helpers.parse_charge("-2"), -2)
+        self.assertEqual(gui_input.parse_charge("1"), 1)
+        self.assertEqual(gui_input.parse_charge("0"), 0)
+        self.assertEqual(gui_input.parse_charge("-2"), -2)
 
     def test_explicit_plus_sign(self):
-        self.assertEqual(gui_helpers.parse_charge("+1"), 1)
-        self.assertEqual(gui_helpers.parse_charge("+0"), 0)
+        self.assertEqual(gui_input.parse_charge("+1"), 1)
+        self.assertEqual(gui_input.parse_charge("+0"), 0)
 
     def test_surrounding_and_inner_spaces_are_ignored(self):
-        self.assertEqual(gui_helpers.parse_charge("  +1 "), 1)
-        self.assertEqual(gui_helpers.parse_charge("- 1"), -1)
+        self.assertEqual(gui_input.parse_charge("  +1 "), 1)
+        self.assertEqual(gui_input.parse_charge("- 1"), -1)
 
     def test_full_width_characters_are_accepted(self):
-        self.assertEqual(gui_helpers.parse_charge("１"), 1)
-        self.assertEqual(gui_helpers.parse_charge("＋２"), 2)
-        self.assertEqual(gui_helpers.parse_charge("－１"), -1)
+        self.assertEqual(gui_input.parse_charge("１"), 1)
+        self.assertEqual(gui_input.parse_charge("＋２"), 2)
+        self.assertEqual(gui_input.parse_charge("－１"), -1)
 
     def test_unicode_minus_sign_is_accepted(self):
-        self.assertEqual(gui_helpers.parse_charge("\u22121"), -1)
+        self.assertEqual(gui_input.parse_charge("\u22121"), -1)
 
     def test_invalid_input_raises_a_helpful_error(self):
         for bad in ("", "+", "-", "abc", "1.5", "1e3", "++1", "1 2", None):
-            with self.assertRaises(gui_helpers.ChargeInputError) as ctx:
-                gui_helpers.parse_charge(bad)
+            with self.assertRaises(gui_input.ChargeInputError) as ctx:
+                gui_input.parse_charge(bad)
             self.assertIn("整数", str(ctx.exception))
 
     def test_round_trip_with_format_charge(self):
         for value in range(-5, 6):
-            self.assertEqual(gui_helpers.parse_charge(gui_helpers.format_charge(value)), value)
+            self.assertEqual(gui_input.parse_charge(gui_input.format_charge(value)), value)
 
 
 if __name__ == "__main__":

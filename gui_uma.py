@@ -28,7 +28,7 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     画面部品: 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・
               振動アニメーション・ダウンロード・電荷とスピン多重度の入力欄(common/gui_parts.py)
     補助関数: アップロードされたファイルの取り出し・読み込みと検証・ダウンロードのファイル名・
-              電荷の表示と読み取り(common/gui_helpers.py)
+              電荷の表示と読み取り(common/gui_input.py・common/gui_output.py)
     そのほか: 構造ファイルの読み込み・検証(common/io_reader.py)、xyz出力(common/writer_xyz.py)、
               構造・振動の3D表示(common/plot_common.py)
     このファイルには、UMA版にしかない部分(モデルの選択、UMAの呼び出し)だけを残している。
@@ -49,7 +49,7 @@ from IPython.display import clear_output
 
 from uma_app import load_yaml, __version__
 from uma_app import uma_engine, uma_optimize, uma_freq, uma_report
-from common import io_reader, writer_xyz, gui_parts, gui_helpers
+from common import io_reader, writer_xyz, gui_parts, gui_input, gui_output
 
 
 # -----------------------------------------------------------------------------
@@ -140,7 +140,7 @@ def build_app():
                 do_freq = bool(freq_checkbox.value)
 
                 content_bytes, uploaded_filename = file_input.read()
-                structure = gui_helpers.load_uploaded_structure(
+                structure = gui_input.load_uploaded_structure(
                     content_bytes, uploaded_filename, charge, multiplicity,
                     defaults["validation"]["min_interatomic_distance_angstrom"])
 
@@ -233,11 +233,11 @@ def build_app():
                 vib_viewer.setup(freq_result, final_symbols, final_coords)
                 downloads.show(
                     [
-                        *gui_helpers.xyz_download_items(final_xyz_path, traj_xyz_path),
+                        *gui_output.xyz_download_items(final_xyz_path, traj_xyz_path),
                         ("計算ログ(条件・履歴・振動数・UMAに関する情報)",
                          log_path, "_log.txt", "計算ログ"),
                     ],
-                    default_stem=gui_helpers.default_download_stem(uploaded_filename),
+                    default_stem=gui_output.default_download_stem(uploaded_filename),
                 )
 
             except (io_reader.StructureError, ValueError) as e:
