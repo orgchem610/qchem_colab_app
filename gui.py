@@ -206,7 +206,7 @@ def build_app():
                     content_bytes, uploaded_filename, charge, multiplicity,
                     defaults["validation"]["min_interatomic_distance_angstrom"])
 
-                if io_reader.contains_transition_metal(structure):
+                if engine.contains_transition_metal(structure):
                     raise io_reader.StructureError(
                         "アップロードされた構造に遷移金属元素が含まれています。\n"
                         "現在のプロトタイプ(HF/3-21G)は主要な典型元素(H〜Ar程度)"

@@ -1,7 +1,10 @@
 """
-qcapp.io_reader
+common.io_reader
 ----------------
 構造ファイルの読み込みと、計算実行前の入力チェックをまとめたモジュール。
+計算エンジン(PySCF/UMA)に依存しない、共通の入力チェックだけを置く。
+(特定のエンジンが扱えない元素の判定は、そのエンジンのパッケージにある。
+ 例: PySCF版の遷移金属の判定は qcapp/engine.py の contains_transition_metal。)
 
 【対応形式】
     .xyz は外部ライブラリに依存しない自前の最小パーサーで読み込む。
@@ -28,14 +31,6 @@ ATOMIC_NUMBERS = {
     "Tc": 43, "Ru": 44, "Rh": 45, "Pd": 46, "Ag": 47, "Cd": 48, "In": 49, "Sn": 50,
     "Sb": 51, "Te": 52, "I": 53, "Xe": 54,
 }
-
-# 現時点で「遷移金属」として扱う元素(3d, 4d, 5dの一部)。
-# 3-21G/HFのプロトタイプではこれらの元素は未対応であることをユーザーに伝えるために使う。
-TRANSITION_METAL_SYMBOLS = set(
-    "Sc Ti V Cr Mn Fe Co Ni Cu Zn".split()
-    + "Y Zr Nb Mo Tc Ru Rh Pd Ag Cd".split()
-    + "Hf Ta W Re Os Ir Pt Au Hg".split()
-)
 
 # 拡張子 -> ASEに渡すformat名。ASEが標準対応している範囲のみ。
 _ASE_FORMAT_BY_EXTENSION = {
@@ -202,15 +197,6 @@ def validate_structure(structure: Structure, min_distance: float = 0.4) -> None:
                     f"{d:.3f} Åしかありません(しきい値 {min_distance} Å)。"
                     "構造ファイルの座標が正しいか確認してください。"
                 )
-
-
-def contains_transition_metal(structure: Structure) -> bool:
-    """アップロードされた構造に遷移金属元素が含まれているかを判定する。
-
-    現時点(HF/3-21Gのみのプロトタイプ)では未対応の元素が含まれていることを
-    GUI側で明示的にエラー表示するために使用する。
-    """
-    return any(s in TRANSITION_METAL_SYMBOLS for s in structure.symbols)
 
 
 def validate_charge_and_multiplicity(structure: Structure, charge: int, multiplicity: int) -> None:

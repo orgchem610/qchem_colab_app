@@ -24,6 +24,27 @@ from qcapp import load_yaml
 from common.io_reader import Structure
 
 
+# PySCF版で「遷移金属」として扱う元素(3d, 4d, 5dの一部)。
+# 現時点のPySCF版では、これらの元素を含む構造は未対応(ECP付きの基底関数を
+# config/basis_sets.yaml に登録していない)であることを、計算の前に利用者へ伝えるために使う。
+# 扱える元素の範囲はエンジンごとに決まるため、UMA版とは別に、このパッケージに置いている。
+TRANSITION_METAL_SYMBOLS = set(
+    "Sc Ti V Cr Mn Fe Co Ni Cu Zn".split()
+    + "Y Zr Nb Mo Tc Ru Rh Pd Ag Cd".split()
+    + "Hf Ta W Re Os Ir Pt Au Hg".split()
+)
+
+
+def contains_transition_metal(structure: Structure) -> bool:
+    """構造に、PySCF版が未対応の遷移金属元素が含まれているかを判定する。
+
+    GUI側で、計算を始める前に分かりやすくエラー表示するために使う。
+    (以前は common/io_reader.py にあったが、扱える元素の範囲はエンジンごとに
+    決まるため、v0.2.1でこのモジュールに移した。)
+    """
+    return any(s in TRANSITION_METAL_SYMBOLS for s in structure.symbols)
+
+
 class SCFConvergenceError(RuntimeError):
     """SCF計算が収束しなかったときの例外。日本語の説明文を持つ。"""
     pass
