@@ -14,7 +14,7 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     - 分子軌道・原子電荷・moldenの出力はない(UMAは電子状態を返さないため)。
     - 振動数計算は、構造最適化の後処理として行う(PySCF版と同じ位置づけ)。
     - Hugging Faceのトークンは、このGUIでは一切扱わない。ノートブックの「2.」のセルが
-      環境変数 HF_TOKEN に設定し、uma_engine がそれを読み取る(入力欄をGUIに置くと、
+      環境変数 HF_TOKEN に設定し、uma_hf がそれを読み取る(入力欄をGUIに置くと、
       入力値がウィジェットの状態として保持され、保存されるノートブックに残りうるため)。
 
 【ipywidgetsの版について】
@@ -48,7 +48,7 @@ import ipywidgets as widgets
 from IPython.display import clear_output
 
 from uma_app import load_yaml, __version__
-from uma_app import uma_engine, uma_optimize, uma_freq, uma_report
+from uma_app import uma_engine, uma_hf, uma_optimize, uma_freq, uma_report
 from common import io_reader, writer_xyz, gui_parts, gui_input, gui_output
 
 
@@ -145,7 +145,7 @@ def build_app():
                     defaults["validation"]["min_interatomic_distance_angstrom"])
 
                 print("\n--- Hugging Faceのアクセス権を確認しています ---")
-                uma_engine.check_model_access()
+                uma_hf.check_model_access()
                 print("  UMAへのアクセスを確認しました。")
 
                 device = uma_engine.get_device()
@@ -243,7 +243,7 @@ def build_app():
             except (io_reader.StructureError, ValueError) as e:
                 print("\n❌ 入力内容にエラーがあります:")
                 print(str(e))
-            except uma_engine.UmaSetupError as e:
+            except uma_hf.UmaSetupError as e:
                 print("\n❌ UMAを使うための準備に問題があります:")
                 print(str(e))
             except ImportError as e:

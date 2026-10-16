@@ -10,7 +10,8 @@ PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お�
 
 | ファイル | 役割 |
 |---|---|
-| `uma_engine.py` | Hugging Faceのトークン・アクセス確認、モデル(predictor)の読み込み、ASEのAtoms/Calculator作成 |
+| `uma_hf.py` | Hugging Faceのトークン・アクセス確認(`login_from_environment`・`check_model_access`)、UMAを使うための準備の問題を表す例外(`UmaSetupError`) |
+| `uma_engine.py` | モデル(predictor)の読み込み、計算デバイスの判定、ASEのAtoms/Calculator作成 |
 | `uma_optimize.py` | ASE(LBFGS等)+UMAによる構造最適化。結果の項目名は `qcapp/optimize.py` とそろえてある |
 | `uma_freq.py` | 数値微分によるHessianと、並進・回転を除いた調和振動数解析(純粋なnumpy) |
 | `uma_notice.py` | UMAのライセンス・引用の一次情報へのリンク(計算ログの末尾に記載。ノートブック冒頭の文面と同じ内容に保つ) |
@@ -37,8 +38,8 @@ PySCF版と共有しています。`uma_app` は `qcapp` を一切importしま�
 
 - トークンは、ノートブックの「2.」のセル(`getpass` またはColabのシークレット。同じセルでアクセス確認まで行う)で受け取り、環境変数 `HF_TOKEN`
   (Hugging Face公式の標準の受け渡し方法)にだけ設定します。セルの変数には残しません。
-- `uma_engine.login_from_environment()` が環境変数を読み取ってログインします。入力方法(`getpass`・シークレット)は
-  `uma_engine` や `gui_uma.py` からは見えないため、入力セルの作りを変えてもこれらを変更する必要はありません。
+- `uma_hf.login_from_environment()` が環境変数を読み取ってログインします。入力方法(`getpass`・シークレット)は
+  `uma_hf` や `gui_uma.py` からは見えないため、入力セルの作りを変えてもこれらを変更する必要はありません。
 - トークンの入力欄をGUI(ipywidgets)に置く方式は採用していません。入力値がウィジェットの状態として保持され、
   保存されるノートブックに残りうるためです。
 
