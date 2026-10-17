@@ -23,7 +23,7 @@ import types
 
 _MODULES = ("ipywidgets", "IPython", "IPython.display", "google", "google.colab",
             "google.colab.output", "google.colab.files")
-_REPO_MODULES = ("common.gui_parts", "common.colab_widgets")
+_REPO_MODULES = ("common.gui_parts", "common.colab_widgets", "common.energy_plot")
 
 
 class _Env:
@@ -99,6 +99,11 @@ def _build_ipywidgets(env):
             for fn in self._handlers:
                 fn(self)
 
+    class IntText(_W):
+        def __init__(self, **kw):
+            kw.setdefault("value", 0)
+            super().__init__(**kw)
+
     class IntSlider(_W):
         def __setattr__(self, key, value):
             if key == "max" and not self._initializing:
@@ -128,7 +133,7 @@ def _build_ipywidgets(env):
     class HBox(VBox):
         pass
 
-    for cls in (Layout, HTML, Dropdown, Text, FileUpload, Button, IntSlider, Output, VBox, HBox):
+    for cls in (Layout, HTML, Dropdown, Text, FileUpload, Button, IntText, IntSlider, Output, VBox, HBox):
         setattr(m, cls.__name__, cls)
     return m
 

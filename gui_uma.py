@@ -4,6 +4,9 @@ gui_uma.py
 UMA(機械学習ポテンシャル)版のGUI組み立て(ColabApp_UMA.ipynb のエントリーポイント)。
 
 PySCF版の gui.py とは別ファイルになっており、お互いに影響しない。
+計算の流れ(アクセス権の確認 → モデルの読み込み → 構造最適化 → 振動数解析 → 出力ファイルの書き出し)は
+uma_app/uma_pipeline.py に委譲し、このファイルは、入力値の収集、アップロードされたファイルの
+読み込みと検証、結果の表示、例外の利用者向けメッセージへの変換だけを行う。
 (README.md「gui.pyをルート直下に置いている理由」のとおり、`gui.py` は `qcapp` と `common`
 から、`gui_uma.py` は `uma_app` と `common` から、それぞれ必要な部品を組み合わせて
 画面を組み立てる「アプリの組み立て役」。)
@@ -14,7 +17,7 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     - 分子軌道・原子電荷・moldenの出力はない(UMAは電子状態を返さないため)。
     - 振動数計算は、構造最適化の後処理として行う(PySCF版と同じ位置づけ)。
     - Hugging Faceのトークンは、このGUIでは一切扱わない。ノートブックの「2.」のセルが
-      環境変数 HF_TOKEN に設定し、uma_engine がそれを読み取る(入力欄をGUIに置くと、
+      環境変数 HF_TOKEN に設定し、uma_hf がそれを読み取る(入力欄をGUIに置くと、
       入力値がウィジェットの状態として保持され、保存されるノートブックに残りうるため)。
 
 【ipywidgetsの版について】
@@ -26,11 +29,12 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
 
 【PySCF版と共通の部品】(どちらも common/ にある)
     画面部品: 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・
-              振動アニメーション・ダウンロード(common/gui_parts.py)
-    補助関数: アップロードされたファイルの取り出し・ダウンロードのファイル名(common/gui_helpers.py)
+              振動アニメーション・ダウンロード・電荷とスピン多重度の入力欄(common/gui_parts.py)
+    補助関数: アップロードされたファイルの取り出し・読み込みと検証・ダウンロードのファイル名・
+              電荷の表示と読み取り(common/gui_input.py・common/gui_output.py)
     そのほか: 構造ファイルの読み込み・検証(common/io_reader.py)、xyz出力(common/writer_xyz.py)、
               構造・振動の3D表示(common/plot_common.py)
-    このファイルには、UMA版にしかない部分(モデルの選択、電荷の入力欄、UMAの呼び出し)だけを残している。
+    このファイルには、UMA版にしかない部分(モデルの選択、UMAの呼び出し)だけを残している。
 
 使い方(ColabApp_UMA.ipynbから):
     import gui_uma
@@ -38,17 +42,14 @@ PySCF版の gui.py とは別ファイルになっており、お互いに影響�
     display(app)
 """
 
-import os
-import tempfile
-import time
 import traceback
 
 import ipywidgets as widgets
 from IPython.display import clear_output
 
 from uma_app import load_yaml, __version__
-from uma_app import uma_engine, uma_optimize, uma_freq, uma_report
-from common import io_reader, writer_xyz, gui_parts, gui_helpers
+from uma_app import uma_hf, uma_pipeline
+from common import io_reader, gui_parts, gui_input, gui_output
 
 
 # -----------------------------------------------------------------------------
@@ -59,7 +60,6 @@ def build_app():
     models = load_yaml("uma_models.yaml")
     defaults = load_yaml("uma_defaults.yaml")
     gui_defaults = defaults["gui_defaults"]
-    task_name = defaults["uma"]["task_name"]
 
     # --- ① 入力ウィジェット ---------------------------------------------------
     title = widgets.HTML(
@@ -77,10 +77,7 @@ def build_app():
 
     # 電荷の入力欄は、PySCF版(gui.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
     charge_input = gui_parts.ChargeInput(value=int(gui_defaults["charge"]))
-    mult_input = widgets.IntText(
-        value=gui_defaults["multiplicity"], description="スピン多重度",
-        style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
-    )
+    mult_input = gui_parts.MultiplicityInput(value=gui_defaults["multiplicity"])
     freq_checkbox = widgets.Checkbox(
         value=gui_defaults["do_frequency"],
         description="振動数計算も実行する",
@@ -91,7 +88,7 @@ def build_app():
         widgets.HTML("<h4>① 構造ファイルと計算条件</h4>"),
         *file_input.widgets,
         model_dd,
-        widgets.HBox([charge_input.controls, mult_input]),
+        widgets.HBox([charge_input.controls, mult_input.widget]),
         charge_input.message,
         freq_checkbox,
     ])
@@ -131,139 +128,47 @@ def build_app():
         finally:
             run_button.disabled = False
 
+    def _reset_results():
+        """前回の計算結果の表示を、すべて消す(新しい結果と混ざらないように、計算の開始時に呼ぶ)。"""
+        energy_viewer.reset()
+        vib_viewer.reset()
+        downloads.reset()
+
     def _run_pipeline():
         with log_output:
             clear_output(wait=True)
-            t_total_start = time.perf_counter()
+            _reset_results()
             try:
                 charge = charge_input.value
                 multiplicity = int(mult_input.value)
-                model_key = model_dd.value
-                do_freq = bool(freq_checkbox.value)
 
                 content_bytes, uploaded_filename = file_input.read()
-                file_ext = os.path.splitext(uploaded_filename)[1] or ".xyz"
-                with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False, mode="wb") as tf:
-                    tf.write(content_bytes)
-                    tmp_path = tf.name
+                structure = gui_input.load_uploaded_structure(
+                    content_bytes, uploaded_filename, charge, multiplicity,
+                    defaults["validation"]["min_interatomic_distance_angstrom"])
 
-                structure = io_reader.read_structure(tmp_path)
-                print(f"[入力構造] ファイル: {uploaded_filename}"
-                      f"  原子数: {len(structure.symbols)}  組成: "
-                      f"{', '.join(sorted(set(structure.symbols)))}")
-
-                io_reader.validate_structure(
-                    structure, defaults["validation"]["min_interatomic_distance_angstrom"])
-                io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)
-
-                print("\n--- Hugging Faceのアクセス権を確認しています ---")
-                uma_engine.check_model_access()
-                print("  UMAへのアクセスを確認しました。")
-
-                device = uma_engine.get_device()
-                device_label = uma_engine.describe_device(device)
-                print(f"\n--- UMAモデル {model_key} を読み込みます(デバイス: {device_label}) ---")
-                if device == "cpu":
-                    print("  [注意] GPUが使えないため、計算に非常に時間がかかります。"
-                          "「ランタイム」→「ランタイムのタイプを変更」でT4 GPUを選んでください。")
-                print("  (初回はモデルファイルのダウンロードに時間がかかります。"
-                      "しばらくお待ちください)")
-                t_load = time.perf_counter()
-                predictor = uma_engine.load_predictor(model_key, device)
-                calculator = uma_engine.make_calculator(predictor, task_name)
-                print(f"  モデル準備 所要時間: {time.perf_counter() - t_load:.1f} 秒")
-
-                atoms = uma_engine.build_atoms(structure, charge, multiplicity)
-
-                opt_cfg = defaults["geometry_optimization"]
-                print(f"\n--- 構造最適化を開始します"
-                      f"({opt_cfg['optimizer']}, 収束条件 fmax <= {opt_cfg['fmax_ev_per_angstrom']} eV/Å,"
-                      f" 最大 {opt_cfg['max_steps']} ステップ) ---")
-
-                def _print_opt_progress(step, energy_hartree, fmax):
-                    print(f"  step {step:3d}  E = {energy_hartree:.6f} Ha  fmax = {fmax:.4f} eV/Å")
-
-                opt_result = uma_optimize.run_geometry_optimization(
-                    atoms, calculator, opt_cfg, progress=_print_opt_progress)
-                if opt_result.converged:
-                    print(f"  収束しました。構造最適化 所要時間: {opt_result.elapsed_seconds:.1f} 秒"
-                          f"  (記録された点数: {len(opt_result.energies)})")
-                else:
-                    print(f"  [注意] {opt_result.max_steps}ステップ以内に収束しませんでした"
-                          f"(最終 fmax = {opt_result.final_fmax:.4f} eV/Å)。"
-                          "途中経過の構造を表示します。初期構造を見直すか、"
-                          "config/uma_defaults.yaml の max_steps を増やして再実行してください。")
-
-                final_symbols = list(opt_result.symbols)
-                final_coords = [list(c) for c in opt_result.coords_history[-1]]
-
-                freq_result = None
-                if do_freq:
-                    natoms = len(final_symbols)
-                    freq_cfg = defaults["frequency"]
-                    if natoms >= freq_cfg["warn_natoms"]:
-                        print(f"\n  [注意] 原子数が{natoms}と多いため、振動数計算には"
-                              "時間がかかる可能性があります。このタブを開いたままお待ちください。")
-                    print("\n--- 振動数計算を開始します(数値微分によるHessian) ---")
-                    atoms_final = atoms.copy()
-                    atoms_final.set_positions(final_coords)
-                    report_every = max(1, natoms // 10)
-
-                    def _print_freq_progress(done, total):
-                        if done % report_every == 0 or done == total:
-                            print(f"  Hessian計算: {done}/{total} 原子")
-
-                    freq_result = uma_freq.run_frequency_analysis(
-                        atoms_final, calculator, freq_cfg, progress=_print_freq_progress)
-                    print(f"  振動数計算 所要時間: {freq_result.elapsed_seconds:.1f} 秒"
-                          f"  (虚振動: {freq_result.n_imaginary}個)")
-                    if freq_result.warning_message:
-                        print(f"  [注意] {freq_result.warning_message}")
-
-                total_elapsed = time.perf_counter() - t_total_start
-                label = "構造最適化 + 振動数計算" if do_freq else "構造最適化のみ"
-                print(f"\n=== 合計所要時間({label}): {total_elapsed:.1f} 秒 ===")
-
-                out_dir = tempfile.mkdtemp(prefix="qchem_uma_output_")
-                final_xyz_path = os.path.join(out_dir, "final_structure_for_ColabReaction.xyz")
-                xyz_comment = (f"Optimized by qchem_colab_app UMA "
-                               f"(v{__version__}, {model_key}, {task_name})")
-                writer_xyz.write_final_structure(final_symbols, final_coords, final_xyz_path,
-                                                 comment=xyz_comment)
-
-                traj_xyz_path = os.path.join(out_dir, "optimization_trajectory.xyz")
-                writer_xyz.write_trajectory(
-                    opt_result.symbols, opt_result.coords_history, traj_xyz_path, opt_result.energies)
-
-                log_path = os.path.join(out_dir, "calculation_log.txt")
-                with open(log_path, "w", encoding="utf-8") as f:
-                    f.write(uma_report.build_log_text(
-                        version=__version__, model_key=model_key, task_name=task_name,
-                        device_label=device_label, input_filename=uploaded_filename,
-                        charge=charge, multiplicity=multiplicity,
-                        opt_result=opt_result, freq_result=freq_result,
-                        total_seconds=total_elapsed))
+                settings = uma_pipeline.CalculationSettings(
+                    charge=charge, multiplicity=multiplicity, model_key=model_dd.value,
+                    do_frequency=bool(freq_checkbox.value), input_filename=uploaded_filename)
+                result = uma_pipeline.run_calculation(structure, settings, defaults)
 
                 print("\n計算が完了しました。下の「③ 可視化」「④ ダウンロード」をご確認ください。")
 
-                energy_viewer.show(opt_result)
-                vib_viewer.setup(freq_result, final_symbols, final_coords)
+                energy_viewer.show(result.opt_result)
+                vib_viewer.setup(result.freq_result, result.final_symbols, result.final_coords)
                 downloads.show(
                     [
-                        ("最終構造(ColabReactionにそのままアップロード可能)",
-                         final_xyz_path, ".xyz", "最終構造"),
-                        ("最適化トラジェクトリ(多フレーム)",
-                         traj_xyz_path, "_traj.xyz", "トラジェクトリ"),
+                        *gui_output.xyz_download_items(result.final_xyz_path, result.traj_xyz_path),
                         ("計算ログ(条件・履歴・振動数・UMAに関する情報)",
-                         log_path, "_log.txt", "計算ログ"),
+                         result.log_path, "_log.txt", "計算ログ"),
                     ],
-                    default_stem=gui_helpers.default_download_stem(uploaded_filename),
+                    default_stem=gui_output.default_download_stem(uploaded_filename),
                 )
 
             except (io_reader.StructureError, ValueError) as e:
                 print("\n❌ 入力内容にエラーがあります:")
                 print(str(e))
-            except uma_engine.UmaSetupError as e:
+            except uma_hf.UmaSetupError as e:
                 print("\n❌ UMAを使うための準備に問題があります:")
                 print(str(e))
             except ImportError as e:

@@ -9,9 +9,8 @@ uma_app.uma_report
 Hugging Faceのトークンなどの秘密情報は一切含めない。
 """
 
+from common.energy_plot import HARTREE_TO_KCAL_MOL
 from uma_app import uma_notice
-
-_HARTREE_TO_KCAL_MOL = 627.5094740631
 
 
 def build_log_text(*, version, model_key, task_name, device_label, input_filename,
@@ -51,7 +50,7 @@ def build_log_text(*, version, model_key, task_name, device_label, input_filenam
     if n_points:
         e_final = opt_result.energies[-1]
         for i in range(n_points):
-            d_e = (opt_result.energies[i] - e_final) * _HARTREE_TO_KCAL_MOL
+            d_e = (opt_result.energies[i] - e_final) * HARTREE_TO_KCAL_MOL
             add(f"{i:5d} {opt_result.energies[i]:16.8f} {d_e:15.3f} {opt_result.fmax_history[i]:12.5f}")
         add("(ΔEは最終構造を基準とした相対エネルギー)")
     add("")

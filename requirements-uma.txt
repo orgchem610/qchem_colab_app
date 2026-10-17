@@ -2,7 +2,7 @@
 # requirements-uma.txt  (qchem_colab_app UMA版 / ColabApp_UMA.ipynb 用)
 # -----------------------------------------------------------------------------
 # PySCF版(requirements.txt)とは別ファイルです。UMA版では PySCF・geomeTRIC・
-# GPU4PySCF・plotly・kaleido は使いません(エネルギーグラフは自前のSVGで描画)。
+# GPU4PySCF は使いません(エネルギーグラフは自前のSVGで描画)。
 #
 # 【バージョン指定の考え方】(requirements.txt と同じ方針)
 #   このプロジェクトのコードが具体的なAPIの形に強く依存しているものは上限も指定し、

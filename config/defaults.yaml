@@ -24,6 +24,7 @@ geometry_optimization:
 frequency:
   temperature_K: 298.15
   pressure_Pa: 101325.0
+  warn_natoms: 40         # これ以上の原子数では、振動数計算(CPU)に時間がかかる旨を表示する
 
 validation:
   min_interatomic_distance_angstrom: 0.4  # これより近い原子対があればアップロード時にエラー

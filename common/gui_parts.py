@@ -4,16 +4,19 @@ common.gui_parts
 gui.py(PySCF版)と gui_uma.py(UMA版)で共通の、画面部品(ipywidgets)をまとめたモジュール。
 計算エンジンには依存せず、次の「プレーンな値」だけを受け取る(疎結合)。
 
-    StructureFileInput    構造ファイルの入力(ドラッグ&ドロップ領域 + 「ファイルを選択」ボタン)
+    StructureFileInput    構造ファイルの入力(ドラッグ&ドロップ領域 + 「ファイルを選択」ボタン)。
+                          受け取ったファイルの構造は、その場で自動的に表示する
     EnergyStructureViewer エネルギー収束グラフ(点をクリック)+ スライダー + 構造表示
                           渡す結果: .energies[Hartree] / .coords_history[Å] / .symbols を持つ任意のオブジェクト
     VibrationViewer       振動モードの選択とアニメーション表示
                           渡す結果: .frequencies_cm1 / .normal_modes を持つ任意のオブジェクト
     DownloadPanel         ダウンロードボタン(ファイル名の入力欄つき)
     ChargeInput           電荷の入力欄(「+1」の形で表示。−1/+1ボタンつき)
+    MultiplicityInput     スピン多重度の入力欄(電荷の入力欄と同じ行に並べる)
 
 各部品は、画面に置くウィジェットを `.widget`(または `.widgets`)として公開し、
-計算が終わった後に show() / setup() を呼んで中身を更新する。計算の結果をどう得るかは
+計算が終わった後に show() / setup() を呼んで中身を更新する。新しい計算を始めるときは、
+reset() を呼んで、前回の結果の表示を消す。計算の結果をどう得るかは
 呼び出し側(gui.py / gui_uma.py)の責任で、部品は計算エンジンのモジュールをimportしない。
 
 ドラッグ&ドロップとグラフのクリックは、common/colab_widgets.py の
@@ -31,7 +34,7 @@ import tempfile
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, JSON
 
-from common import colab_widgets, gui_helpers, plot_common
+from common import colab_widgets, energy_plot, gui_input, gui_output, io_reader, plot_common
 
 
 def dropdown_from_list(items, description, width="420px"):
@@ -48,6 +51,11 @@ def dropdown_from_list(items, description, width="420px"):
 # -----------------------------------------------------------------------------
 # 電荷の入力
 # -----------------------------------------------------------------------------
+
+# 計算条件の入力欄(電荷・スピン多重度)で共通の、見た目の寸法
+_LABEL_WIDTH = "140px"
+_INPUT_WIDTH = "220px"
+
 
 class ChargeInput:
     """電荷の入力部品。正の値を「+1」のように符号付きで表示するため、数値ウィジェット(IntText)ではなく
@@ -66,9 +74,9 @@ class ChargeInput:
         self._updating = False
 
         self.text = widgets.Text(
-            value=gui_helpers.format_charge(self._value), description=description,
+            value=gui_input.format_charge(self._value), description=description,
             continuous_update=False,   # 入力の途中ではなく、Enterまたは欄の外へ移ったときに反映する
-            style={"description_width": "140px"}, layout=widgets.Layout(width="220px"),
+            style={"description_width": _LABEL_WIDTH}, layout=widgets.Layout(width=_INPUT_WIDTH),
         )
         self.minus_button = widgets.Button(
             description="−1", button_style="info", layout=widgets.Layout(width="48px"))
@@ -89,12 +97,12 @@ class ChargeInput:
         if change["name"] != "value" or self._updating:
             return
         try:
-            self._value = gui_helpers.parse_charge(change["new"])
+            self._value = gui_input.parse_charge(change["new"])
             self.message.value = ""
-        except gui_helpers.ChargeInputError as e:
+        except gui_input.ChargeInputError as e:
             self.message.value = f"<span style='color:#b42318'>{html.escape(str(e))}</span>"
         # 読み取れた場合は「+1」の形に整え、読み取れなかった場合は直前の値に戻す
-        shown = gui_helpers.format_charge(self._value)
+        shown = gui_input.format_charge(self._value)
         if self.text.value != shown:
             self._updating = True
             try:
@@ -104,7 +112,29 @@ class ChargeInput:
 
     def _step(self, delta):
         self.message.value = ""
-        self.text.value = gui_helpers.format_charge(self._value + delta)
+        self.text.value = gui_input.format_charge(self._value + delta)
+
+
+class MultiplicityInput:
+    """スピン多重度の入力部品(整数の入力欄)。
+
+    電荷の入力欄(ChargeInput)と同じ幅・同じ説明欄の幅にそろえてあり、同じ行に並べて使う。
+    値の範囲や、電子数との整合の確認は、この部品ではなく、計算前の検証
+    (common/gui_input.load_uploaded_structure → io_reader)で行う。
+
+    widget : 入力欄(ipywidgets.IntText)
+    value  : 現在のスピン多重度(整数)
+    """
+
+    def __init__(self, value=1, description="スピン多重度"):
+        self.widget = widgets.IntText(
+            value=int(value), description=description,
+            style={"description_width": _LABEL_WIDTH}, layout=widgets.Layout(width=_INPUT_WIDTH),
+        )
+
+    @property
+    def value(self):
+        return int(self.widget.value)
 
 
 # -----------------------------------------------------------------------------
@@ -115,8 +145,12 @@ class StructureFileInput:
     """構造ファイルの入力部品。ドラッグ&ドロップ(Colabのみ)と「ファイルを選択」ボタンの両方に対応し、
     両方を使った場合は、最後に選んだファイルを使う。
 
-    widgets : 画面に並べるウィジェットのリスト
+    widgets : 画面に並べるウィジェットのリスト(最後が、受け取った構造の表示欄)
     read()  : (ファイルの中身[bytes], ファイル名) を返す。選ばれていなければ io_reader.StructureError
+
+    ファイルを受け取ると(ドロップ・ボタンのどちらでも)、その構造を、すぐ下の表示欄に自動で表示する
+    (原子数・組成の概要と、3D表示)。読み込めない場合は、その理由を表示する(計算の前に、
+    構造ファイルの内容を目で確認できるようにするため)。
     """
 
     def __init__(self, callback_prefix="qchem_drop"):
@@ -150,10 +184,13 @@ class StructureFileInput:
             "対応形式: .xyz, .com, .gjf, .pdb(.mol/.sdfは現時点では未対応です)</p>"
         )
 
+        self.preview_output = widgets.Output()   # 受け取った構造の表示欄
+
         self.widgets = [
             *([self._drop_zone_output, self._status] if self._drop_callback is not None else []),
             self.upload,
             hint,
+            self.preview_output,
         ]
 
     def _on_file_dropped(self, payload):
@@ -169,6 +206,9 @@ class StructureFileInput:
             self._status.value = (
                 "<span style='color:#b42318'>ドロップされたファイルを受け取れませんでした: "
                 f"{html.escape(str(e))}</span>")
+            self._clear_preview()
+            return JSON({"ok": True})
+        self._update_preview()
         return JSON({"ok": True})
 
     def _on_upload_changed(self, change):
@@ -177,9 +217,32 @@ class StructureFileInput:
             self._dropped_file = None
             self._status.value = (
                 "<span style='color:#666'>「構造ファイル」ボタンで選んだファイルを使用します。</span>")
+            self._update_preview()
+        elif change["name"] == "value":
+            self._clear_preview()
+
+    def _clear_preview(self):
+        with self.preview_output:
+            clear_output()
+
+    def _update_preview(self):
+        """受け取った構造ファイルを読み込んで、概要と3D表示を出す。読み込めない場合は理由を表示する。"""
+        with self.preview_output:
+            clear_output(wait=True)
+            try:
+                content, name = self.read()
+                structure = gui_input.read_uploaded_structure(content, name)
+                print(f"[受け取った構造] {gui_input.describe_structure(structure, name)}")
+                view = plot_common.render_single_structure(structure.symbols, structure.coords)
+                view.show()
+            except (io_reader.StructureError, ValueError) as e:
+                print("構造を表示できませんでした。ファイルの形式・内容をご確認ください:")
+                print(str(e))
+            except Exception as e:  # 表示のための処理が、ファイルの受け取りを妨げないようにする
+                print(f"構造を表示できませんでした(内部エラー: {type(e).__name__}: {e})")
 
     def read(self):
-        return gui_helpers.extract_uploaded_file(self.upload, self._dropped_file)
+        return gui_input.extract_uploaded_file(self.upload, self._dropped_file)
 
 
 # -----------------------------------------------------------------------------
@@ -259,6 +322,23 @@ class EnergyStructureViewer:
             # スライダーの値が変わらなかった場合は observer が走らないため、ここで構造を表示する
             self._show_structure_at_step(last)
 
+    def reset(self):
+        """前回の結果の表示(グラフ・構造・スライダー)をすべて消す。新しい計算を始めるときに呼ぶ。"""
+        self._result = None
+        self._n_steps = 0
+        self._suppress_plot_redraw = True
+        try:
+            self.slider.value = 0
+            self.slider.max = 0
+        finally:
+            self._suppress_plot_redraw = False
+        self.slider.disabled = True
+        self.plot_status.value = ""
+        with self.energy_output:
+            clear_output()
+        with self.step_view_output:
+            clear_output()
+
     def _show_structure_at_step(self, step_index):
         result = self._result
         # グラフに載せているのは「エネルギーと座標が対になっている点」だけ(n_steps個)。
@@ -267,7 +347,7 @@ class EnergyStructureViewer:
         with self.step_view_output:
             clear_output(wait=True)
             e_rel_kcal = ((result.energies[step_index] - result.energies[n_steps - 1])
-                          * colab_widgets.HARTREE_TO_KCAL_MOL)
+                          * energy_plot.HARTREE_TO_KCAL_MOL)
             print(self._step_label(step_index, e_rel_kcal, result))
             view = plot_common.render_single_structure(
                 result.symbols, result.coords_history[step_index])
@@ -279,13 +359,13 @@ class EnergyStructureViewer:
         with self.energy_output:
             clear_output(wait=True)
             try:
-                display(HTML(colab_widgets.build_energy_plot_html(
+                display(HTML(energy_plot.build_energy_plot_html(
                     energies, selected_index=selected_index, callback_name=self._plot_callback)))
             except Exception as e:
                 print(f"(グラフを描画できませんでした。下のスライダーで構造を切り替えられます。詳細: {e})")
 
     def _on_slider_changed(self, change):
-        if change["name"] != "value":
+        if change["name"] != "value" or self._result is None:
             return
         self._show_structure_at_step(change["new"])
         # 点のクリックが原因の変更では、JavaScript側が既に赤い菱形を動かしているため描き直さない
@@ -323,6 +403,8 @@ class VibrationViewer:
 
     setup(freq_result, symbols, coords) : 振動数解析の結果(.frequencies_cm1 / .normal_modes を持つ
         オブジェクト。計算していない場合は None)と、振動させる構造を受け取って、選択肢を更新する。
+        前回のアニメーションの表示は、このとき消す。
+    reset() : 前回の結果の表示をすべて消す(新しい計算を始めるとき)。
     """
 
     def __init__(self):
@@ -341,10 +423,15 @@ class VibrationViewer:
             self.output,
         ])
 
+    def reset(self):
+        self.setup(None, None, None)
+
     def setup(self, freq_result, symbols, coords):
         self._freq_result = freq_result
         self._symbols = symbols
         self._coords = coords
+        with self.output:
+            clear_output()       # 前回のアニメーションを残さない
         if (freq_result is None or freq_result.normal_modes is None
                 or not len(freq_result.frequencies_cm1)):
             self.mode_dropdown.options = []
@@ -392,6 +479,11 @@ class DownloadPanel:
         self._output = widgets.Output()
         self.widget = widgets.VBox([widgets.HTML("<h4>④ ダウンロード</h4>"), self._output])
 
+    def reset(self):
+        """前回のダウンロードボタンを消す。新しい計算を始めるときに呼ぶ。"""
+        with self._output:
+            clear_output()
+
     def show(self, items, default_stem=""):
         with self._output:
             clear_output(wait=True)
@@ -425,7 +517,7 @@ class DownloadPanel:
 
                 def _make_handler(src_path=src_path, suffix=suffix):
                     def _handler(_):
-                        stem = gui_helpers.sanitize_filename_stem(name_input.value)
+                        stem = gui_output.sanitize_filename_stem(name_input.value)
                         tmp_dir = tempfile.mkdtemp(prefix=self._tmp_prefix)
                         dst_path = os.path.join(tmp_dir, f"{stem}{suffix}")
                         shutil.copyfile(src_path, dst_path)

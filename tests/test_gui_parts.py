@@ -77,7 +77,18 @@ class _Base(unittest.TestCase):
         self._ctx.__exit__(None, None, None)
 
 
-class TestStructureFileInputInColab(_Base):
+class _QuietPreview(_Base):
+    """構造の自動表示(print)の出力を捕まえて、テストの出力を汚さない。"""
+
+    def setUp(self):
+        super().setUp()
+        self.preview_text = io.StringIO()
+        redirect = contextlib.redirect_stdout(self.preview_text)
+        redirect.__enter__()
+        self.addCleanup(redirect.__exit__, None, None, None)
+
+
+class TestStructureFileInputInColab(_QuietPreview):
     def setUp(self):
         super().setUp()
         self.inp = self.gp.StructureFileInput(callback_prefix="test_drop")
@@ -114,13 +125,70 @@ class TestStructureFileInputInColab(_Base):
         self.assertEqual(self.inp.read(), (XYZ, "dropped_again.xyz"))  # もう一度ドロップした
 
 
-class TestStructureFileInputOutsideColab(_Base):
+class TestStructureFilePreview(_QuietPreview):
+    """ファイルを受け取ったときに、構造が自動で表示されること。"""
+
+    def setUp(self):
+        super().setUp()
+        self.inp = self.gp.StructureFileInput(callback_prefix="test_preview")
+        self.drop = next(fn for name, fn in self.env.callbacks.items() if name.startswith("test_preview"))
+
+    def test_preview_area_is_the_last_widget(self):
+        self.assertIs(self.inp.widgets[-1], self.inp.preview_output)
+
+    def test_dropped_file_is_shown_with_a_summary(self):
+        self.drop(_payload("water.xyz"))
+        self.assertEqual(len(self.shown), 1)
+        self.assertIn("water.xyz", self.preview_text.getvalue())
+        self.assertIn("原子数: 3", self.preview_text.getvalue())
+        self.assertIn("組成: H, O", self.preview_text.getvalue())
+
+    def test_the_callback_still_reports_success(self):
+        self.assertEqual(self.drop(_payload("water.xyz")).data, {"ok": True})
+
+    def test_file_selected_with_the_button_is_shown_too(self):
+        self.inp.upload.value = ({"name": "button.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
+        self.assertEqual(len(self.shown), 1)
+        self.assertIn("button.xyz", self.preview_text.getvalue())
+
+    def test_the_newest_file_is_the_one_shown(self):
+        self.drop(_payload("first.xyz"))
+        self.drop(_payload("second.xyz"))
+        self.assertEqual(len(self.shown), 2)
+        self.assertIn("second.xyz", self.preview_text.getvalue().splitlines()[-1])
+
+    def test_unreadable_content_is_explained_without_raising(self):
+        result = self.drop(_payload("broken.xyz", b"abc"))
+        self.assertEqual(result.data, {"ok": True})
+        self.assertIn("構造を表示できませんでした", self.preview_text.getvalue())
+        self.assertEqual(len(self.shown), 0)
+        self.assertEqual(self.inp.read(), (b"abc", "broken.xyz"))     # ファイル自体は受け取っている
+
+    def test_rejected_drop_does_not_show_a_structure(self):
+        self.drop(_payload("notes.txt"))
+        self.assertEqual(len(self.shown), 0)
+
+    def test_emptying_the_upload_does_not_show_anything_new(self):
+        self.inp.upload.value = ({"name": "a.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
+        self.inp.upload.value = ()
+        self.assertEqual(len(self.shown), 1)
+
+    def test_failure_of_the_display_does_not_prevent_receiving_the_file(self):
+        with mock.patch.object(self.gp.plot_common, "render_single_structure",
+                               side_effect=RuntimeError("描画の失敗")):
+            result = self.drop(_payload("water.xyz"))
+        self.assertEqual(result.data, {"ok": True})
+        self.assertIn("内部エラー", self.preview_text.getvalue())
+        self.assertEqual(self.inp.read(), (XYZ, "water.xyz"))
+
+
+class TestStructureFileInputOutsideColab(_QuietPreview):
     colab = False
 
     def test_no_drop_zone_and_no_callback_outside_colab(self):
         inp = self.gp.StructureFileInput()
         self.assertEqual(self.env.callbacks, {})
-        self.assertEqual(len(inp.widgets), 2)              # ファイル選択ボタンと説明だけ
+        self.assertEqual(len(inp.widgets), 3)              # ファイル選択ボタン・説明・受け取った構造の表示欄
         self.assertIn("ボタンをクリック", inp.widgets[1].value)
 
     def test_upload_button_still_works(self):
@@ -212,6 +280,39 @@ class TestEnergyStructureViewer(_Base):
         self.assertIn("履歴が記録されていない", out)
 
 
+class TestEnergyStructureViewerReset(_Base):
+    def setUp(self):
+        super().setUp()
+        self.viewer = self.gp.EnergyStructureViewer(callback_prefix="test_reset")
+
+    def test_reset_clears_the_plot_the_structure_and_the_slider(self):
+        _capture(self.viewer.show, _result())
+        self.assertEqual(len(self.viewer.energy_output.outputs), 1)
+        self.viewer.reset()
+        self.assertEqual(self.viewer.energy_output.outputs, [])
+        self.assertEqual((self.viewer.slider.max, self.viewer.slider.value), (0, 0))
+        self.assertTrue(self.viewer.slider.disabled)
+        self.assertEqual(self.viewer.plot_status.value, "")
+
+    def test_reset_forgets_the_previous_result(self):
+        _capture(self.viewer.show, _result())
+        self.viewer.reset()
+        click = next(fn for name, fn in self.env.callbacks.items() if name.startswith("test_reset"))
+        self.assertEqual(click(1).data, {"ok": False})                # 前回の結果の点は、もう選べない
+
+    def test_moving_the_slider_after_reset_does_not_fail(self):
+        _capture(self.viewer.show, _result())
+        self.viewer.reset()
+        self.viewer.slider.value = 0
+
+    def test_a_new_result_can_be_shown_after_reset(self):
+        _capture(self.viewer.show, _result(6, 6))
+        self.viewer.reset()
+        _capture(self.viewer.show, _result(3, 3))
+        self.assertEqual((self.viewer.slider.max, self.viewer.slider.value), (2, 2))
+        self.assertEqual(self.viewer.energy_output.outputs[0].data.count('class="qc-hit"'), 3)
+
+
 class TestVibrationViewer(_Base):
     def setUp(self):
         super().setUp()
@@ -242,6 +343,32 @@ class TestVibrationViewer(_Base):
         out = _capture(self.viewer.button.click)
         self.assertIn("1600.0", out)
         self.assertEqual(len(self.shown), 1)
+
+
+class TestVibrationViewerReset(_Base):
+    def setUp(self):
+        super().setUp()
+        self.viewer = self.gp.VibrationViewer()
+        self.freq = SimpleNamespace(frequencies_cm1=[1600.5], normal_modes=[0])
+        self.viewer.setup(self.freq, ["O", "H", "H"], [[0, 0, 0]] * 3)
+        self.viewer.output.outputs.append("前回のアニメーション")
+
+    def test_reset_disables_the_controls_and_clears_the_animation(self):
+        self.viewer.reset()
+        self.assertEqual(self.viewer.mode_dropdown.options, [])
+        self.assertTrue(self.viewer.mode_dropdown.disabled)
+        self.assertTrue(self.viewer.button.disabled)
+        self.assertEqual(self.viewer.output.outputs, [])
+
+    def test_a_run_without_frequency_analysis_clears_the_previous_animation(self):
+        self.viewer.setup(None, ["O", "H", "H"], [[0, 0, 0]] * 3)
+        self.assertEqual(self.viewer.output.outputs, [])
+        self.assertTrue(self.viewer.button.disabled)
+
+    def test_a_new_frequency_result_clears_the_previous_animation(self):
+        self.viewer.setup(self.freq, ["O", "H", "H"], [[0, 0, 0]] * 3)
+        self.assertEqual(self.viewer.output.outputs, [])
+        self.assertFalse(self.viewer.button.disabled)
 
 
 class TestDownloadPanelInColab(_Base):
@@ -286,6 +413,14 @@ class TestDownloadPanelInColab(_Base):
         self._name_input().value = "my?name"
         self._buttons()[0].click()
         self.assertEqual(self.env.downloaded, ["result.xyz", "myname.xyz"])
+
+    def test_reset_removes_the_buttons_of_the_previous_calculation(self):
+        self.panel.show(self.items, default_stem="water_result")
+        self.assertEqual(len(self.panel._output.outputs), 1)
+        self.panel.reset()
+        self.assertEqual(self.panel._output.outputs, [])
+        self.panel.show(self.items, default_stem="b")
+        self.assertEqual(len(self.panel._output.outputs), 1)
 
     def test_showing_again_replaces_the_previous_buttons(self):
         self.panel.show(self.items, default_stem="a")
@@ -358,6 +493,20 @@ class TestChargeInput(_Base):
     def test_controls_hold_the_text_and_both_buttons(self):
         self.assertEqual(self.charge.controls.children,
                          [self.charge.text, self.charge.minus_button, self.charge.plus_button])
+
+
+class TestMultiplicityInput(_Base):
+    def test_initial_value_is_returned_as_an_integer(self):
+        self.assertEqual(self.gp.MultiplicityInput(value=3).value, 3)
+        self.assertEqual(self.gp.MultiplicityInput().value, 1)
+
+    def test_value_follows_the_input_widget(self):
+        mult = self.gp.MultiplicityInput(value=1)
+        mult.widget.value = 2
+        self.assertEqual(mult.value, 2)
+
+    def test_default_label_is_spin_multiplicity(self):
+        self.assertEqual(self.gp.MultiplicityInput().widget.description, "スピン多重度")
 
 
 class TestDropdownFromList(_Base):

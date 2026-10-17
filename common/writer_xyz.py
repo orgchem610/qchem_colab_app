@@ -15,6 +15,12 @@ ColabReactionがreactant/productとして受け付ける標準的な.xyz形式
 そのものにしている(独自拡張は入れていない)。
 """
 
+import os
+
+# 最適化の出力ファイル名(PySCF版・UMA版で共通)
+FINAL_STRUCTURE_FILENAME = "final_structure_for_ColabReaction.xyz"
+TRAJECTORY_FILENAME = "optimization_trajectory.xyz"
+
 
 def _format_xyz_block(symbols, coords, comment=""):
     lines = [str(len(symbols)), comment]
@@ -46,6 +52,21 @@ def write_trajectory(symbols, coords_history, filepath, energies=None):
         blocks.append(_format_xyz_block(symbols, coords, comment))
     with open(filepath, "w", encoding="utf-8") as f:
         f.write("\n".join(blocks) + "\n")
+
+
+def write_optimization_outputs(out_dir, final_symbols, final_coords, final_comment, opt_result):
+    """構造最適化の標準の出力(最終構造と最適化トラジェクトリ)を out_dir に書き出す。
+
+    PySCF版・UMA版の両方が、同じファイル名・同じ形式で出力するための関数。
+    opt_result は、symbols・coords_history・energies を持つ最適化結果
+    (qcapp.optimize・uma_app.uma_optimize の OptimizationResult)。
+    戻り値は (最終構造のパス, トラジェクトリのパス)。
+    """
+    final_path = os.path.join(out_dir, FINAL_STRUCTURE_FILENAME)
+    write_final_structure(final_symbols, final_coords, final_path, comment=final_comment)
+    trajectory_path = os.path.join(out_dir, TRAJECTORY_FILENAME)
+    write_trajectory(opt_result.symbols, opt_result.coords_history, trajectory_path, opt_result.energies)
+    return final_path, trajectory_path
 
 
 def xyz_string(symbols, coords, comment=""):

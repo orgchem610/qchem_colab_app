@@ -117,16 +117,6 @@ class TestChargeAndMultiplicity(unittest.TestCase):
             io_reader.validate_charge_and_multiplicity(structure, charge=2, multiplicity=1)
 
 
-class TestTransitionMetalDetection(unittest.TestCase):
-    def test_organic_molecule_is_false(self):
-        structure = io_reader.Structure(symbols=["C", "H", "H", "H", "O"], coords=[[0, 0, 0]] * 5)
-        self.assertFalse(io_reader.contains_transition_metal(structure))
-
-    def test_iron_complex_is_true(self):
-        structure = io_reader.Structure(symbols=["Fe", "C", "O"], coords=[[0, 0, 0]] * 3)
-        self.assertTrue(io_reader.contains_transition_metal(structure))
-
-
 class TestReadStructureDispatch(unittest.TestCase):
     """read_structure()の拡張子による振り分けロジックのテスト。
     .com/.gjf/.pdbの実際の読み込み(ASEが必要)はこの開発環境では

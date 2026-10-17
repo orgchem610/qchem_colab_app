@@ -1,10 +1,11 @@
 """
 qcapp.visualizer_pyscf
 ------------------------------
-PySCFのMole/SCFオブジェクトに直接依存する可視化関数群。
+PySCFのMole/SCFオブジェクトに直接依存する可視化(描画・表示)の関数群。
 
-分子軌道(cubeファイル)・Mulliken電荷など、PySCF固有のデータ構造を
-扱うためここに置いている。UMA版では別の方法で同等の情報を得る必要があり、
+分子軌道(cubeファイル)・Mulliken電荷の色分けなど、PySCF固有のデータ構造を
+扱うためここに置いている。HOMO/LUMOの軌道番号やMulliken電荷の値を求める
+「解析」の関数は、描画とは役割が違うため qcapp/analysis_pyscf.py に分けてある。UMA版では別の方法で同等の情報を得る必要があり、
 これらの関数をそのまま再利用することはできない
 (common.plot_common側の関数とは対照的)。
 
@@ -32,21 +33,12 @@ _VDW_RADII = {
 _DEFAULT_VDW_RADIUS = 1.70
 
 
-def get_homo_lumo_indices(mf):
-    """収束済みSCFオブジェクトからHOMO/LUMOの軌道インデックスを求める(閉殻を想定)。"""
-    mo_occ = mf.mo_occ
-    if isinstance(mo_occ, (tuple, list)):
-        mo_occ = mo_occ[0]  # UHFの場合はひとまずalphaチャンネルを使う
-    occ_indices = np.nonzero(np.asarray(mo_occ) > 0)[0]
-    homo_idx = int(occ_indices[-1]) if len(occ_indices) else 0
-    lumo_idx = homo_idx + 1
-    return homo_idx, lumo_idx
-
-
 def _mo_coeff_for_cube(mf, orbital_index):
     mo_coeff = mf.mo_coeff
-    if isinstance(mo_coeff, (tuple, list)):
-        mo_coeff = mo_coeff[0]  # UHFの場合はひとまずalphaチャンネルを使う
+    # 開殻(UHF/UKS)では、αとβの軌道係数をまとめた(2, 基底関数, 軌道)の3次元配列(または2つの配列の
+    # 組)になっている。軌道の選択肢(analysis_pyscf.orbital_choices)はαスピンの軌道なので、αを使う。
+    if isinstance(mo_coeff, (tuple, list)) or getattr(mo_coeff, "ndim", 2) == 3:
+        mo_coeff = mo_coeff[0]
     return mo_coeff[:, orbital_index]
 
 
@@ -100,15 +92,8 @@ def render_orbital(mol, mf, orbital_index, isoval_fraction=0.12, width=500, heig
     return view
 
 
-def compute_mulliken_charges(mol, mf):
-    """Mulliken電荷を原子ごとに計算する。戻り値は [(元素記号, 電荷), ...]。"""
-    _, atomic_charges = mf.mulliken_pop(verbose=0)
-    symbols = [mol.atom_symbol(i) for i in range(mol.natm)]
-    return list(zip(symbols, [float(c) for c in atomic_charges]))
-
-
 def atomic_charges_table_html(charges):
-    """compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
+    """analysis_pyscf.compute_mulliken_charges() の結果を簡単なHTML表に整形する。"""
     rows = "".join(
         f"<tr><td style='padding:2px 10px;text-align:right'>{i + 1}</td>"
         f"<td style='padding:2px 10px'>{sym}</td>"
@@ -225,48 +210,5 @@ def render_charges(mol, charges, show_labels=True, width=500, height=400):
     add_atom_charge_spheres(view, mol, charges)
     if show_labels:
         add_atom_charge_labels(view, mol, charges)
-    view.zoomTo()
-    return view
-
-
-def render_density(mol, mf, isovals=(0.002, 0.02, 0.2), width=500, height=400):
-    """(現在gui.pyからは未使用。将来また使う可能性を考えて残している)
-
-    全電子密度を、淡色(低密度)から濃色(高密度)へのグラデーションになるよう
-    3段階の等値面を重ねて表示する。
-
-    軌道(render_orbital)とは異なり、電子密度は原子核付近で桁違いに大きく
-    分子表面付近では非常に小さいという、極端に広いダイナミックレンジを持つ。
-    そのため軌道と同じ「最大値に対する割合」で等値面を決めると、3段階とも
-    ほぼ同じ(核付近のごく小さな)範囲に収まってしまい、見た目上グラデーション
-    にならないことがある。電子密度の可視化では、原子単位(e/bohr^3)での
-    絶対値として 0.002 / 0.02 / 0.2 前後の値を使うのが一般的であるため
-    (0.002は分子表面(van der Waals表面相当)を表す値としてよく使われる)、
-    これらを既定値として採用する。
-    """
-    import py3Dmol
-    from pyscf.tools import cubegen
-
-    dm = mf.make_rdm1()
-    if isinstance(dm, (tuple, list)):
-        dm = dm[0] + dm[1]  # UHFの場合はalpha+beta密度を合算
-
-    tmpdir = tempfile.mkdtemp()
-    cube_path = os.path.join(tmpdir, "density.cube")
-    cubegen.density(mol, cube_path, dm)
-
-    with open(cube_path, "r", encoding="utf-8") as f:
-        cube_data = f.read()
-
-    # (色, 不透明度) の組。淡い黄色(低密度・分子表面付近)
-    # → オレンジ → 濃い赤(高密度・原子核付近)の順。
-    colors = ["#ffcc00", "#ff5500", "#880000"]
-    opacities = [0.55, 0.75, 0.92]
-
-    view = py3Dmol.view(width=width, height=height)
-    view.addModel(cube_data, "cube")
-    view.setStyle({"stick": {}})
-    for isoval, color, opacity in zip(isovals, colors, opacities):
-        view.addVolumetricData(cube_data, "cube", {"isoval": isoval, "color": color, "opacity": opacity})
     view.zoomTo()
     return view

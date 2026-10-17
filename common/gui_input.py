@@ -1,20 +1,24 @@
 """
-common.gui_helpers
-------------------
-GUI(gui.py / gui_uma.py)まわりの、画面部品(ipywidgets)に依存しない小さな関数群。
+common.gui_input
+----------------
+GUI(gui.py / gui_uma.py)の「入力」まわりの、画面部品(ipywidgets)に依存しない関数群。
 ipywidgetsがなくても単体テストできるよう、画面部品(common/gui_parts.py)から分けてある。
 
-    - extract_uploaded_file      : アップロード(またはドロップ)された構造ファイルの取り出し
-    - sanitize_filename_stem     : ダウンロードするファイル名(拡張子なし)の整形
-    - default_download_stem      : ファイル名の既定値(「入力ファイル名_result」)
+    - extract_uploaded_file    : アップロード(またはドロップ)された構造ファイルの取り出し
+    - read_uploaded_structure  : 取り出した構造ファイルの読み込み(検証はしない。受け取った構造の表示用)
+    - describe_structure       : 読み込んだ構造の概要(ファイル名・原子数・組成)の文字列
+    - load_uploaded_structure  : 取り出した構造ファイルの読み込みと、計算前の検証
     - format_charge / parse_charge / ChargeInputError
-                                 : 電荷の表示(正の値は「+1」の形)と、入力欄の文字列の読み取り
+                               : 電荷の表示(正の値は「+1」の形)と、入力欄の文字列の読み取り
 
+ダウンロードするファイル名など、「出力」まわりの関数は common/gui_output.py にある
+(v0.2.1で、以前の common/gui_helpers.py を、入力と出力に分けた)。
 計算エンジン(PySCF・UMA)には依存しない。
 """
 
 import os
 import re
+import tempfile
 import unicodedata
 
 from common import io_reader
@@ -59,22 +63,50 @@ def extract_uploaded_file(upload_widget, dropped_file=None):
     )
 
 
-def sanitize_filename_stem(raw):
-    """ファイル名(拡張子なし)として使えない文字を除去する。空なら 'result' にする。"""
-    stem = re.sub(r'[\\/:*?"<>|]', "", (raw or "").strip())
-    return stem or "result"
+def read_uploaded_structure(content, filename):
+    """アップロードされた構造ファイルの中身(bytes)を読み込み、Structure を返す。
 
-
-def default_download_stem(input_filename):
-    """ダウンロードするファイル名の既定値(拡張子なし)を、入力ファイル名から作る。
-
-    例: "water.xyz" -> "water_result"。入力ファイル名が使えない場合は "result"。
+    拡張子で形式を判定するため、一時ファイルにも同じ拡張子を付ける(拡張子がなければ .xyz とみなす)。
+    一時ファイルは、読み込み後に削除する。原子間距離や電荷・多重度の検証はしない
+    (受け取った構造をすぐ表示するときに使う。計算前の検証は load_uploaded_structure)。
+    読み込めない場合は、io_reader.StructureError を送出する。
     """
-    name = os.path.basename(str(input_filename or "").replace("\\", "/"))
-    # 「.xyz」のように拡張子しかない名前には、ファイル名の本体がないものとして扱う
-    stem = "" if re.fullmatch(r"\.[^.]*", name) else os.path.splitext(name)[0].lstrip(".")
-    stem = re.sub(r'[\\/:*?"<>|]', "", stem).strip()
-    return f"{stem}_result" if stem else "result"
+    extension = os.path.splitext(str(filename or ""))[1] or ".xyz"
+    fd, tmp_path = tempfile.mkstemp(suffix=extension)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+        return io_reader.read_structure(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def describe_structure(structure, filename):
+    """読み込んだ構造の概要(ファイル名・原子数・組成)を、1行の文字列にする。"""
+    return (f"ファイル: {filename}  原子数: {len(structure.symbols)}  組成: "
+            f"{', '.join(sorted(set(structure.symbols)))}")
+
+
+def load_uploaded_structure(content, filename, charge, multiplicity, min_distance, log=print):
+    """アップロードされた構造ファイルの中身(bytes)を読み込み、計算できる構造かを検証して返す。
+
+    PySCF版・UMA版のどちらも、計算の前に同じ入力チェックを行う。
+        1. 構造ファイルを読み込む(read_uploaded_structure)
+        2. 読み込んだ構造の概要(ファイル名・原子数・組成)を log に出す
+        3. 原子どうしが近すぎないか(min_distance[Å]未満の原子対がないか)を検証する
+        4. 電荷とスピン多重度が、電子数と矛盾しないか検証する
+    読み込み・検証に失敗した場合は、io_reader.StructureError(または ValueError)を送出する。
+    それ以降の処理(遷移金属の判定など、エンジンごとに異なる確認)は、呼び出し側で行う。
+    """
+    structure = read_uploaded_structure(content, filename)
+    log(f"[入力構造] {describe_structure(structure, filename)}")
+
+    io_reader.validate_structure(structure, min_distance)
+    io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)
+    return structure
 
 
 class ChargeInputError(ValueError):

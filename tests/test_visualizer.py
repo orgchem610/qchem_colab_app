@@ -1,7 +1,7 @@
 """
 tests/test_visualizer.py
 --------------------------
-qcapp.visualizer(および内部のvisualizer_pyscf)のうち、pyscf/py3Dmolを実際には呼ばない部分
+qcapp.visualizer_pyscf のうち、pyscf/py3Dmolを実際には呼ばない部分
 (cubeファイルのテキストパース、電荷テーブルのHTML整形)だけを対象にした
 単体テスト。isoval計算やMulliken電荷計算そのものはPySCFが必要なため、
 Colab上での実機確認が必要(README.md参照)。
@@ -11,10 +11,12 @@ import os
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import visualizer  # noqa: E402
 from qcapp import visualizer_pyscf  # noqa: E402
 
 
@@ -39,10 +41,31 @@ class TestMaxAbsFromCubeFile(unittest.TestCase):
         self.assertAlmostEqual(max_abs, 0.5)
 
 
+class TestMoCoeffForCube(unittest.TestCase):
+    """cubeファイルを作るときに渡す軌道係数(1つの軌道の列)の取り出し。"""
+
+    def test_closed_shell_two_dimensional_coefficients(self):
+        coeff = np.arange(12.0).reshape(4, 3)            # (基底関数, 軌道)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=coeff), 1)
+        self.assertEqual(column.shape, (4,))
+        self.assertTrue(np.array_equal(column, coeff[:, 1]))
+
+    def test_open_shell_three_dimensional_array_uses_the_alpha_orbitals(self):
+        coeff = np.arange(24.0).reshape(2, 4, 3)         # (スピン, 基底関数, 軌道)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=coeff), 2)
+        self.assertEqual(column.shape, (4,))
+        self.assertTrue(np.array_equal(column, coeff[0][:, 2]))
+
+    def test_open_shell_pair_of_arrays_uses_the_alpha_orbitals(self):
+        alpha, beta = np.arange(12.0).reshape(4, 3), -np.arange(12.0).reshape(4, 3)
+        column = visualizer_pyscf._mo_coeff_for_cube(SimpleNamespace(mo_coeff=(alpha, beta)), 0)
+        self.assertTrue(np.array_equal(column, alpha[:, 0]))
+
+
 class TestAtomicChargesTable(unittest.TestCase):
     def test_table_contains_all_atoms_with_signed_charges(self):
         charges = [("O", -0.45), ("H", 0.225), ("H", 0.225)]
-        html = visualizer.atomic_charges_table_html(charges)
+        html = visualizer_pyscf.atomic_charges_table_html(charges)
         self.assertIn("<table", html)
         self.assertIn("O", html)
         self.assertIn("-0.450", html)
