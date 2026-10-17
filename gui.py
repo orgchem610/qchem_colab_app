@@ -126,6 +126,22 @@ def build_app():
     # -------------------------------------------------------------------
     # 分子軌道・原子電荷(PySCF版にしかない可視化)
     # -------------------------------------------------------------------
+    def _reset_results():
+        """前回の計算結果の表示を、すべて消す(新しい結果と混ざらないように、計算の開始時に呼ぶ)。"""
+        state.clear()
+        energy_viewer.reset()
+        vib_viewer.reset()
+        downloads.reset()
+        mo_dd.options = []
+        mo_dd.disabled = True
+        mo_button.disabled = True
+        mo_note.value = ""
+        density_button.disabled = True
+        charge_labels_checkbox.disabled = True
+        for output in (mo_output, charge_table_output, charge_view_output):
+            with output:
+                clear_output()
+
     def _setup_mo_controls():
         result = state["result"]
         choices = analysis_pyscf.orbital_choices(result.final_mol, result.mf_final)
@@ -191,6 +207,7 @@ def build_app():
     def _run_pipeline():
         with log_output:
             clear_output(wait=True)
+            _reset_results()
             try:
                 charge = int(charge_input.value)
                 multiplicity = int(mult_input.value)

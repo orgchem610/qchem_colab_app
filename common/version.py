@@ -8,4 +8,4 @@ qcapp.__version__・uma_app.__version__ は、この値をそのまま使える�
 (以前は、qcapp と uma_app の __init__.py にそれぞれ書いており、更新漏れが起きたことがある。)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"

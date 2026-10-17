@@ -5,6 +5,8 @@ GUI(gui.py / gui_uma.py)の「入力」まわりの、画面部品(ipywidgets)�
 ipywidgetsがなくても単体テストできるよう、画面部品(common/gui_parts.py)から分けてある。
 
     - extract_uploaded_file    : アップロード(またはドロップ)された構造ファイルの取り出し
+    - read_uploaded_structure  : 取り出した構造ファイルの読み込み(検証はしない。受け取った構造の表示用)
+    - describe_structure       : 読み込んだ構造の概要(ファイル名・原子数・組成)の文字列
     - load_uploaded_structure  : 取り出した構造ファイルの読み込みと、計算前の検証
     - format_charge / parse_charge / ChargeInputError
                                : 電荷の表示(正の値は「+1」の形)と、入力欄の文字列の読み取り
@@ -61,33 +63,46 @@ def extract_uploaded_file(upload_widget, dropped_file=None):
     )
 
 
-def load_uploaded_structure(content, filename, charge, multiplicity, min_distance, log=print):
-    """アップロードされた構造ファイルの中身(bytes)を読み込み、計算できる構造かを検証して返す。
+def read_uploaded_structure(content, filename):
+    """アップロードされた構造ファイルの中身(bytes)を読み込み、Structure を返す。
 
-    PySCF版・UMA版のどちらも、計算の前に同じ入力チェックを行う。
-        1. 構造ファイルを読み込む(拡張子で形式を判定するため、一時ファイルにも同じ拡張子を付ける。
-           拡張子がなければ .xyz とみなす。一時ファイルは読み込み後に削除する)
-        2. 読み込んだ構造の概要(ファイル名・原子数・組成)を log に出す
-        3. 原子どうしが近すぎないか(min_distance[Å]未満の原子対がないか)を検証する
-        4. 電荷とスピン多重度が、電子数と矛盾しないか検証する
-    読み込み・検証に失敗した場合は、io_reader.StructureError(または ValueError)を送出する。
-    それ以降の処理(遷移金属の判定など、エンジンごとに異なる確認)は、呼び出し側で行う。
+    拡張子で形式を判定するため、一時ファイルにも同じ拡張子を付ける(拡張子がなければ .xyz とみなす)。
+    一時ファイルは、読み込み後に削除する。原子間距離や電荷・多重度の検証はしない
+    (受け取った構造をすぐ表示するときに使う。計算前の検証は load_uploaded_structure)。
+    読み込めない場合は、io_reader.StructureError を送出する。
     """
     extension = os.path.splitext(str(filename or ""))[1] or ".xyz"
     fd, tmp_path = tempfile.mkstemp(suffix=extension)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(content)
-        structure = io_reader.read_structure(tmp_path)
+        return io_reader.read_structure(tmp_path)
     finally:
         try:
             os.remove(tmp_path)
         except OSError:
             pass
 
-    log(f"[入力構造] ファイル: {filename}"
-        f"  原子数: {len(structure.symbols)}  組成: "
-        f"{', '.join(sorted(set(structure.symbols)))}")
+
+def describe_structure(structure, filename):
+    """読み込んだ構造の概要(ファイル名・原子数・組成)を、1行の文字列にする。"""
+    return (f"ファイル: {filename}  原子数: {len(structure.symbols)}  組成: "
+            f"{', '.join(sorted(set(structure.symbols)))}")
+
+
+def load_uploaded_structure(content, filename, charge, multiplicity, min_distance, log=print):
+    """アップロードされた構造ファイルの中身(bytes)を読み込み、計算できる構造かを検証して返す。
+
+    PySCF版・UMA版のどちらも、計算の前に同じ入力チェックを行う。
+        1. 構造ファイルを読み込む(read_uploaded_structure)
+        2. 読み込んだ構造の概要(ファイル名・原子数・組成)を log に出す
+        3. 原子どうしが近すぎないか(min_distance[Å]未満の原子対がないか)を検証する
+        4. 電荷とスピン多重度が、電子数と矛盾しないか検証する
+    読み込み・検証に失敗した場合は、io_reader.StructureError(または ValueError)を送出する。
+    それ以降の処理(遷移金属の判定など、エンジンごとに異なる確認)は、呼び出し側で行う。
+    """
+    structure = read_uploaded_structure(content, filename)
+    log(f"[入力構造] {describe_structure(structure, filename)}")
 
     io_reader.validate_structure(structure, min_distance)
     io_reader.validate_charge_and_multiplicity(structure, charge, multiplicity)

@@ -51,6 +51,58 @@ class TestExtractUploadedFile(unittest.TestCase):
             gui_input.extract_uploaded_file(SimpleNamespace(value="unexpected"))
 
 
+class TestReadUploadedStructure(unittest.TestCase):
+    """io_reader.read_structure は差し替えて、一時ファイルの扱いだけを確認する(検証はしないこと)。"""
+
+    def setUp(self):
+        self.seen = {}
+        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+
+        def read_structure(path):
+            self.seen["path"] = path
+            with open(path, "rb") as f:
+                self.seen["content"] = f.read()
+            return self.structure
+
+        patches = [
+            mock.patch.object(io_reader, "read_structure", read_structure, create=True),
+            mock.patch.object(io_reader, "validate_structure", side_effect=AssertionError("検証してはいけない"),
+                              create=True),
+            mock.patch.object(io_reader, "validate_charge_and_multiplicity",
+                              side_effect=AssertionError("検証してはいけない"), create=True),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_content_is_written_to_a_temporary_file_with_the_same_extension_and_removed_afterwards(self):
+        result = gui_input.read_uploaded_structure(b"data", "mol.gjf")
+        self.assertIs(result, self.structure)
+        self.assertTrue(self.seen["path"].endswith(".gjf"))
+        self.assertEqual(self.seen["content"], b"data")
+        self.assertFalse(os.path.exists(self.seen["path"]))
+
+    def test_name_without_an_extension_is_treated_as_xyz(self):
+        gui_input.read_uploaded_structure(b"data", "water")
+        self.assertTrue(self.seen["path"].endswith(".xyz"))
+
+    def test_temporary_file_is_removed_even_when_reading_fails(self):
+        def failing(path):
+            self.seen["path"] = path
+            raise io_reader.StructureError("読めません")
+
+        with mock.patch.object(io_reader, "read_structure", failing, create=True):
+            with self.assertRaises(io_reader.StructureError):
+                gui_input.read_uploaded_structure(b"data", "a.xyz")
+        self.assertFalse(os.path.exists(self.seen["path"]))
+
+
+class TestDescribeStructure(unittest.TestCase):
+    def test_file_name_atom_count_and_composition(self):
+        text = gui_input.describe_structure(SimpleNamespace(symbols=["O", "H", "H"]), "water.xyz")
+        self.assertEqual(text, "ファイル: water.xyz  原子数: 3  組成: H, O")
+
+
 class TestLoadUploadedStructure(unittest.TestCase):
     """io_reader の読み込み・検証関数は差し替えて、受け渡しの順序と後始末だけを確認する。"""
 

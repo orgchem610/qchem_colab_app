@@ -128,9 +128,16 @@ def build_app():
         finally:
             run_button.disabled = False
 
+    def _reset_results():
+        """前回の計算結果の表示を、すべて消す(新しい結果と混ざらないように、計算の開始時に呼ぶ)。"""
+        energy_viewer.reset()
+        vib_viewer.reset()
+        downloads.reset()
+
     def _run_pipeline():
         with log_output:
             clear_output(wait=True)
+            _reset_results()
             try:
                 charge = charge_input.value
                 multiplicity = int(mult_input.value)
