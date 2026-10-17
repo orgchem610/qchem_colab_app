@@ -1,0 +1,5 @@
+PyYAML==6.0.3
+ase==3.29.0
+fairchem-core==2.23.0
+huggingface_hub==1.23.0
+py3Dmol==2.5.5
