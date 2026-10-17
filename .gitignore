@@ -18,5 +18,4 @@ requirements-uma-lock.txt
 .venv/
 .pytest_cache/
 references/
-DOCUMENT.md
 AGENTS.md

@@ -6,9 +6,11 @@ GUI一式を組み立てるモジュール。
 
 設計方針:
     - ウィジェットの「見た目」を組み立てる責務だけをこのファイルに置き、
-      実際の計算処理(PySCFの呼び出し等)は qcapp/ 以下の各モジュールに
-      委譲する(GUIと計算ロジックを分離し、どちらか一方だけを
-      差し替えやすくするため)。
+      計算の流れ(構造最適化 → CPUでのSCF再計算 → 振動数解析 → 出力ファイルの書き出し)は
+      qcapp/pipeline.py に委譲する(GUIと計算ロジックを分離し、どちらか一方だけを
+      差し替えやすく、また、PySCFやColabなしで計算の流れを単体テストできるようにするため)。
+      このファイルは、入力値の収集、アップロードされたファイルの読み込みと検証、結果の表示、
+      例外の利用者向けメッセージへの変換だけを行う。
     - 画面はおおまかに次の4ブロックに分かれる:
         ① 入力(構造ファイルのドラッグ&ドロップ/選択・計算条件)
         ② 実行ボタンとログ出力
@@ -30,18 +32,14 @@ Colab上で動作しない場合があったため)。Colab以外の環境では
     display(app)
 """
 
-import os
-import tempfile
-import time
 import traceback
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from qcapp import load_yaml, __version__
-from common import io_reader, writer_xyz, gui_parts, gui_input, gui_output
-from qcapp import engine, optimize, freq as freq_module
-from qcapp import writer_molden, visualizer_pyscf, analysis_pyscf
+from common import io_reader, gui_parts, gui_input, gui_output
+from qcapp import engine, pipeline, visualizer_pyscf, analysis_pyscf
 
 
 # -----------------------------------------------------------------------------
@@ -129,8 +127,8 @@ def build_app():
     # 分子軌道・原子電荷(PySCF版にしかない可視化)
     # -------------------------------------------------------------------
     def _setup_mo_controls():
-        mf_final = state["mf_final"]
-        choices = analysis_pyscf.orbital_choices(state["final_mol"], mf_final)
+        result = state["result"]
+        choices = analysis_pyscf.orbital_choices(result.final_mol, result.mf_final)
         mo_dd.options = choices.options
         mo_dd.value = choices.default_index
         mo_note.value = ("<small>開殻分子のため、αスピンの軌道を表示します"
@@ -142,11 +140,12 @@ def build_app():
     def _on_mo_button_clicked(_):
         with mo_output:
             clear_output(wait=True)
-            view = visualizer_pyscf.render_orbital(state["final_mol"], state["mf_final"], mo_dd.value)
+            result = state["result"]
+            view = visualizer_pyscf.render_orbital(result.final_mol, result.mf_final, mo_dd.value)
             view.show()
 
     def _render_charge_view():
-        mol_final = state["final_mol"]
+        mol_final = state["result"].final_mol
         charges = state["charges"]
         with charge_view_output:
             clear_output(wait=True)
@@ -155,8 +154,8 @@ def build_app():
             view.show()
 
     def _on_density_button_clicked(_):
-        mol_final = state["final_mol"]
-        mf_final = state["mf_final"]
+        mol_final = state["result"].final_mol
+        mf_final = state["result"].mf_final
         charges = analysis_pyscf.compute_mulliken_charges(mol_final, mf_final)
         state["charges"] = charges
         with charge_table_output:
@@ -192,111 +191,31 @@ def build_app():
     def _run_pipeline():
         with log_output:
             clear_output(wait=True)
-            t_total_start = time.perf_counter()
             try:
                 charge = int(charge_input.value)
                 multiplicity = int(mult_input.value)
-                basis_key = basis_dd.value
-                functional_key = method_dd.value
-                do_freq = bool(freq_checkbox.value)
-                try_gpu = engine.gpu_runtime_detected()  # GPUランタイムなら自動でGPU4PySCFを試す
 
                 content_bytes, uploaded_filename = file_input.read()
                 structure = gui_input.load_uploaded_structure(
                     content_bytes, uploaded_filename, charge, multiplicity,
                     defaults["validation"]["min_interatomic_distance_angstrom"])
 
-                if engine.contains_transition_metal(structure):
-                    raise io_reader.StructureError(
-                        "アップロードされた構造に遷移金属元素が含まれています。\n"
-                        "現在のプロトタイプ(HF/3-21G)は主要な典型元素(H〜Ar程度)"
-                        "のみに対応しており、遷移金属の計算にはまだ対応していません。\n"
-                        "今後のバージョンでECP付き基底関数(LANL2DZ等)を追加予定です。"
-                    )
-
-                mol = engine.build_mole(structure, charge, multiplicity, basis_key)
-
-                print("\n--- 構造最適化を開始します ---")
-                print("  GPUランタイム: " + (
-                    "検出されました(GPU4PySCFでの計算を試みます)" if try_gpu
-                    else "検出されませんでした(CPUで計算します)"))
-                opt_result = optimize.run_geometry_optimization(
-                    mol, functional_key, defaults, try_gpu=try_gpu)
-                print(f"  {opt_result.gpu_message}")
-                print(f"  構造最適化 所要時間: {opt_result.elapsed_seconds:.1f} 秒"
-                      f"  (記録されたエネルギー点数: {len(opt_result.energies)})")
-                if len(opt_result.energies) <= 1:
-                    print(
-                        "  [注意] 記録されたエネルギー点数が非常に少ないため、"
-                        "エネルギー収束グラフが単調にならない可能性があります。"
-                        "qcapp/optimize.py の _make_callback() のキー名調整が"
-                        "必要かもしれません(README.mdのトラブルシューティング参照)。"
-                    )
-
-                final_mol = opt_result.mol_final
-                final_mol.cart = True  # 念のため明示(GaussView/MacMolPlt互換のデカルト型d/f軌道)
-                natm = final_mol.natm
-                print(
-                    f"\n--- 最終構造でCPU上のSCFを再計算しています(原子数: {natm})---\n"
-                    "  (分子軌道・電荷・moldenファイル出力等はCPU版PySCFで統一的に扱うため、\n"
-                    "   構造最適化にGPUを使った場合でもこの再計算はCPU上で行っています。\n"
-                    "   構造最適化時の密度行列を初期値として使うことで、通常より速く\n"
-                    "   収束するはずですが、原子数が多いほど時間がかかります)"
-                )
-                t_cpu_scf_start = time.perf_counter()
-                mf_final, _, _ = engine.build_scf(final_mol, functional_key, try_gpu=False)
-                mf_final = engine.run_scf(mf_final, defaults, dm0=opt_result.dm0_guess)
-                print(f"  CPU再計算 所要時間: {time.perf_counter() - t_cpu_scf_start:.1f} 秒")
-
-                freq_result = None
-                if do_freq:
-                    if natm >= defaults["frequency"]["warn_natoms"]:
-                        print(
-                            f"\n  [注意] 原子数が{natm}と多いため、振動数計算(Hessian計算)は\n"
-                            "  CPU上でかなりの時間(数十分〜数時間程度)がかかる可能性があります。\n"
-                            "  Colabの接続が長時間の無出力状態で切断されることがあるため、\n"
-                            "  途中経過が出ない間もこのタブを開いたままにしておいてください。"
-                        )
-                    print("\n--- 振動数計算を開始します ---")
-                    t_freq_start = time.perf_counter()
-                    freq_result = freq_module.run_frequency_analysis(mf_final, defaults)
-                    print(f"  振動数計算 所要時間: {freq_result.elapsed_seconds:.1f} 秒"
-                          f"(実測の壁時計時間: {time.perf_counter() - t_freq_start:.1f} 秒)")
-                    if freq_result.warning_message:
-                        print(f"  [注意] {freq_result.warning_message}")
-
-                total_elapsed = time.perf_counter() - t_total_start
-                label = "構造最適化 + 振動数計算" if do_freq else "構造最適化のみ"
-                print(f"\n=== 合計所要時間({label}): {total_elapsed:.1f} 秒 ===")
-
-                out_dir = tempfile.mkdtemp(prefix="qchem_output_")
-                final_symbols = [final_mol.atom_symbol(i) for i in range(final_mol.natm)]
-                final_coords = [list(c) for c in final_mol.atom_coords(unit="Angstrom")]
-
-                xyz_comment = f"Optimized by qchem_colab_app (v{__version__}, {functional_key}/{basis_key})"
-                final_xyz_path, traj_xyz_path = writer_xyz.write_optimization_outputs(
-                    out_dir, final_symbols, final_coords, xyz_comment, opt_result)
-
-                molden_path = os.path.join(out_dir, "final_structure.molden")
-                writer_molden.write_molden(mf_final, molden_path)
-
-                state.update(dict(
-                    structure=structure, opt_result=opt_result,
-                    final_mol=final_mol, mf_final=mf_final, freq_result=freq_result,
-                    final_symbols=final_symbols, final_coords=final_coords,
-                    out_dir=out_dir, final_xyz_path=final_xyz_path,
-                    traj_xyz_path=traj_xyz_path, molden_path=molden_path,
-                ))
+                settings = pipeline.CalculationSettings(
+                    charge=charge, multiplicity=multiplicity,
+                    functional_key=method_dd.value, basis_key=basis_dd.value,
+                    do_frequency=bool(freq_checkbox.value))
+                result = pipeline.run_calculation(structure, settings, defaults)
+                state["result"] = result
 
                 print("\n計算が完了しました。下の「③ 可視化」「④ ダウンロード」をご確認ください。")
 
-                energy_viewer.show(opt_result)
-                vib_viewer.setup(freq_result, final_symbols, final_coords)
+                energy_viewer.show(result.opt_result)
+                vib_viewer.setup(result.freq_result, result.final_symbols, result.final_coords)
                 _setup_mo_controls()
                 downloads.show([
-                    *gui_output.xyz_download_items(final_xyz_path, traj_xyz_path),
+                    *gui_output.xyz_download_items(result.final_xyz_path, result.traj_xyz_path),
                     ("分子軌道・構造(molden)",
-                     molden_path, ".molden", "molden"),
+                     result.molden_path, ".molden", "molden"),
                 ], default_stem=gui_output.default_download_stem(uploaded_filename))
 
             except (io_reader.StructureError, ValueError) as e:
