@@ -1,5 +1,5 @@
 """
-qcapp.optimize
+pyscf_backend.optimize
 --------------
 PySCF の geomeTRIC 連携(pyscf.geomopt.geometric_solver)を用いた構造最適化。
 
@@ -75,7 +75,7 @@ def _make_callback(result: "OptimizationResult"):
 def run_geometry_optimization(mol, functional_key: str, defaults: dict, try_gpu: bool = True) -> "OptimizationResult":
     """構造最適化を実行し、エネルギー・座標の履歴と所要時間を記録して返す。"""
     from pyscf.geomopt.geometric_solver import optimize
-    from qcapp import engine
+    from pyscf_backend import engine
 
     result = OptimizationResult()
     result.symbols = [mol.atom_symbol(i) for i in range(mol.natm)]

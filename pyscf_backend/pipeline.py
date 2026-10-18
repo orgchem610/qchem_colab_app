@@ -1,5 +1,5 @@
 """
-qcapp.pipeline
+pyscf_backend.pipeline
 --------------
 PySCF版の「計算の流れ」をまとめたモジュール。
 
@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 
 from common import io_reader, writer_xyz
-from qcapp import __version__, engine, freq as freq_module, optimize, writer_molden
+from pyscf_backend import __version__, engine, freq as freq_module, optimize, writer_molden
 
 
 @dataclass
@@ -40,10 +40,10 @@ class CalculationSettings:
 class CalculationResult:
     """計算の結果と、書き出したファイルの場所。画面表示・ダウンロードに使う。"""
     structure: object            # common.io_reader.Structure(読み込んだ構造)
-    opt_result: object           # qcapp.optimize.OptimizationResult
+    opt_result: object           # pyscf_backend.optimize.OptimizationResult
     final_mol: object            # 最適化後の構造の pyscf Mole
     mf_final: object             # 最終構造でCPU上で収束させたSCFオブジェクト
-    freq_result: object          # qcapp.freq.FrequencyResult(振動数計算をしなかった場合は None)
+    freq_result: object          # pyscf_backend.freq.FrequencyResult(振動数計算をしなかった場合は None)
     final_symbols: list
     final_coords: list           # 単位 Å
     out_dir: str                 # 出力ファイルを書き出したフォルダ
@@ -95,7 +95,7 @@ def run_calculation(structure, settings, defaults, log=print):
     if len(opt_result.energies) <= 1:
         log("  [注意] 記録されたエネルギー点数が非常に少ないため、"
             "エネルギー収束グラフが単調にならない可能性があります。"
-            "qcapp/optimize.py の _make_callback() のキー名調整が"
+            "pyscf_backend/optimize.py の _make_callback() のキー名調整が"
             "必要かもしれません。")
 
     final_mol = opt_result.mol_final

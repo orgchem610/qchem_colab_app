@@ -1,7 +1,7 @@
 """
 tests/test_analysis_pyscf.py
 ----------------------------
-qcapp.analysis_pyscf(軌道・電荷の情報の取り出し)の単体テスト。
+pyscf_backend.analysis_pyscf(軌道・電荷の情報の取り出し)の単体テスト。
 PySCFは使わず、必要な属性だけを持つ代用のオブジェクトで確認する。
 """
 
@@ -14,7 +14,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import analysis_pyscf  # noqa: E402
+from pyscf_backend import analysis_pyscf  # noqa: E402
 
 
 def _mol(symbols):

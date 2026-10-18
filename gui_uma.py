@@ -5,10 +5,10 @@ UMA(機械学習ポテンシャル)版のGUI組み立て(ColabApp_UMA.ipynb の�
 
 PySCF版の gui.py とは別ファイルになっており、お互いに影響しない。
 計算の流れ(アクセス権の確認 → モデルの読み込み → 構造最適化 → 振動数解析 → 出力ファイルの書き出し)は
-uma_app/uma_pipeline.py に委譲し、このファイルは、入力値の収集、アップロードされたファイルの
+uma_backend/uma_pipeline.py に委譲し、このファイルは、入力値の収集、アップロードされたファイルの
 読み込みと検証、結果の表示、例外の利用者向けメッセージへの変換だけを行う。
-(README.md「gui.pyをルート直下に置いている理由」のとおり、`gui.py` は `qcapp` と `common`
-から、`gui_uma.py` は `uma_app` と `common` から、それぞれ必要な部品を組み合わせて
+(README.md「gui.pyをルート直下に置いている理由」のとおり、`gui.py` は `pyscf_backend` と `common`
+から、`gui_uma.py` は `uma_backend` と `common` から、それぞれ必要な部品を組み合わせて
 画面を組み立てる「アプリの組み立て役」。)
 
 【PySCF版との違い】
@@ -47,8 +47,8 @@ import traceback
 import ipywidgets as widgets
 from IPython.display import clear_output
 
-from uma_app import load_yaml, __version__
-from uma_app import uma_hf, uma_pipeline
+from uma_backend import load_yaml, __version__
+from uma_backend import uma_hf, uma_pipeline
 from common import io_reader, gui_parts, gui_input, gui_output
 
 

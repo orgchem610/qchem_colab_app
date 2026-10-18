@@ -1,7 +1,7 @@
 """
 tests/test_uma_hf.py
 --------------------
-uma_app.uma_hf(Hugging Faceのトークン管理・アクセス権の確認)のうち、
+uma_backend.uma_hf(Hugging Faceのトークン管理・アクセス権の確認)のうち、
 huggingface_hub・ネットワークを使わない部分(エラーメッセージの整形・トークンの確認)の単体テスト。
 Hugging Faceからの実際の取得は、Colab上での実機確認が必要。
 """
@@ -13,7 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_hf  # noqa: E402
+from uma_backend import uma_hf  # noqa: E402
 
 
 class GatedRepoError(Exception):

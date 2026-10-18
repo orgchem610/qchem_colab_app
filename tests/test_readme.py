@@ -15,8 +15,8 @@ import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-import qcapp  # noqa: E402
-import uma_app  # noqa: E402
+import pyscf_backend  # noqa: E402
+import uma_backend  # noqa: E402
 
 # READMEに書かれているが、リポジトリにファイルとしては存在しなくてよいもの
 NOT_IN_REPO = {
@@ -24,7 +24,7 @@ NOT_IN_REPO = {
     "ColabReaction.ipynb",       # 参考にした外部のノートブック
     "requirements-lock.txt",     # Colab上で自動生成される(Git管理対象外)
     "requirements-uma-lock.txt",  # 同上
-    "qcapp/dispatch.py",         # 設計方針メモに登場する、将来の例
+    "pyscf_backend/dispatch.py",         # 設計方針メモに登場する、将来の例
 }
 
 
@@ -47,8 +47,8 @@ class TestReadme(unittest.TestCase):
 
     def test_current_version_matches_the_code(self):
         header = "\n".join(self.text.splitlines()[:30])
-        self.assertIn(f"v{qcapp.__version__}", header)
-        self.assertEqual(qcapp.__version__, uma_app.__version__)
+        self.assertIn(f"v{pyscf_backend.__version__}", header)
+        self.assertEqual(pyscf_backend.__version__, uma_backend.__version__)
 
     def test_code_fences_are_balanced(self):
         self.assertEqual(self.text.count("```") % 2, 0)

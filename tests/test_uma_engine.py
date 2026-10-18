@@ -1,7 +1,7 @@
 """
 tests/test_uma_engine.py
 ------------------------
-uma_app.uma_engine(デバイス・モデルの読み込み・Calculator)のうち、fairchem・torch・ネットワークを
+uma_backend.uma_engine(デバイス・モデルの読み込み・Calculator)のうち、fairchem・torch・ネットワークを
 使わない部分の単体テスト。fairchemは、代用のモジュールに差し替えて、
 uma_hf(認証・例外)との受け渡しを確認する。
 モデルの実際の読み込みと推論は、Colab上での実機確認が必要。
@@ -15,7 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_engine, uma_hf  # noqa: E402
+from uma_backend import uma_engine, uma_hf  # noqa: E402
 
 
 class TestDevice(unittest.TestCase):

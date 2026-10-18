@@ -1,8 +1,8 @@
-# uma_app — UMA(機械学習ポテンシャル)版
+# uma_backend — UMA(機械学習ポテンシャル)版
 
 機械学習ポテンシャル **UMA**(Meta FAIR Chemistry)で、構造最適化と振動数解析を行います。
 入口は、リポジトリ直下の `ColabApp_UMA.ipynb`(画面は `gui_uma.py`)です。
-PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お互いに影響しません。
+PySCF版(`ColabApp.ipynb` / `gui.py` / `pyscf_backend/`)とは独立しており、お互いに影響しません。
 
 **計算結果は、機械学習による高速な予測値であり、DFT等の量子化学計算そのものの値ではありません。**
 
@@ -12,7 +12,7 @@ PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お�
 |---|---|
 | `uma_hf.py` | Hugging Faceのトークン・アクセス確認(`login_from_environment`・`check_model_access`)、UMAを使うための準備の問題を表す例外(`UmaSetupError`) |
 | `uma_engine.py` | モデル(predictor)の読み込み、計算デバイスの判定、ASEのAtoms/Calculator作成 |
-| `uma_optimize.py` | ASE(LBFGS等)+UMAによる構造最適化。結果の項目名は `qcapp/optimize.py` とそろえてある |
+| `uma_optimize.py` | ASE(LBFGS等)+UMAによる構造最適化。結果の項目名は `pyscf_backend/optimize.py` とそろえてある |
 | `uma_freq.py` | 数値微分によるHessianと、並進・回転を除いた調和振動数解析(純粋なnumpy) |
 | `uma_notice.py` | UMAのライセンス・引用の一次情報へのリンク(計算ログの末尾に記載。ノートブック冒頭の文面と同じ内容に保つ) |
 | `uma_report.py` | ダウンロード用ログの本文の組み立て |
@@ -22,7 +22,7 @@ PySCF版(`ColabApp.ipynb` / `gui.py` / `qcapp/`)とは独立しており、お�
 
 `common/`(構造の読み込み・検証、xyz出力、構造・振動の表示、ドラッグ&ドロップ、クリックできるグラフ、
 GUIの共通の画面部品 `gui_parts.py`、電荷の入力欄(正の値を「+1」の形で表示)・電荷の表示と読み取りの関数 `gui_input.py`)は
-PySCF版と共有しています。`uma_app` は `qcapp` を一切importしません。
+PySCF版と共有しています。`uma_backend` は `pyscf_backend` を一切importしません。
 
 ## 使い方
 

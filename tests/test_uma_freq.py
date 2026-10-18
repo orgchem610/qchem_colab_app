@@ -1,7 +1,7 @@
 """
 tests/test_uma_freq.py
 ----------------------
-uma_app.uma_freq の数値計算部分(中心差分によるHessian・並進回転を除いた調和解析)の
+uma_backend.uma_freq の数値計算部分(中心差分によるHessian・並進回転を除いた調和解析)の
 単体テスト。ASEにもUMAにも依存せず、numpyだけで動く。
 
 「原子間をバネでつないだモデル」の解析解や、物理的に成り立つべき性質
@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_freq  # noqa: E402
+from uma_backend import uma_freq  # noqa: E402
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
 

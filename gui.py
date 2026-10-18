@@ -7,7 +7,7 @@ GUI一式を組み立てるモジュール。
 設計方針:
     - ウィジェットの「見た目」を組み立てる責務だけをこのファイルに置き、
       計算の流れ(構造最適化 → CPUでのSCF再計算 → 振動数解析 → 出力ファイルの書き出し)は
-      qcapp/pipeline.py に委譲する(GUIと計算ロジックを分離し、どちらか一方だけを
+      pyscf_backend/pipeline.py に委譲する(GUIと計算ロジックを分離し、どちらか一方だけを
       差し替えやすく、また、PySCFやColabなしで計算の流れを単体テストできるようにするため)。
       このファイルは、入力値の収集、アップロードされたファイルの読み込みと検証、結果の表示、
       例外の利用者向けメッセージへの変換だけを行う。
@@ -37,9 +37,9 @@ import traceback
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from qcapp import load_yaml, __version__
+from pyscf_backend import load_yaml, __version__
 from common import io_reader, gui_parts, gui_input, gui_output
-from qcapp import engine, pipeline, visualizer_pyscf, analysis_pyscf
+from pyscf_backend import engine, pipeline, visualizer_pyscf, analysis_pyscf
 
 
 # -----------------------------------------------------------------------------

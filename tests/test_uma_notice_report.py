@@ -1,7 +1,7 @@
 """
 tests/test_uma_notice_report.py
 -------------------------------
-uma_app.uma_notice(UMAに関する注意書き)と uma_app.uma_report(ログ本文の組み立て)の単体テスト。
+uma_backend.uma_notice(UMAに関する注意書き)と uma_backend.uma_report(ログ本文の組み立て)の単体テスト。
 どちらも文字列を作るだけで、UMA・ASE・ネットワークには依存しない。
 """
 
@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_notice, uma_report  # noqa: E402
+from uma_backend import uma_notice, uma_report  # noqa: E402
 
 
 class TestNotice(unittest.TestCase):

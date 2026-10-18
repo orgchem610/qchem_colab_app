@@ -1,7 +1,7 @@
 """
 tests/test_uma_optimize.py
 --------------------------
-uma_app.uma_optimize の単体テスト。
+uma_backend.uma_optimize の単体テスト。
 
 UMAそのものは使わず、ASE付属の簡易ポテンシャル(EMT)で「履歴の記録・単位換算・
 収束判定・入力チェック」のロジックだけを確認する。ASEが入っていない環境では、
@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_optimize  # noqa: E402
+from uma_backend import uma_optimize  # noqa: E402
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
 

@@ -1,11 +1,11 @@
 """
-qcapp.visualizer_pyscf
+pyscf_backend.visualizer_pyscf
 ------------------------------
 PySCFのMole/SCFオブジェクトに直接依存する可視化(描画・表示)の関数群。
 
 分子軌道(cubeファイル)・Mulliken電荷の色分けなど、PySCF固有のデータ構造を
 扱うためここに置いている。HOMO/LUMOの軌道番号やMulliken電荷の値を求める
-「解析」の関数は、描画とは役割が違うため qcapp/analysis_pyscf.py に分けてある。UMA版では別の方法で同等の情報を得る必要があり、
+「解析」の関数は、描画とは役割が違うため pyscf_backend/analysis_pyscf.py に分けてある。UMA版では別の方法で同等の情報を得る必要があり、
 これらの関数をそのまま再利用することはできない
 (common.plot_common側の関数とは対照的)。
 

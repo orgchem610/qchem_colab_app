@@ -1,5 +1,5 @@
 """
-uma_app.uma_engine
+uma_backend.uma_engine
 ------------------
 UMA(fairchem-core)で計算するための土台となるモジュール。
 
@@ -8,14 +8,14 @@ UMA(fairchem-core)で計算するための土台となるモジュール。
     - ASEのAtomsとCalculatorの構築
 
 Hugging Faceのトークン管理・UMAへのアクセス権の確認・UmaSetupError は、役割が違うため
-uma_app/uma_hf.py にある(v0.2.1で、このファイルから分けた)。
+uma_backend/uma_hf.py にある(v0.2.1で、このファイルから分けた)。
 
 fairchem・torch・aseは、このファイルを読み込んだだけではimportしない
 (各関数の中でimportする)。これにより、これらがインストールされていない環境でも
 このモジュール自体は読み込め、単体テストできる。
 """
 
-from uma_app import uma_hf
+from uma_backend import uma_hf
 
 
 # -----------------------------------------------------------------------------

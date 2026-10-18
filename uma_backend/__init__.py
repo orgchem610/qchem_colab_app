@@ -1,12 +1,12 @@
 """
-uma_app: 機械学習ポテンシャルUMAを計算エンジンとする構造最適化・振動数解析のコアパッケージ
+uma_backend: 機械学習ポテンシャルUMAを計算エンジンとする構造最適化・振動数解析のコアパッケージ
 
 このパッケージは、ColabApp_UMA.ipynb(+ ルート直下の gui_uma.py)から呼び出される、
 UMA(ASE + fairchem-core)に固有の処理をまとめたものです。
 
-【依存関係の方針】(README.md「将来的な構成: UMA利用版」「common/qcappに分けた理由」参照)
+【依存関係の方針】(README.md「将来的な構成: UMA利用版」「common/pyscf_backendに分けた理由」参照)
     - 計算エンジンに依存しない共通部品は、リポジトリ直下の common/ から使う。
-    - PySCF専用の qcapp/ には一切依存しない(PySCFがインストールされていない
+    - PySCF専用の pyscf_backend/ には一切依存しない(PySCFがインストールされていない
       UMA用の環境でも動くようにするため)。設定ファイルの読み込み関数とバージョン番号は、
       common/ にある共通のもの(common/config.py・common/version.py)を、このパッケージの
       名前でも使えるようにしている。

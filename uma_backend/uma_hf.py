@@ -1,5 +1,5 @@
 """
-uma_app.uma_hf
+uma_backend.uma_hf
 --------------
 UMAの学習済みモデルを取得するための、Hugging Faceのトークン管理と、アクセス権の確認。
 
@@ -10,7 +10,7 @@ UMAの学習済みモデルを取得するための、Hugging Faceのトーク�
     - UMAを使うための準備の問題を表す例外(UmaSetupError)
 
 モデルの読み込み・計算デバイス・ASEのAtoms/Calculatorの構築は、役割が違うため
-uma_app/uma_engine.py にある(v0.2.1で、以前の uma_engine.py から認証の部分を分けた)。
+uma_backend/uma_engine.py にある(v0.2.1で、以前の uma_engine.py から認証の部分を分けた)。
 UmaSetupError は、このモジュールで定義しており、uma_engine.py からは再エクスポートしていない
 (importする側は uma_hf.UmaSetupError と書く)。
 

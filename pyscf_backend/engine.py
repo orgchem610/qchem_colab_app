@@ -1,5 +1,5 @@
 """
-qcapp.engine
+pyscf_backend.engine
 ------------
 PySCF の Mole オブジェクト・SCF オブジェクトの構築、
 および SCF 実行(収束チェック・自動リトライ)を担当するモジュール。
@@ -20,7 +20,7 @@ GPU4PySCF がインストールされ、かつ実際に初期化に成功した�
 import subprocess
 import warnings
 
-from qcapp import load_yaml
+from pyscf_backend import load_yaml
 from common.io_reader import Structure
 
 

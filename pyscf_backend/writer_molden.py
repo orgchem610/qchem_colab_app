@@ -1,5 +1,5 @@
 """
-qcapp.writer_molden
+pyscf_backend.writer_molden
 --------------------
 最終構造・分子軌道をMolden形式(.molden)で書き出すモジュール。
 

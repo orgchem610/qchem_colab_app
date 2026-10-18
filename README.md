@@ -109,7 +109,7 @@ Colab上での具体的な操作手順は、各ノートブック内のMarkdown�
 機械学習ポテンシャル**UMA**(Meta FAIR Chemistry)を計算エンジンとして、構造最適化と振動数解析を
 高速に行うノートブックです。**結果は機械学習による予測値であり、量子化学計算そのものの値では
 ありません。** 構成・設計上の判断・トラブルシューティングの詳細は、
-[`uma_app/README.md`](uma_app/README.md)にあります。
+[`uma_backend/README.md`](uma_backend/README.md)にあります。
 
 ### できること
 
@@ -184,7 +184,7 @@ UMAの利用にあたっては、次の一次情報をご確認ください(ノ�
   UMA版では、ノートブックの「II-0」のセルを実行すると解決します(PySCF版のノートブックには、現時点では同じセルを
   追加していません)。
 - **UMA版のトラブルシューティング**(Hugging Faceのアクセス、`torch`の更新、GPUが使えない、など)は、
-  [`uma_app/README.md`](uma_app/README.md)にまとめています。
+  [`uma_backend/README.md`](uma_backend/README.md)にまとめています。
 
 ## 使用ライブラリ・引用について
 

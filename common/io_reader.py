@@ -4,7 +4,7 @@ common.io_reader
 構造ファイルの読み込みと、計算実行前の入力チェックをまとめたモジュール。
 計算エンジン(PySCF/UMA)に依存しない、共通の入力チェックだけを置く。
 (特定のエンジンが扱えない元素の判定は、そのエンジンのパッケージにある。
- 例: PySCF版の遷移金属の判定は qcapp/engine.py の contains_transition_metal。)
+ 例: PySCF版の遷移金属の判定は pyscf_backend/engine.py の contains_transition_metal。)
 
 【対応形式】
     .xyz は外部ライブラリに依存しない自前の最小パーサーで読み込む。

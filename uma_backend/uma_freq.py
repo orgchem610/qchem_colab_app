@@ -1,5 +1,5 @@
 """
-uma_app.uma_freq
+uma_backend.uma_freq
 ----------------
 UMAを使った振動数解析(調和近似)。
 
@@ -8,7 +8,7 @@ UMAを使った振動数解析(調和近似)。
        Hessian(エネルギーの2次微分行列)を作る。
     2. 質量で重みづけし、並進3+回転3(直線分子は回転2)の方向を除いた空間で
        対角化する。これにより振動モードだけ(3N-6個。直線分子は3N-5個)が得られ、
-       PySCF版(qcapp/freq.py)と同じ個数・同じ形式で結果を返せる。
+       PySCF版(pyscf_backend/freq.py)と同じ個数・同じ形式で結果を返せる。
        (ASEのVibrationsをそのまま使うと、並進・回転に由来するゼロ付近の
         モードが混ざり、虚振動の数え方が紛らわしくなるため)
     3. 数値計算の部分(compute_hessian_fd, harmonic_analysis)は、ASEにもUMAにも
@@ -20,7 +20,7 @@ UMAを使った振動数解析(調和近似)。
 【単位】 座標[Å]、力[eV/Å]、Hessian[eV/Å^2]、質量[amu]、振動数[cm^-1]
 虚振動は、PySCF版と同じく負の値で表す。
 
-【結果の形式】(qcapp/freq.py の FrequencyResult と項目名をそろえている)
+【結果の形式】(pyscf_backend/freq.py の FrequencyResult と項目名をそろえている)
     frequencies_cm1 : 振動数のリスト(昇順。虚振動は負)
     normal_modes    : 各モードの原子変位ベクトル。shape (モード数, 原子数, 3)
     n_imaginary, thermo_summary, elapsed_seconds, warning_message

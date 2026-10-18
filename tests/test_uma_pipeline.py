@@ -1,7 +1,7 @@
 """
 tests/test_uma_pipeline.py
 --------------------------
-uma_app.uma_pipeline(UMA版の計算の流れ)の単体テスト。
+uma_backend.uma_pipeline(UMA版の計算の流れ)の単体テスト。
 UMA・fairchem・ASE・ネットワークは使わず、uma_hf・uma_engine・uma_optimize・uma_freq を
 代用の関数に差し替えて、各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
 UMAによる実際の計算は、Colab上での実機確認が必要。
@@ -18,7 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import __version__, uma_hf, uma_pipeline  # noqa: E402
+from uma_backend import __version__, uma_hf, uma_pipeline  # noqa: E402
 
 
 def _defaults(warn_natoms=60):

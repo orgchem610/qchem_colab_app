@@ -1,5 +1,5 @@
 """
-uma_app.uma_report
+uma_backend.uma_report
 ------------------
 計算結果をまとめたログファイル(テキスト)の本文を組み立てるモジュール。
 ファイルへの書き出しやダウンロードはGUI側(gui_uma.py)が行い、ここでは文字列を
@@ -10,7 +10,7 @@ Hugging Faceのトークンなどの秘密情報は一切含めない。
 """
 
 from common.energy_plot import HARTREE_TO_KCAL_MOL
-from uma_app import uma_notice
+from uma_backend import uma_notice
 
 
 def build_log_text(*, version, model_key, task_name, device_label, input_filename,

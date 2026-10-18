@@ -1,5 +1,5 @@
 """
-qcapp: PySCFを計算エンジンとするab initio量子化学計算のコアパッケージ
+pyscf_backend: PySCFを計算エンジンとするab initio量子化学計算のコアパッケージ
 
 このパッケージは、ColabApp.ipynb から呼び出される、PySCFに固有の実処理を
 まとめたものです。ノートブック自体にはロジックを書かず、ここに切り出すことで

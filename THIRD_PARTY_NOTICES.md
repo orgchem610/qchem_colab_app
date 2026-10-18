@@ -15,7 +15,7 @@ UMA版が利用する外部のソフトウェア・データと、そのライ�
   Wood, B. M. et al. *UMA: A Family of Universal Models for Atoms.* arXiv:2506.23971 (2025).
   https://arxiv.org/abs/2506.23971
 - このリポジトリは、UMAの学習済みモデルを同梱も再配布もしません。各利用者が、ご自身のHugging Faceの
-  アカウントでアクセスを申請し、Colab上で直接ダウンロードします(`uma_app/uma_engine.py`)。
+  アカウントでアクセスを申請し、Colab上で直接ダウンロードします(`uma_backend/uma_engine.py`)。
 
 ## そのほかのライブラリ
 

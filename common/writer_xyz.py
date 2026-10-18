@@ -4,8 +4,8 @@ common.writer_xyz
 単一フレーム(最終構造用)および多フレーム(最適化トラジェクトリ用)の
 .xyzファイル・文字列を書き出すモジュール。外部ライブラリに依存しない。
 
-計算エンジン(qcapp=PySCF, 将来のuma_app等)に依存しない共通コードのため、
-qcapp側のバージョン番号やモジュール固有の文言をここに埋め込まないこと
+計算エンジン(pyscf_backend=PySCF, 将来のuma_backend等)に依存しない共通コードのため、
+pyscf_backend側のバージョン番号やモジュール固有の文言をここに埋め込まないこと
 (comment引数はNoneならごく簡単な既定文言を使い、エンジン側の詳しい情報
 [バージョン・手法名など]を含めたい場合は呼び出し側で組み立てて渡す)。
 
@@ -35,7 +35,7 @@ def write_final_structure(symbols, coords, filepath, comment="Optimized structur
 
     このファイルはColabReactionのreactant/productとしてそのまま
     アップロードできることを想定している。comment(バージョン・手法名等)は
-    呼び出し側(qcapp側やuma_app側)で組み立てて渡すこと。
+    呼び出し側(pyscf_backend側やuma_backend側)で組み立てて渡すこと。
     """
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(_format_xyz_block(symbols, coords, comment) + "\n")
@@ -59,7 +59,7 @@ def write_optimization_outputs(out_dir, final_symbols, final_coords, final_comme
 
     PySCF版・UMA版の両方が、同じファイル名・同じ形式で出力するための関数。
     opt_result は、symbols・coords_history・energies を持つ最適化結果
-    (qcapp.optimize・uma_app.uma_optimize の OptimizationResult)。
+    (pyscf_backend.optimize・uma_backend.uma_optimize の OptimizationResult)。
     戻り値は (最終構造のパス, トラジェクトリのパス)。
     """
     final_path = os.path.join(out_dir, FINAL_STRUCTURE_FILENAME)

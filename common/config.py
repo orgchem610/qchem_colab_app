@@ -3,9 +3,9 @@ common.config
 -------------
 config/ ディレクトリ配下のYAMLファイルを読み込む共通関数。
 
-PySCF版(qcapp)・UMA版(uma_app)のどちらも、同じ config/ ディレクトリの設定ファイルを
+PySCF版(pyscf_backend)・UMA版(uma_backend)のどちらも、同じ config/ ディレクトリの設定ファイルを
 読むため、読み込みの処理をここに1つだけ置いている(以前は、2つのパッケージの
-__init__.py に同じ内容が重複していた)。qcapp.load_yaml・uma_app.load_yaml は、
+__init__.py に同じ内容が重複していた)。pyscf_backend.load_yaml・uma_backend.load_yaml は、
 この関数をそのまま使えるようにした別名で、呼び出し側は変わらない。
 """
 

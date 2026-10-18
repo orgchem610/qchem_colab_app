@@ -1,7 +1,7 @@
 """
 tests/test_engine.py
 --------------------
-qcapp.engine のうち、PySCF・GPUなしでテストできる部分(遷移金属の判定・GPUランタイムの判定)の単体テスト。
+pyscf_backend.engine のうち、PySCF・GPUなしでテストできる部分(遷移金属の判定・GPUランタイムの判定)の単体テスト。
 Mole・SCFの構築と実行は、PySCFが必要なため、Colab上での実機確認が必要(README.md参照)。
 """
 
@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import engine  # noqa: E402
+from pyscf_backend import engine  # noqa: E402
 
 
 def _structure(symbols):

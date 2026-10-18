@@ -1,5 +1,5 @@
 """
-uma_app.uma_pipeline
+uma_backend.uma_pipeline
 --------------------
 UMA版の「計算の流れ」をまとめたモジュール。
 
@@ -14,7 +14,7 @@ log という関数(既定は print)を通して受け渡すため、GUI(gui_uma
 GUI側の責務(gui_uma.py): 入力値の収集、アップロードされたファイルの読み込みと検証
 (common/gui_input.load_uploaded_structure)、この関数の呼び出し、結果の表示、
 例外の利用者向けメッセージへの変換。例外は、ここでは捕まえずにそのまま送出する。
-PySCF版の qcapp/pipeline.py とは独立しており(uma_app は qcapp に依存しない)、
+PySCF版の pyscf_backend/pipeline.py とは独立しており(uma_backend は pyscf_backend に依存しない)、
 似た流れでも、エンジンごとに別々に変えていける。
 """
 
@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 
 from common import writer_xyz
-from uma_app import __version__, uma_engine, uma_freq, uma_hf, uma_optimize, uma_report
+from uma_backend import __version__, uma_engine, uma_freq, uma_hf, uma_optimize, uma_report
 
 
 @dataclass
@@ -41,8 +41,8 @@ class CalculationSettings:
 class CalculationResult:
     """計算の結果と、書き出したファイルの場所。画面表示・ダウンロードに使う。"""
     structure: object            # common.io_reader.Structure(読み込んだ構造)
-    opt_result: object           # uma_app.uma_optimize.OptimizationResult
-    freq_result: object          # uma_app.uma_freq.FrequencyResult(振動数計算をしなかった場合は None)
+    opt_result: object           # uma_backend.uma_optimize.OptimizationResult
+    freq_result: object          # uma_backend.uma_freq.FrequencyResult(振動数計算をしなかった場合は None)
     final_symbols: list
     final_coords: list           # 単位 Å
     device_label: str            # 計算に使ったデバイスの説明(例: GPU(Tesla T4))

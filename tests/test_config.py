@@ -14,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import load_yaml  # noqa: E402
+from pyscf_backend import load_yaml  # noqa: E402
 
 
 class TestPurposesYaml(unittest.TestCase):

@@ -1,11 +1,11 @@
 """
-qcapp.analysis_pyscf
+pyscf_backend.analysis_pyscf
 --------------------
 収束済みのPySCFのSCFオブジェクト(mf)から、軌道・電荷の「情報」を取り出す関数群。
 
 ここに置く関数は、描画(py3Dmol)にもウィジェット(ipywidgets)にも依存しない。
-結果を3Dや表で表示する関数は、役割が違うため qcapp/visualizer_pyscf.py にある。
-(PySCFのMole/SCFそのものに依存するため、common/ ではなく qcapp/ に置いている。)
+結果を3Dや表で表示する関数は、役割が違うため pyscf_backend/visualizer_pyscf.py にある。
+(PySCFのMole/SCFそのものに依存するため、common/ ではなく pyscf_backend/ に置いている。)
 """
 
 from collections import namedtuple

@@ -1,9 +1,9 @@
 """
-uma_app.uma_optimize
+uma_backend.uma_optimize
 --------------------
 ASEの最適化アルゴリズム(LBFGS等)とUMAを使った構造最適化。
 
-qcapp/optimize.py(PySCF + geomeTRIC)と、結果を入れる入れ物
+pyscf_backend/optimize.py(PySCF + geomeTRIC)と、結果を入れる入れ物
 (OptimizationResult)の項目名をそろえてある。これにより、common/ の
 可視化・出力関数(エネルギー推移・構造表示・xyz出力)をそのまま使える。
 
