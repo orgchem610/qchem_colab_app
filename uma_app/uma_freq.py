@@ -13,6 +13,9 @@ UMAを使った振動数解析(調和近似)。
         モードが混ざり、虚振動の数え方が紛らわしくなるため)
     3. 数値計算の部分(compute_hessian_fd, harmonic_analysis)は、ASEにもUMAにも
        依存しない純粋なnumpyの関数にしてあり、単体テストで検証できる。
+       tests/test_uma_freq.py では、解析解(バネのモデル)との照合に加えて、ASE付属の簡易ポテンシャル
+       (EMT)を使い、ASEの Vibrations(力の中心差分)・VibrationsData(Hessianからの振動数)と
+       振動数が一致することも確認している(ASEが入っていない環境では、この照合だけスキップされる)。
 
 【単位】 座標[Å]、力[eV/Å]、Hessian[eV/Å^2]、質量[amu]、振動数[cm^-1]
 虚振動は、PySCF版と同じく負の値で表す。
