@@ -1,7 +1,7 @@
 """
 tests/test_pipeline.py
 ----------------------
-qcapp.pipeline(PySCF版の計算の流れ)の単体テスト。
+pyscf_backend.pipeline(PySCF版の計算の流れ)の単体テスト。
 PySCFは使わず、engine・optimize・freq・writer_molden を代用の関数に差し替えて、
 各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
 PySCFによる実際の計算は、Colab上での実機確認が必要。
@@ -18,8 +18,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import io_reader  # noqa: E402
-from qcapp import __version__, pipeline  # noqa: E402
+from qchem_colab_app.common_backend import io_reader  # noqa: E402
+from qchem_colab_app.pyscf_backend import __version__, pipeline  # noqa: E402
 
 DEFAULTS = {"frequency": {"warn_natoms": 40}}
 

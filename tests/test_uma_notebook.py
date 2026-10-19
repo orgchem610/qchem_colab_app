@@ -14,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_notice  # noqa: E402
+from qchem_colab_app.uma_backend import uma_notice  # noqa: E402
 
 NOTEBOOK = os.path.join(os.path.dirname(__file__), "..", "ColabApp_UMA.ipynb")
 
@@ -98,7 +98,7 @@ class TestTokenAndAccessCell(unittest.TestCase):
         path_cell = next(c for c in self.code if "sys.path.append" in c["text"])
         install = next(c for c in self.code if "pip" in c["text"] and "install" in c["text"])
         self.assertLess(clone["index"], cell["index"])
-        self.assertLess(path_cell["index"], cell["index"])     # uma_app をimportするために必要
+        self.assertLess(path_cell["index"], cell["index"])     # uma_backend をimportするために必要
         self.assertLess(cell["index"], install["index"])
 
     def test_the_separate_access_check_cell_is_gone(self):

@@ -1,7 +1,7 @@
 """
 tests/fake_gui_env.py
 ---------------------
-common/gui_parts.py などのGUI部品を、ipywidgets・Google Colab・ブラウザなしでテストするための、
+qchem_colab_app/gui/parts.py などのGUI部品を、ipywidgets・Google Colab・ブラウザなしでテストするための、
 簡易な代用品(ipywidgets / IPython.display / google.colab)。
 
 本物のウィジェットの「値が変わると observe に登録した関数が呼ばれる」
@@ -10,7 +10,7 @@ common/gui_parts.py などのGUI部品を、ipywidgets・Google Colab・ブラ�
 
 使い方:
     with fake_gui_env(colab=True) as env:
-        gui_parts = env.import_module("common.gui_parts")
+        parts = env.import_module("qchem_colab_app.gui.parts")
         ...
 env.callbacks : Colabに登録されたJavaScriptから呼べる関数(名前 -> 関数)
 env.downloaded: colab.files.download() に渡されたファイル名のリスト
@@ -23,7 +23,29 @@ import types
 
 _MODULES = ("ipywidgets", "IPython", "IPython.display", "google", "google.colab",
             "google.colab.output", "google.colab.files")
-_REPO_MODULES = ("common.gui_parts", "common.colab_widgets", "common.energy_plot")
+_REPO_MODULES = ("qchem_colab_app.gui.parts", "qchem_colab_app.gui.colab_widgets",
+                 "qchem_colab_app.gui.energy_plot")
+
+
+def _forget(name):
+    """モジュールを sys.modules から消し、親パッケージの属性(from 親 import 子 で使われる)も消す。
+
+    属性を消さないと、読み込み直したときに、from qchem_colab_app.gui import colab_widgets が、
+    前のテストで読み込んだ古いモジュールを返してしまう。
+    """
+    sys.modules.pop(name, None)
+    parent_name, _, child = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None and hasattr(parent, child):
+        delattr(parent, child)
+
+
+def _restore(name, module):
+    parent_name, _, child = name.rpartition(".")
+    sys.modules[name] = module
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, child, module)
 
 
 class _Env:
@@ -163,7 +185,7 @@ def _build_ipython_display(env):
 
 @contextlib.contextmanager
 def fake_gui_env(colab=True):
-    """ipywidgets などを代用品に差し替えたうえで、common.gui_parts を読み込み直せる状態にする。"""
+    """ipywidgets などを代用品に差し替えたうえで、qchem_colab_app.gui.parts を読み込み直せる状態にする。"""
     env = _Env(colab)
     saved = {name: sys.modules.get(name) for name in _MODULES + _REPO_MODULES}
 
@@ -190,15 +212,17 @@ def fake_gui_env(colab=True):
             sys.modules[name] = None          # import すると ImportError になる(Colab以外の環境)
 
     for name in _REPO_MODULES:
-        sys.modules.pop(name, None)
+        _forget(name)
     try:
         yield env
     finally:
-        for name, module in saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
-        for name in _REPO_MODULES:
+        for name in _MODULES:
             if saved[name] is None:
                 sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = saved[name]
+        for name in _REPO_MODULES:
+            if saved[name] is None:
+                _forget(name)
+            else:
+                _restore(name, saved[name])

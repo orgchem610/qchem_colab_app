@@ -1,8 +1,10 @@
 """
 tests/test_energy_plot.py
 -------------------------
-common.energy_plot(エネルギー値の変換・目盛りの計算・クリックできるSVGグラフのHTML生成)の
+qchem_colab_app/gui/energy_plot.py(目盛りの計算・クリックできるSVGグラフのHTML生成)の
 単体テスト。Colab/ブラウザなしでテストできる部分だけを対象にする。
+エネルギーの換算・相対エネルギーは、バックエンドの共通部品(common_backend/energy.py)にあり、
+tests/test_energy.py で確認する。
 
 JavaScriptがColab上で実際に動くか(点のクリック → Python呼び出し)はこのテストでは
 確認できないため、Colab上での実機確認が必要(README.md参照)。
@@ -16,26 +18,12 @@ import xml.dom.minidom
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import colab_widgets, energy_plot as cw  # noqa: E402
+from qchem_colab_app.common_backend import energy  # noqa: E402
+from qchem_colab_app.gui import colab_widgets, energy_plot as cw  # noqa: E402
 
 
 def _svg_part(html_text):
     return re.search(r"<svg.*?</svg>", html_text, re.S).group(0)
-
-
-class TestRelativeEnergies(unittest.TestCase):
-    def test_reference_is_the_last_point_in_kcal_per_mol(self):
-        values = cw.relative_energies_kcal([-10.0, -10.01])
-        self.assertAlmostEqual(values[0], 6.275094740631222)
-        self.assertAlmostEqual(values[1], 0.0)
-
-    def test_empty_list_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            cw.relative_energies_kcal([])
-
-    def test_nan_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            cw.relative_energies_kcal([-10.0, float("nan")])
 
 
 class TestNiceTicks(unittest.TestCase):
@@ -125,12 +113,14 @@ class TestEnergyPlotHtml(unittest.TestCase):
 
 class TestModuleSplit(unittest.TestCase):
     def test_plot_functions_are_not_in_colab_widgets_any_more(self):
-        for name in ("relative_energies_kcal", "nice_ticks", "build_energy_plot_html", "HARTREE_TO_KCAL_MOL"):
+        for name in ("nice_ticks", "build_energy_plot_html"):
             self.assertTrue(hasattr(cw, name), name)
             self.assertFalse(hasattr(colab_widgets, name), name)
 
-    def test_unit_conversion_constant(self):
-        self.assertAlmostEqual(cw.HARTREE_TO_KCAL_MOL, 627.5094740631)
+    def test_energy_conversion_is_defined_only_in_common_backend(self):
+        # 換算と相対エネルギーは、バックエンドからも使うため、common_backend/energy.py に1か所だけ置く
+        self.assertIs(cw.relative_energies_kcal, energy.relative_energies_kcal)
+        self.assertFalse(hasattr(cw, "HARTREE_TO_KCAL_MOL"))
 
     def test_safe_id_check_is_shared_with_colab_widgets(self):
         self.assertIs(cw.check_safe_id, colab_widgets.check_safe_id)

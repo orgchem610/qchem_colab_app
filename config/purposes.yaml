@@ -3,7 +3,7 @@
 # GUIの「計算目的」ドロップダウンに表示される選択肢の一覧です。
 # 各項目の意味:
 #   label      : GUI上に表示される日本語ラベル
-#   key        : プログラム内部で使う識別子(engine.py / gui.py から参照)
+#   key        : プログラム内部で使う識別子(engine.py / gui/pyscf_calc.py から参照)
 #   does_opt   : 構造最適化を行うかどうか
 #   allow_freq : このpurposeで振動数計算を(オプションとして)許可するかどうか
 #

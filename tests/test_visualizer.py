@@ -1,7 +1,7 @@
 """
 tests/test_visualizer.py
 --------------------------
-qcapp.visualizer_pyscf のうち、pyscf/py3Dmolを実際には呼ばない部分
+pyscf_backend.visualizer_pyscf のうち、pyscf/py3Dmolを実際には呼ばない部分
 (cubeファイルのテキストパース、電荷テーブルのHTML整形)だけを対象にした
 単体テスト。isoval計算やMulliken電荷計算そのものはPySCFが必要なため、
 Colab上での実機確認が必要(README.md参照)。
@@ -17,7 +17,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import visualizer_pyscf  # noqa: E402
+from qchem_colab_app.pyscf_backend import visualizer_pyscf  # noqa: E402
 
 
 _FAKE_CUBE = """orbital

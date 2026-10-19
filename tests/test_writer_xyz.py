@@ -1,7 +1,7 @@
 """
 tests/test_writer_xyz.py
 ------------------------
-common.writer_xyz(xyz形式の出力)の単体テスト。外部ライブラリには依存しない。
+common_backend.writer_xyz(xyz形式の出力)の単体テスト。外部ライブラリには依存しない。
 """
 
 import os
@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import writer_xyz  # noqa: E402
+from qchem_colab_app.common_backend import writer_xyz  # noqa: E402
 
 SYMBOLS = ["O", "H", "H"]
 COORDS = [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
