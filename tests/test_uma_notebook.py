@@ -14,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_backend import uma_notice  # noqa: E402
+from qchem_colab_app.uma_backend import uma_notice  # noqa: E402
 
 NOTEBOOK = os.path.join(os.path.dirname(__file__), "..", "ColabApp_UMA.ipynb")
 

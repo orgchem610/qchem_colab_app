@@ -18,8 +18,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import io_reader  # noqa: E402
-from pyscf_backend import __version__, pipeline  # noqa: E402
+from qchem_colab_app.common_backend import io_reader  # noqa: E402
+from qchem_colab_app.pyscf_backend import __version__, pipeline  # noqa: E402
 
 DEFAULTS = {"frequency": {"warn_natoms": 40}}
 

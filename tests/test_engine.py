@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from pyscf_backend import engine  # noqa: E402
+from qchem_colab_app.pyscf_backend import engine  # noqa: E402
 
 
 def _structure(symbols):

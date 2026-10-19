@@ -18,7 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_backend import __version__, uma_hf, uma_pipeline  # noqa: E402
+from qchem_colab_app.uma_backend import __version__, uma_hf, uma_pipeline  # noqa: E402
 
 
 def _defaults(warn_natoms=60):

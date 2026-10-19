@@ -1,7 +1,7 @@
 """
 tests/test_common_config.py
 ---------------------------
-common.config(config/ のYAMLファイルの読み込み)の単体テスト。
+qchem_colab_app/common_backend/config.py(config/ のYAMLファイルの読み込み)の単体テスト。
 pyscf_backend・uma_backend が、同じ関数・同じ場所を使っていること(別名になっていること)も確認する。
 """
 
@@ -11,16 +11,17 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pyscf_backend  # noqa: E402
-import uma_backend  # noqa: E402
-from common import config  # noqa: E402
+from qchem_colab_app import pyscf_backend, uma_backend  # noqa: E402
+from qchem_colab_app.common_backend import config  # noqa: E402
 
 
 class TestLoadYaml(unittest.TestCase):
     def test_config_directory_is_the_one_in_the_repository_root(self):
         self.assertTrue(config.CONFIG_DIR.is_dir())
         self.assertEqual(config.CONFIG_DIR.parent, config.PROJECT_ROOT)
-        self.assertTrue((config.PROJECT_ROOT / "gui.py").exists())
+        # リポジトリのルートには、ノートブックと、最上位パッケージ(qchem_colab_app)がある
+        self.assertTrue((config.PROJECT_ROOT / "ColabApp.ipynb").exists())
+        self.assertTrue((config.PROJECT_ROOT / "qchem_colab_app" / "common_backend" / "config.py").exists())
 
     def test_existing_file_is_parsed(self):
         defaults = config.load_yaml("defaults.yaml")

@@ -1,7 +1,7 @@
 """
 tests/test_gui_input.py
 -----------------------
-common.gui_input(アップロードされたファイルの取り出し・読み込みと検証・電荷の表示と読み取り)の単体テスト。
+gui.inputs(アップロードされたファイルの取り出し・読み込みと検証・電荷の表示と読み取り)の単体テスト。
 ipywidgetsには依存しない(FileUploadの値は、同じ形の辞書・オブジェクトで代用している)。
 """
 
@@ -13,7 +13,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import gui_input, io_reader  # noqa: E402
+from qchem_colab_app.common_backend import io_reader  # noqa: E402
+
+from qchem_colab_app.gui import inputs as gui_input  # noqa: E402
 
 
 class TestExtractUploadedFile(unittest.TestCase):
@@ -44,7 +46,7 @@ class TestExtractUploadedFile(unittest.TestCase):
         for empty in ((), {}, None):
             with self.assertRaises(io_reader.StructureError) as ctx:
                 gui_input.extract_uploaded_file(SimpleNamespace(value=empty))
-            self.assertIn("ドラッグ", str(ctx.exception))
+            self.assertIn("アップロード", str(ctx.exception))
 
     def test_unexpected_value_type_is_reported(self):
         with self.assertRaises(RuntimeError):

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_backend import uma_notice, uma_report  # noqa: E402
+from qchem_colab_app.uma_backend import uma_notice, uma_report  # noqa: E402
 
 
 class TestNotice(unittest.TestCase):

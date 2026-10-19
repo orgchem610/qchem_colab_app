@@ -15,8 +15,8 @@ import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-import pyscf_backend  # noqa: E402
-import uma_backend  # noqa: E402
+from qchem_colab_app import pyscf_backend  # noqa: E402
+from qchem_colab_app import uma_backend  # noqa: E402
 
 # READMEに書かれているが、リポジトリにファイルとしては存在しなくてよいもの
 NOT_IN_REPO = {
@@ -24,7 +24,7 @@ NOT_IN_REPO = {
     "ColabReaction.ipynb",       # 参考にした外部のノートブック
     "requirements-lock.txt",     # Colab上で自動生成される(Git管理対象外)
     "requirements-uma-lock.txt",  # 同上
-    "pyscf_backend/dispatch.py",         # 設計方針メモに登場する、将来の例
+    "qchem_colab_app/pyscf_backend/dispatch.py",         # 設計方針メモに登場する、将来の例
 }
 
 

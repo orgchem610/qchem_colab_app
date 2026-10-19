@@ -1,7 +1,7 @@
 """
 tests/test_gui_parts.py
 -----------------------
-common/gui_parts.py(PySCF版 gui.py とUMA版 gui_uma.py で共通の画面部品)の単体テスト。
+qchem_colab_app/gui/parts.py(PySCF版 gui/pyscf_calc.py とUMA版 gui/uma_calc.py で共通の画面部品)の単体テスト。
 電荷の入力部品(ChargeInput)も、ここで確認する。
 
 ipywidgets・Google Colab・py3Dmolの代わりに、tests/fake_gui_env.py の簡易な代用品を使う。
@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fake_gui_env import fake_gui_env  # noqa: E402
-from common import io_reader  # noqa: E402
+from qchem_colab_app.common_backend import io_reader  # noqa: E402
 
 XYZ = b"3\nwater\nO 0.0 0.0 0.0\nH 0.96 0.0 0.0\nH -0.24 0.93 0.0\n"
 
@@ -55,7 +55,7 @@ class _Base(unittest.TestCase):
     def setUp(self):
         self._ctx = fake_gui_env(colab=self.colab)
         self.env = self._ctx.__enter__()
-        self.gp = self.env.import_module("common.gui_parts")
+        self.gp = self.env.import_module("qchem_colab_app.gui.parts")
         self.shown = []
 
         class _View:
@@ -117,10 +117,19 @@ class TestStructureFileInputInColab(_QuietPreview):
         with self.assertRaises(io_reader.StructureError):
             self.inp.read()
 
-    def test_the_last_selected_file_wins(self):
-        self.drop(_payload("dropped.xyz"))
-        self.inp.upload.value = ({"name": "button.xyz", "content": b"b", "type": "", "size": 1},)
-        self.assertEqual(self.inp.read(), (b"b", "button.xyz"))        # ボタンで選び直した
+    def test_no_file_select_button_is_shown_in_colab(self):
+        # ドロップ領域をクリックしてもファイルを選べるため、その下のファイル選択ボタンは置かない
+        self.assertNotIn(self.inp.upload, self.inp.widgets)
+        self.assertEqual([type(w).__name__ for w in self.inp.widgets if type(w).__name__ == "FileUpload"], [])
+
+    def test_hint_tells_to_click_the_drop_zone_and_does_not_mention_a_button(self):
+        hint = self.inp.widgets[2].value
+        self.assertIn("枠をクリック", hint)
+        self.assertNotIn("下のボタン", hint)
+
+    def test_the_last_dropped_file_wins(self):
+        self.drop(_payload("dropped.xyz", b"a"))
+        self.assertEqual(self.inp.read(), (b"a", "dropped.xyz"))
         self.drop(_payload("dropped_again.xyz"))
         self.assertEqual(self.inp.read(), (XYZ, "dropped_again.xyz"))  # もう一度ドロップした
 
@@ -146,11 +155,6 @@ class TestStructureFilePreview(_QuietPreview):
     def test_the_callback_still_reports_success(self):
         self.assertEqual(self.drop(_payload("water.xyz")).data, {"ok": True})
 
-    def test_file_selected_with_the_button_is_shown_too(self):
-        self.inp.upload.value = ({"name": "button.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
-        self.assertEqual(len(self.shown), 1)
-        self.assertIn("button.xyz", self.preview_text.getvalue())
-
     def test_the_newest_file_is_the_one_shown(self):
         self.drop(_payload("first.xyz"))
         self.drop(_payload("second.xyz"))
@@ -167,11 +171,6 @@ class TestStructureFilePreview(_QuietPreview):
     def test_rejected_drop_does_not_show_a_structure(self):
         self.drop(_payload("notes.txt"))
         self.assertEqual(len(self.shown), 0)
-
-    def test_emptying_the_upload_does_not_show_anything_new(self):
-        self.inp.upload.value = ({"name": "a.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
-        self.inp.upload.value = ()
-        self.assertEqual(len(self.shown), 1)
 
     def test_failure_of_the_display_does_not_prevent_receiving_the_file(self):
         with mock.patch.object(self.gp.plot_common, "render_single_structure",
@@ -195,6 +194,22 @@ class TestStructureFileInputOutsideColab(_QuietPreview):
         inp = self.gp.StructureFileInput()
         inp.upload.value = ({"name": "a.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
         self.assertEqual(inp.read(), (XYZ, "a.xyz"))
+
+    def test_the_upload_button_is_the_first_widget_outside_colab(self):
+        inp = self.gp.StructureFileInput()
+        self.assertIs(inp.widgets[0], inp.upload)
+
+    def test_file_selected_with_the_button_is_shown_too(self):
+        inp = self.gp.StructureFileInput()
+        inp.upload.value = ({"name": "button.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
+        self.assertEqual(len(self.shown), 1)
+        self.assertIn("button.xyz", self.preview_text.getvalue())
+
+    def test_emptying_the_upload_does_not_show_anything_new(self):
+        inp = self.gp.StructureFileInput()
+        inp.upload.value = ({"name": "a.xyz", "content": XYZ, "type": "", "size": len(XYZ)},)
+        inp.upload.value = ()
+        self.assertEqual(len(self.shown), 1)
 
 
 class TestEnergyStructureViewer(_Base):

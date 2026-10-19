@@ -17,7 +17,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from pyscf_backend import visualizer_pyscf  # noqa: E402
+from qchem_colab_app.pyscf_backend import visualizer_pyscf  # noqa: E402
 
 
 _FAKE_CUBE = """orbital
