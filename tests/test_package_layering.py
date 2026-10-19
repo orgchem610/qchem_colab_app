@@ -29,7 +29,7 @@ LAYERS = {
 }
 
 # gui の中で、計算エンジンのパッケージを呼び出してよい「画面」と、その呼び先
-GUI_SCREENS = {"pyscf_calc": {"pyscf_backend"}, "uma_calc": {"uma_backend"}}
+GUI_SCREENS = {"pyscf_screen": {"pyscf_backend"}, "uma_screen": {"uma_backend"}}
 
 # 画面の層の外(バックエンド)で、importしてはいけないライブラリ
 BACKEND_FORBIDDEN_LIBRARIES = {"ipywidgets", "IPython"}
@@ -154,7 +154,7 @@ class TestNotebooks(unittest.TestCase):
         self.assertEqual(violations, [])
 
     def test_each_notebook_imports_its_own_screen(self):
-        expected = {"ColabApp.ipynb": "pyscf_calc", "ColabApp_UMA.ipynb": "uma_calc"}
+        expected = {"ColabApp.ipynb": "pyscf_screen", "ColabApp_UMA.ipynb": "uma_screen"}
         for name, screen in expected.items():
             screens = []
             for source in self._code(name):

@@ -1,6 +1,6 @@
 """
-qchem_colab_app.gui.pyscf_calc
-------------------------------
+qchem_colab_app.gui.pyscf_screen
+--------------------------------
 ipywidgets を使って、ColabApp.ipynb の Execution Section から呼び出す
 PySCF版のGUI一式を組み立てるモジュール。
 
@@ -19,7 +19,7 @@ PySCF版のGUI一式を組み立てるモジュール。
         ④ ダウンロード(最終構造xyz・トラジェクトリxyz・moldenファイル)
 
 構造ファイルの入力(ドラッグ&ドロップ)・エネルギーグラフ(点のクリック)・振動アニメーション・
-ダウンロード・電荷入力の画面部品は、UMA版(gui/uma_calc.py)と共通の gui/parts.py にある。
+ダウンロード・電荷入力の画面部品は、UMA版(gui/uma_screen.py)と共通の gui/parts.py にある。
 これらは、ブラウザ側JavaScript → Colabのコールバック → Python の仕組み
 (gui/colab_widgets.py)で実現している(ipywidgets.FileUploadやPlotlyのFigureWidgetは
 Colab上で動作しない場合があったため)。Colab以外の環境では、ドロップ領域を出さず
@@ -27,12 +27,12 @@ Colab上で動作しない場合があったため)。Colab以外の環境では
 部分(計算手法・基底関数の選択、MO・原子電荷の可視化、PySCFの呼び出し)だけを残している。
 
 パッケージ内での位置づけ: 画面の層(gui)のうち、計算エンジン(pyscf_backend)を呼び出す「画面」。
-計算エンジンを呼び出してよいのは、このファイルと uma_calc.py だけで、共通の画面部品(parts.py など)は、
+計算エンジンを呼び出してよいのは、このファイルと uma_screen.py だけで、共通の画面部品(parts.py など)は、
 計算エンジンのパッケージをimportしない(tests/test_package_layering.py で検査)。
 
 使い方(ColabApp.ipynbから):
-    from qchem_colab_app.gui import pyscf_calc
-    app = pyscf_calc.build_app()
+    from qchem_colab_app.gui import pyscf_screen
+    app = pyscf_screen.build_app()
     display(app)
 """
 
@@ -41,9 +41,8 @@ import traceback
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from qchem_colab_app.common_backend import io_reader
+from qchem_colab_app.common_backend import config_loader, io_reader, version
 from qchem_colab_app.gui import parts, inputs, outputs
-from qchem_colab_app.pyscf_backend import load_yaml, __version__
 from qchem_colab_app.pyscf_backend import engine, pipeline, visualizer_pyscf, analysis_pyscf
 
 
@@ -52,15 +51,15 @@ from qchem_colab_app.pyscf_backend import engine, pipeline, visualizer_pyscf, an
 # -----------------------------------------------------------------------------
 
 def build_app():
-    purposes = load_yaml("purposes.yaml")
-    functionals = load_yaml("functionals.yaml")
-    basis_cfg = load_yaml("basis_sets.yaml")
-    defaults = load_yaml("defaults.yaml")
+    purposes = config_loader.load_yaml("purposes.yaml")
+    functionals = config_loader.load_yaml("functionals.yaml")
+    basis_cfg = config_loader.load_yaml("basis_sets.yaml")
+    defaults = config_loader.load_yaml("defaults.yaml")
     basis_items = basis_cfg.get("main_group") or []
 
     # --- ① 入力ウィジェット ---------------------------------------------------
     title = widgets.HTML(
-        f"<h2>量子化学計算プロトタイプ (qchem_colab_app v{__version__})</h2>"
+        f"<h2>量子化学計算プロトタイプ (qchem_colab_app v{version.__version__})</h2>"
         f"<p>対応している計算手法・基底関数は「① 構造ファイルと計算条件」の"
         f"ドロップダウンからご確認ください。</p>"
     )
@@ -68,14 +67,14 @@ def build_app():
     state = {}  # 計算結果をウィジェット間で共有するための入れ物
 
     # 構造ファイルの入力・エネルギーグラフ・振動アニメーション・ダウンロードは、
-    # uma_calc.py(UMA版)と共通の部品(gui/parts.py)を使う。
+    # uma_screen.py(UMA版)と共通の部品(gui/parts.py)を使う。
     file_input = parts.StructureFileInput(callback_prefix="qchem_drop")
 
     purpose_dd = parts.dropdown_from_list(purposes, "計算目的")
     method_dd = parts.dropdown_from_list(functionals, "計算手法")
     basis_dd = parts.dropdown_from_list(basis_items, "基底関数")
 
-    # 電荷の入力欄は、UMA版(uma_calc.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
+    # 電荷の入力欄は、UMA版(uma_screen.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
     charge_input = parts.ChargeInput(value=defaults["gui_defaults"]["charge"])
     mult_input = parts.MultiplicityInput(value=defaults["gui_defaults"]["multiplicity"])
     freq_checkbox = widgets.Checkbox(
@@ -200,7 +199,7 @@ def build_app():
     # 実行ボタンのハンドラ(計算パイプライン本体)
     # -------------------------------------------------------------------
     def on_run_clicked(_):
-        # 計算中にもう一度押されても、二重に実行しない(UMA版 uma_calc.py と同じ)
+        # 計算中にもう一度押されても、二重に実行しない(UMA版 uma_screen.py と同じ)
         if run_button.disabled:
             return
         run_button.disabled = True

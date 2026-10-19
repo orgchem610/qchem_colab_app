@@ -1,14 +1,14 @@
 """
-qchem_colab_app.gui.uma_calc
-----------------------------
+qchem_colab_app.gui.uma_screen
+------------------------------
 UMA(機械学習ポテンシャル)版のGUI組み立て(ColabApp_UMA.ipynb から呼び出される画面)。
 
-PySCF版の gui/pyscf_calc.py とは別ファイルになっており、お互いに影響しない。
+PySCF版の gui/pyscf_screen.py とは別ファイルになっており、お互いに影響しない。
 計算の流れ(アクセス権の確認 → モデルの読み込み → 構造最適化 → 振動数解析 → 出力ファイルの書き出し)は
 qchem_colab_app/uma_backend/uma_pipeline.py に委譲し、このファイルは、入力値の収集、アップロードされた
 ファイルの読み込みと検証、結果の表示、例外の利用者向けメッセージへの変換だけを行う。
 (画面の層(gui)のうち、計算エンジン(uma_backend)を呼び出す「画面」。計算エンジンを呼び出してよいのは、
-このファイルと pyscf_calc.py だけで、共通の画面部品(parts.py など)は、計算エンジンのパッケージを
+このファイルと pyscf_screen.py だけで、共通の画面部品(parts.py など)は、計算エンジンのパッケージを
 importしない。tests/test_package_layering.py で検査している。)
 
 【PySCF版との違い】
@@ -37,8 +37,8 @@ importしない。tests/test_package_layering.py で検査している。)
     このファイルには、UMA版にしかない部分(モデルの選択、UMAの呼び出し)だけを残している。
 
 使い方(ColabApp_UMA.ipynbから):
-    from qchem_colab_app.gui import uma_calc
-    app = uma_calc.build_app()
+    from qchem_colab_app.gui import uma_screen
+    app = uma_screen.build_app()
     display(app)
 """
 
@@ -47,9 +47,8 @@ import traceback
 import ipywidgets as widgets
 from IPython.display import clear_output
 
-from qchem_colab_app.common_backend import io_reader
+from qchem_colab_app.common_backend import config_loader, io_reader, version
 from qchem_colab_app.gui import parts, inputs, outputs
-from qchem_colab_app.uma_backend import load_yaml, __version__
 from qchem_colab_app.uma_backend import uma_hf, uma_pipeline
 
 
@@ -58,25 +57,25 @@ from qchem_colab_app.uma_backend import uma_hf, uma_pipeline
 # -----------------------------------------------------------------------------
 
 def build_app():
-    models = load_yaml("uma_models.yaml")
-    defaults = load_yaml("uma_defaults.yaml")
+    models = config_loader.load_yaml("uma_models.yaml")
+    defaults = config_loader.load_yaml("uma_defaults.yaml")
     gui_defaults = defaults["gui_defaults"]
 
     # --- ① 入力ウィジェット ---------------------------------------------------
     title = widgets.HTML(
-        f"<h2>UMA版 構造最適化・振動数解析 (qchem_colab_app v{__version__})</h2>"
+        f"<h2>UMA版 構造最適化・振動数解析 (qchem_colab_app v{version.__version__})</h2>"
         "<p>機械学習ポテンシャルUMAによる高速な構造最適化を行います。</p>"
     )
 
     # 構造ファイルの入力・エネルギーグラフ・振動アニメーション・ダウンロードは、
-    # pyscf_calc.py(PySCF版)と共通の部品(gui/parts.py)を使う。
+    # pyscf_screen.py(PySCF版)と共通の部品(gui/parts.py)を使う。
     file_input = parts.StructureFileInput(callback_prefix="qchem_uma_drop")
 
     model_dd = parts.dropdown_from_list(models, "UMAモデル")
     if gui_defaults.get("model") in [m["key"] for m in models]:
         model_dd.value = gui_defaults["model"]
 
-    # 電荷の入力欄は、PySCF版(pyscf_calc.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
+    # 電荷の入力欄は、PySCF版(pyscf_screen.py)と共通の部品(「+1」の形で表示・−1/+1ボタンつき)
     charge_input = parts.ChargeInput(value=int(gui_defaults["charge"]))
     mult_input = parts.MultiplicityInput(value=gui_defaults["multiplicity"])
     freq_checkbox = widgets.Checkbox(
