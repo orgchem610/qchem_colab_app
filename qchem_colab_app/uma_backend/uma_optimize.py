@@ -26,7 +26,7 @@ import time
 
 import numpy as np
 
-HARTREE_PER_EV = 1.0 / 27.211386245988   # 1 Hartree = 27.211386245988 eV (CODATA 2018)
+from qchem_colab_app.common_backend import energy
 
 ALLOWED_OPTIMIZERS = ("LBFGS", "BFGS", "FIRE")
 
@@ -89,7 +89,7 @@ def run_geometry_optimization(atoms, calculator, opt_cfg, progress=None):
         fmax_now = float(np.linalg.norm(forces, axis=1).max()) if len(forces) else 0.0
         result.coords_history.append(positions.tolist())
         result.energies_ev.append(energy_ev)
-        result.energies.append(energy_ev * HARTREE_PER_EV)
+        result.energies.append(energy_ev / energy.HARTREE_TO_EV)
         result.fmax_history.append(fmax_now)
         if progress is not None:
             progress(len(result.energies) - 1, result.energies[-1], fmax_now)

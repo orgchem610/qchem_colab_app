@@ -16,6 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from qchem_colab_app.common_backend import energy  # noqa: E402
 from qchem_colab_app.uma_backend import uma_optimize  # noqa: E402
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
@@ -29,9 +30,11 @@ class TestInputCheck(unittest.TestCase):
         self.assertIn("未対応の最適化アルゴリズム", str(ctx.exception))
 
 
-class TestConstants(unittest.TestCase):
-    def test_hartree_per_ev(self):
-        self.assertAlmostEqual(1.0 / uma_optimize.HARTREE_PER_EV, 27.211386245988, places=9)
+class TestUnitConversionIsShared(unittest.TestCase):
+    def test_the_conversion_factor_is_not_defined_in_this_module(self):
+        # eV→Hartreeの換算係数は、common_backend.energy.HARTREE_TO_EV に1か所だけ定義する
+        self.assertFalse(hasattr(uma_optimize, "HARTREE_PER_EV"))
+        self.assertTrue(hasattr(uma_optimize, "energy"))
 
 
 @unittest.skipUnless(HAS_ASE, "ASEがインストールされていないためスキップ")
@@ -74,7 +77,7 @@ class TestWithEMT(unittest.TestCase):
     def test_hartree_energies_are_converted_from_ev(self):
         _, _, result = self._run()
         for e_ev, e_ha in zip(result.energies_ev, result.energies):
-            self.assertAlmostEqual(e_ha, e_ev * uma_optimize.HARTREE_PER_EV, places=12)
+            self.assertAlmostEqual(e_ha, e_ev / energy.HARTREE_TO_EV, places=12)
 
     def test_input_atoms_are_not_modified(self):
         atoms, before, _ = self._run()
