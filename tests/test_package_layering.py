@@ -29,7 +29,7 @@ LAYERS = {
 }
 
 # gui の中で、計算エンジンのパッケージを呼び出してよい「画面」と、その呼び先
-GUI_SCREENS = {"pyscf_calc": {"pyscf_backend"}, "uma_calc": {"uma_backend"}}
+GUI_SCREENS = {"pyscf_screen": {"pyscf_backend"}, "uma_screen": {"uma_backend"}}
 
 # 画面の層の外(バックエンド)で、importしてはいけないライブラリ
 BACKEND_FORBIDDEN_LIBRARIES = {"ipywidgets", "IPython"}
@@ -80,9 +80,11 @@ class TestRepositoryLayout(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(PACKAGE_DIR, name, "__init__.py")), name)
 
     def test_package_init_files_import_nothing_from_the_project(self):
-        # パッケージを読み込んだだけで、重いライブラリ(ipywidgets など)が必要にならないように
-        for path in [os.path.join(PACKAGE_DIR, "__init__.py"),
-                     os.path.join(PACKAGE_DIR, "gui", "__init__.py")]:
+        # パッケージを読み込んだだけで、重いライブラリ(ipywidgets など)が必要にならないように。
+        # また、他のモジュールの名前を別名として公開(再エクスポート)しないように
+        paths = [os.path.join(PACKAGE_DIR, "__init__.py")]
+        paths += [os.path.join(PACKAGE_DIR, name, "__init__.py") for name in sorted(LAYERS)]
+        for path in paths:
             with open(path, encoding="utf-8") as f:
                 self.assertEqual(_imports(f.read()), [], path)
 
@@ -154,7 +156,7 @@ class TestNotebooks(unittest.TestCase):
         self.assertEqual(violations, [])
 
     def test_each_notebook_imports_its_own_screen(self):
-        expected = {"ColabApp.ipynb": "pyscf_calc", "ColabApp_UMA.ipynb": "uma_calc"}
+        expected = {"ColabApp.ipynb": "pyscf_screen", "ColabApp_UMA.ipynb": "uma_screen"}
         for name, screen in expected.items():
             screens = []
             for source in self._code(name):

@@ -18,8 +18,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qchem_colab_app.common_backend import io_reader  # noqa: E402
-from qchem_colab_app.pyscf_backend import __version__, pipeline  # noqa: E402
+from qchem_colab_app.common_backend import io_reader, version  # noqa: E402
+from qchem_colab_app.pyscf_backend import pipeline  # noqa: E402
 
 DEFAULTS = {"frequency": {"warn_natoms": 40}}
 
@@ -178,7 +178,7 @@ class TestResult(_Base):
         result = self.run_pipeline()
         with open(result.final_xyz_path, encoding="utf-8") as f:
             comment = f.read().splitlines()[1]
-        self.assertEqual(comment, f"Optimized by qchem_colab_app (v{__version__}, b3lyp/6-31g*)")
+        self.assertEqual(comment, f"Optimized by qchem_colab_app (v{version.__version__}, b3lyp/6-31g*)")
 
     def test_trajectory_has_one_frame_per_recorded_step(self):
         result = self.run_pipeline()

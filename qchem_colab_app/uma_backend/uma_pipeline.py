@@ -7,11 +7,11 @@ UMA版の「計算の流れ」をまとめたモジュール。
     → 構造最適化 → (任意)振動数解析 → 出力ファイル(xyz・計算ログ)の書き出し
 
 画面(ipywidgets)にも、アップロードされたファイルの扱いにも依存しない。画面に出す文面は、
-log という関数(既定は print)を通して受け渡すため、GUI(gui/uma_calc.py)は log_output の中で
+log という関数(既定は print)を通して受け渡すため、GUI(gui/uma_screen.py)は log_output の中で
 この関数を呼ぶだけでよく、UMA・fairchem・Colabなしでも、各段階の呼び出しの順序と
 受け渡しを単体テストできる(uma_hf・uma_engine・uma_optimize・uma_freq を差し替えて確認する)。
 
-GUI側の責務(gui/uma_calc.py): 入力値の収集、アップロードされたファイルの読み込みと検証
+GUI側の責務(gui/uma_screen.py): 入力値の収集、アップロードされたファイルの読み込みと検証
 (gui/inputs.load_uploaded_structure)、この関数の呼び出し、結果の表示、
 例外の利用者向けメッセージへの変換。例外は、ここでは捕まえずにそのまま送出する。
 PySCF版の qchem_colab_app/pyscf_backend/pipeline.py とは独立しており(uma_backend は pyscf_backend に依存しない)、
@@ -23,8 +23,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-from qchem_colab_app.common_backend import writer_xyz
-from qchem_colab_app.uma_backend import __version__, uma_engine, uma_freq, uma_hf, uma_optimize, uma_report
+from qchem_colab_app.common_backend import version, writer_xyz
+from qchem_colab_app.uma_backend import uma_engine, uma_freq, uma_hf, uma_optimize, uma_report
 
 
 @dataclass
@@ -145,14 +145,14 @@ def run_calculation(structure, settings, defaults, log=print):
 
     out_dir = tempfile.mkdtemp(prefix="qchem_uma_output_")
     xyz_comment = (f"Optimized by qchem_colab_app UMA "
-                   f"(v{__version__}, {model_key}, {task_name})")
+                   f"(v{version.__version__}, {model_key}, {task_name})")
     final_xyz_path, traj_xyz_path = writer_xyz.write_optimization_outputs(
         out_dir, final_symbols, final_coords, xyz_comment, opt_result)
 
     log_path = os.path.join(out_dir, "calculation_log.txt")
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(uma_report.build_log_text(
-            version=__version__, model_key=model_key, task_name=task_name,
+            version=version.__version__, model_key=model_key, task_name=task_name,
             device_label=device_label, input_filename=settings.input_filename,
             charge=charge, multiplicity=multiplicity,
             opt_result=opt_result, freq_result=freq_result,

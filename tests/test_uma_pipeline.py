@@ -18,7 +18,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qchem_colab_app.uma_backend import __version__, uma_hf, uma_pipeline  # noqa: E402
+from qchem_colab_app.common_backend import version  # noqa: E402
+from qchem_colab_app.uma_backend import uma_hf, uma_pipeline  # noqa: E402
 
 
 def _defaults(warn_natoms=60):
@@ -196,7 +197,7 @@ class TestResult(_Base):
         result = self.run_pipeline()
         with open(result.final_xyz_path, encoding="utf-8") as f:
             comment = f.read().splitlines()[1]
-        self.assertEqual(comment, f"Optimized by qchem_colab_app UMA (v{__version__}, uma-s-1p2p1, omol)")
+        self.assertEqual(comment, f"Optimized by qchem_colab_app UMA (v{version.__version__}, uma-s-1p2p1, omol)")
 
     def test_trajectory_has_one_frame_per_recorded_step(self):
         result = self.run_pipeline()
@@ -206,7 +207,7 @@ class TestResult(_Base):
     def test_report_is_built_from_the_conditions_and_results(self):
         result = self.run_pipeline()
         kwargs = self.report_kwargs
-        self.assertEqual(kwargs["version"], __version__)
+        self.assertEqual(kwargs["version"], version.__version__)
         self.assertEqual((kwargs["model_key"], kwargs["task_name"]), ("uma-s-1p2p1", "omol"))
         self.assertEqual(kwargs["device_label"], "GPU(Test)")
         self.assertEqual(kwargs["input_filename"], "ethanol.xyz")

@@ -20,7 +20,7 @@ GPU4PySCF がインストールされ、かつ実際に初期化に成功した�
 import subprocess
 import warnings
 
-from qchem_colab_app.pyscf_backend import load_yaml
+from qchem_colab_app.common_backend import config_loader
 from qchem_colab_app.common_backend.io_reader import Structure
 
 
@@ -51,7 +51,7 @@ class SCFConvergenceError(RuntimeError):
 
 
 def _load_functional(functional_key: str) -> dict:
-    functionals = load_yaml("functionals.yaml")
+    functionals = config_loader.load_yaml("functionals.yaml")
     for item in functionals:
         if item["key"] == functional_key:
             return item
@@ -59,7 +59,7 @@ def _load_functional(functional_key: str) -> dict:
 
 
 def _load_basis(basis_key: str) -> dict:
-    basis_sets = load_yaml("basis_sets.yaml")
+    basis_sets = config_loader.load_yaml("basis_sets.yaml")
     for group in ("main_group", "transition_metal_ecp"):
         for item in basis_sets.get(group) or []:
             if item["key"] == basis_key:
