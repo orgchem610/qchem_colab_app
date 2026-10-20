@@ -4,8 +4,8 @@ qchem_colab_app.common_backend.config_loader
 config/ ディレクトリ配下のYAMLファイルを読み込む共通関数。
 
 PySCF版(pyscf_backend)・UMA版(uma_backend)のどちらも、同じ config/ ディレクトリの設定ファイルを
-読むため、読み込みの処理をここに1つだけ置いている。pyscf_backend.load_yaml・uma_backend.load_yaml は、
-この関数をそのまま使えるようにした別名(別名の削除は、AGENTS.md「今後の予定」を参照)。
+読むため、読み込みの処理をここに1つだけ置いている。各パッケージ・画面は、この関数を直接importして使う
+(pyscf_backend・uma_backend には別名を置かない)。
 """
 
 from pathlib import Path

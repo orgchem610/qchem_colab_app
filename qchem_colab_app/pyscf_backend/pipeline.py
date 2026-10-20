@@ -7,11 +7,11 @@ PySCF版の「計算の流れ」をまとめたモジュール。
     → 最終構造でのCPU上のSCF再計算 → (任意)振動数解析 → 出力ファイル(xyz・molden)の書き出し
 
 画面(ipywidgets)にも、アップロードされたファイルの扱いにも依存しない。画面に出す文面は、
-log という関数(既定は print)を通して受け渡すため、GUI(gui/pyscf_calc.py)は log_output の中で
+log という関数(既定は print)を通して受け渡すため、GUI(gui/pyscf_screen.py)は log_output の中で
 この関数を呼ぶだけでよく、ColabやPySCFなしでも、各段階の呼び出しの順序と受け渡しを
 単体テストできる(engine・optimize・freq・writer_molden を差し替えて確認する)。
 
-GUI側の責務(gui/pyscf_calc.py): 入力値の収集、アップロードされたファイルの読み込みと検証
+GUI側の責務(gui/pyscf_screen.py): 入力値の収集、アップロードされたファイルの読み込みと検証
 (gui/inputs.load_uploaded_structure)、この関数の呼び出し、結果の表示、
 例外の利用者向けメッセージへの変換。例外は、ここでは捕まえずにそのまま送出する。
 """
@@ -21,8 +21,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-from qchem_colab_app.common_backend import io_reader, writer_xyz
-from qchem_colab_app.pyscf_backend import __version__, engine, freq as freq_module, optimize, writer_molden
+from qchem_colab_app.common_backend import io_reader, version, writer_xyz
+from qchem_colab_app.pyscf_backend import engine, freq as freq_module, optimize, writer_molden
 
 
 @dataclass
@@ -134,7 +134,7 @@ def run_calculation(structure, settings, defaults, log=print):
     final_symbols = [final_mol.atom_symbol(i) for i in range(final_mol.natm)]
     final_coords = [list(c) for c in final_mol.atom_coords(unit="Angstrom")]
 
-    xyz_comment = f"Optimized by qchem_colab_app (v{__version__}, {functional_key}/{basis_key})"
+    xyz_comment = f"Optimized by qchem_colab_app (v{version.__version__}, {functional_key}/{basis_key})"
     final_xyz_path, traj_xyz_path = writer_xyz.write_optimization_outputs(
         out_dir, final_symbols, final_coords, xyz_comment, opt_result)
 

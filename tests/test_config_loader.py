@@ -2,7 +2,7 @@
 tests/test_config_loader.py
 ---------------------------
 qchem_colab_app/common_backend/config_loader.py(config/ のYAMLファイルの読み込み)の単体テスト。
-pyscf_backend・uma_backend が、同じ関数・同じ場所を使っていること(別名になっていること)も確認する。
+pyscf_backend・uma_backend が、これらを再エクスポート(別名として公開)していないことも確認する。
 """
 
 import os
@@ -35,12 +35,12 @@ class TestLoadYaml(unittest.TestCase):
         self.assertIn("config/", message)
 
 
-class TestAliases(unittest.TestCase):
-    def test_both_packages_use_the_common_function_and_paths(self):
+class TestNoReexport(unittest.TestCase):
+    def test_the_backends_do_not_reexport_the_config_helpers(self):
+        # 設定の読み込みは、common_backend.config_loader を直接importして使う(別名は置かない)
         for package in (pyscf_backend, uma_backend):
-            self.assertIs(package.load_yaml, config_loader.load_yaml)
-            self.assertEqual(package.CONFIG_DIR, config_loader.CONFIG_DIR)
-            self.assertEqual(package.PROJECT_ROOT, config_loader.PROJECT_ROOT)
+            for name in ("load_yaml", "CONFIG_DIR", "PROJECT_ROOT"):
+                self.assertFalse(hasattr(package, name), f"{package.__name__}.{name}")
 
 
 if __name__ == "__main__":

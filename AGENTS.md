@@ -24,6 +24,9 @@
   `ipywidgets`・`IPython`をimportしない。`gui`の共通部品(`parts`など)は、`pyscf_backend`・`uma_backend`をimportしない。
   すべて`tests/test_package_layering.py`で検査する。新しいパッケージを足すときは、このテストの`LAYERS`に、許す依存先を書く。
   新しい画面モジュールを足すときは、`GUI_SCREENS`に、その画面が呼んでよい計算エンジンを書く。
+- 再エクスポート(他のモジュールの名前を、別のパッケージの名前としても公開すること)はしない。他のモジュールの名前は、定義元から直接importする
+  (`load_yaml`は`common_backend.config_loader`から、`__version__`は`common_backend.version`から)。各パッケージの`__init__.py`は、説明だけを書き、
+  何もimportしない(`tests/test_package_layering.py`が検査する)。
 - このファイルでは、最上位パッケージ名`qchem_colab_app`を省略して、`gui.parts`・`pyscf_backend.pipeline`のように書く
   (実際の`import`は、`from qchem_colab_app.gui import parts`の形)。
 - 命名: 最上位パッケージは、プロジェクト固有の名前`qchem_colab_app`を1つだけ置く(`gui`・`common`のような一般的な名前は、
@@ -32,7 +35,7 @@
   モジュール名は短い名詞(役割を表す)にし、動作を表す動詞句は関数名にする。
 - PySCF版とUMA版で似たコードがあっても、将来それぞれ独立に変えていく可能性があるものは、無理に共通化しない。
   - 共通化しているもの: 電荷・スピン多重度の入力欄、構造の読み込みと検証、最適化の標準出力2ファイルとダウンロード項目、
-    ダウンロード名の既定値、`load_yaml`と`__version__`(`common_backend`)。
+    ダウンロード名の既定値、設定の読み込み(`common_backend.config_loader.load_yaml`)と`__version__`(`common_backend.version`)。
   - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、結果クラス(`OptimizationResult`等)、
     設定ファイル(`defaults.yaml`・`uma_defaults.yaml`)、扱える元素の範囲、ノートブックの「1-a〜1-c」セル(リポジトリ取得前に動くため)。
 - `AGENTS.md`は、`develop`・`feature/*`では追跡し、`main`では追跡しない。Claudeが`main`へのマージの手順を案内するときは、
@@ -96,7 +99,7 @@ qchem_colab_app/
 │   │   ├── pyscf_screen.py             # PySCF版の画面(ColabApp.ipynbから呼ぶ。pyscf_backendを呼び出す)
 │   │   └── uma_screen.py               # UMA版の画面(ColabApp_UMA.ipynbから呼ぶ。uma_backendを呼び出す)
 │   ├── pyscf_backend/                     # PySCFを計算エンジンとするab initio計算専用(uma_backendからは呼ばない)
-│   │   ├── __init__.py               # __version__・load_yaml(common_backend.version・common_backend.config_loaderの別名)
+│   │   ├── __init__.py               # パッケージの説明だけ(何もimportしない。別名・再エクスポートは置かない)
 │   │   ├── analysis_pyscf.py          # 分子軌道の選択肢(HOMO/LUMO/SOMO)・Mulliken電荷など、SCF結果からの情報の取り出し
 │   │   ├── engine.py                  # Mole構築・SCF実行(GPU4PySCF自動フォールバック含む)
 │   │   ├── optimize.py                 # geomeTRICによる構造最適化
@@ -105,7 +108,7 @@ qchem_colab_app/
 │   │   ├── writer_molden.py              # moldenファイル出力
 │   │   └── visualizer_pyscf.py            # 分子軌道・原子電荷等、PySCF固有の可視化
 │   └── uma_backend/                   # UMA(機械学習ポテンシャル)専用(pyscf_backendには依存しない)
-│       ├── __init__.py               # __version__・load_yaml(common_backend.version・common_backend.config_loaderの別名)
+│       ├── __init__.py               # パッケージの説明だけ(何もimportしない。別名・再エクスポートは置かない)
 │       ├── uma_hf.py                   # Hugging Faceのトークン・アクセス確認、UmaSetupError
 │       ├── uma_engine.py              # モデルの読み込み、計算デバイスの判定、ASEのAtoms/Calculator
 │       ├── uma_optimize.py             # ASE(LBFGS等)+UMAによる構造最適化
@@ -123,7 +126,7 @@ qchem_colab_app/
     ├── test_colab_widgets.py       # ドロップ領域(JavaScriptを含むHTMLの生成)・識別子の安全確認
     ├── test_energy.py                 # エネルギーの単位換算・相対エネルギー(common_backend)
     ├── test_energy_plot.py           # クリックできるエネルギー収束グラフ(SVG)・目盛り(gui)
-    ├── test_config_loader.py          # config/のYAMLの読み込み(pyscf_backend・uma_backendが同じ関数を使っていること)
+    ├── test_config_loader.py          # config/のYAMLの読み込み(backendが別名を公開していないこと)
     ├── test_gui_input.py             # ファイルの取り出し・構造の読み込みと検証・電荷の表示と読み取り
     ├── test_gui_output.py            # ダウンロード名・ダウンロード項目
     ├── test_gui_parts.py             # 共通の画面部品(電荷・スピン多重度の入力を含む。ipywidgets・Colabの代用品を使用)
@@ -133,7 +136,7 @@ qchem_colab_app/
     ├── test_requirements.py             # requirements*.txtの方針(ipywidgetsを指定しない、など)
     ├── test_githooks.py                  # .githooksの動作(一時的なgitリポジトリで、mainでのAGENTS.mdの拒否・pushの中止を確認)
     ├── test_package_layering.py            # パッケージ構成と依存の向き(gui → *_backend → common_backend)・ノートブックのimportの検査
-    └── test_version_sync.py / test_readme.py   # バージョン番号が1つであること・README.mdとの整合
+    └── test_version_sync.py / test_readme.py   # バージョン番号が1か所だけであること・README.mdとの整合
 ```
 ```
 
@@ -274,9 +277,6 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 ## 今後の予定・検討中の事項
 
-- **再エクスポート(別名)の削除**: `pyscf_backend`・`uma_backend`の`__init__.py`にある`load_yaml`・`PROJECT_ROOT`・`CONFIG_DIR`・
-  `__version__`の別名を削除し、利用側が`common_backend.config_loader`・`common_backend.version`を直接importする。他のパッケージの
-  再エクスポートも、極力減らす。
 - **PySCF版のノートブックへの対応**: ipywidgetsが8.x系に更新された場合に備えて、UMA版の「II-0」のセルと同様のセルを
   `ColabApp.ipynb`にも追加することを検討する。
 - **2つ目の計算目的を追加するとき**: 上記「新しい計算目的を追加するときの方針」の方式を導入する。
@@ -330,8 +330,8 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 1か所だけ書く(画面のタイトル・UMA版の計算ログ・READMEとの整合検査が使うため、全ての層からimportできる`common_backend`に置く)。
 新しい機能を`develop`から`main`へリリースする直前に、次をすべて行う。
 
-1. `common_backend/version.py`の`__version__`を、新しい`X.Y.Z`に更新する(現時点では、`pyscf_backend`・`uma_backend`の`__version__`は
-   別名なので、更新は不要。`tests/test_version_sync.py`が、一致を検査する)。
+1. `common_backend/version.py`の`__version__`を、新しい`X.Y.Z`に更新する(`__version__`を定義している場所は、ここだけ。
+   `tests/test_version_sync.py`が、`pyscf_backend`・`uma_backend`に別の定義がないことを検査する)。
 2. `README.md`冒頭の「現在のバージョン」を、`vX.Y.Z`に更新する(`tests/test_readme.py`が、`__version__`との一致、リンク、コードフェンス、
    記載ファイルの存在を検査する)。
 3. このファイル末尾の「仕様書」と「ディレクトリ構成」を見直し、追加・変更したファイルと仕様を反映する。
@@ -503,7 +503,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 	- `load_yaml(filename: str) -> dict | list`
 
-		引数: `config/` 内の YAML ファイル名。戻り値: パース結果。目的: 設定読込みを一元化し、ファイルが無いときは配置を確認する日本語メッセージの `FileNotFoundError` にする。呼出元: `pyscf_backend.load_yaml`, `uma_backend.load_yaml`（別名）。
+		引数: `config/` 内の YAML ファイル名。戻り値: パース結果。目的: 設定読込みを一元化し、ファイルが無いときは配置を確認する日本語メッセージの `FileNotFoundError` にする。呼出元: `gui.pyscf_screen.build_app`, `gui.uma_screen.build_app`, `pyscf_backend.engine._load_functional`, `pyscf_backend.engine._load_basis`。
 
 - `energy.py`
 
@@ -548,7 +548,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 - `version.py`
 
-	リポジトリ全体のリリース番号 `__version__`（Git タグと同じ値）を 1 か所だけで定義する。`pyscf_backend.__version__`・`uma_backend.__version__` は、この値の別名。画面のタイトル、UMA 版の計算ログ、README との整合検査が使う。更新手順は「バージョン管理・ブランチ運用」の「バージョン番号（`__version__`）の更新」を参照する。
+	リポジトリ全体のリリース番号 `__version__`（Git タグと同じ値）を 1 か所だけで定義する。画面のタイトル（`gui.pyscf_screen`・`gui.uma_screen`）、`pyscf_backend.pipeline`・`uma_backend.uma_pipeline` の出力 xyz のコメント、UMA 版の計算ログ、README との整合検査が、この値を直接 import して使う（`pyscf_backend`・`uma_backend` には別名を置かない）。更新手順は「バージョン管理・ブランチ運用」の「バージョン番号（`__version__`）の更新」を参照する。
 
 - `writer_xyz.py`
 
@@ -767,7 +767,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
 
 - `__init__.py`
 
-	`common_backend.config_loader` の `PROJECT_ROOT`・`CONFIG_DIR`・`load_yaml` と `common_backend.version.__version__` を、このパッケージの名前でも使えるようにした別名。独自の関数は持たない。呼出元: `gui.pyscf_screen.build_app`, `pyscf_backend.engine._load_functional`, `pyscf_backend.engine._load_basis`。
+	パッケージの説明だけを書き、何も import しない。他のモジュールの名前を別名として公開しない（設定の読み込みは `common_backend.config_loader`、バージョンは `common_backend.version` を、使う側が直接 import する）。
 
 - `engine.py`
 
@@ -791,7 +791,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
 
 	- `_load_functional(functional_key: str) -> dict` / `_load_basis(basis_key: str) -> dict` / `_try_import_gpu4pyscf() -> module | None`
 
-		引数: YAML の手法／基底関数キー、またはなし。戻り値: 対応する設定辞書、または GPU4PySCF モジュール・`None`。目的: YAML 検索と GPU の任意依存を分離する内部補助関数。呼出先: `pyscf_backend.load_yaml`; 呼出元: `build_mole`, `build_scf`。
+		引数: YAML の手法／基底関数キー、またはなし。戻り値: 対応する設定辞書、または GPU4PySCF モジュール・`None`。目的: YAML 検索と GPU の任意依存を分離する内部補助関数。呼出先: `common_backend.config_loader.load_yaml`; 呼出元: `build_mole`, `build_scf`。
 
 	- `build_scf(mol, functional_key: str, try_gpu: bool = True) -> tuple[object, bool, str]`
 
@@ -904,7 +904,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
 
 - `__init__.py`
 
-	`common_backend.config_loader` の `PROJECT_ROOT`・`CONFIG_DIR`・`load_yaml` と `common_backend.version.__version__` を、このパッケージの名前でも使えるようにした別名（`pyscf_backend` には依存しない）。独自の関数は持たない。呼出元: `gui.uma_screen.build_app`。
+	パッケージの説明だけを書き、何も import しない（`pyscf_backend` にも依存しない）。他のモジュールの名前を別名として公開しない（設定の読み込みは `common_backend.config_loader`、バージョンは `common_backend.version` を、使う側が直接 import する）。
 
 - `uma_engine.py`
 
@@ -1101,7 +1101,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `pyscf_backend.engine` `write_optimization_outputs` は `write_final_structure` と `write_trajectory` を呼び出す。
 
-	`_load_functional` と `_load_basis` は `pyscf_backend.load_yaml`（`common_backend.config_loader.load_yaml` の別名）を、`build_mole` は `_load_basis` を、`build_scf` は `_load_functional` と `_try_import_gpu4pyscf` を呼び出す。`run_scf` はプロジェクト内の別関数を呼び出さない。
+	`_load_functional` と `_load_basis` は `common_backend.config_loader.load_yaml` を、`build_mole` は `_load_basis` を、`build_scf` は `_load_functional` と `_try_import_gpu4pyscf` を呼び出す。`run_scf` はプロジェクト内の別関数を呼び出さない。
 
 - `pyscf_backend.optimize`
 
@@ -1173,7 +1173,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_config_loader.py`
 
-	対象: `common_backend.config_loader.load_yaml`, `CONFIG_DIR`, `PROJECT_ROOT`。`config/` の場所、YAML の読込み、存在しないファイルのエラー、`pyscf_backend`・`uma_backend` が同じ関数・同じ場所を使っていること（別名）を検証する。
+	対象: `common_backend.config_loader.load_yaml`, `CONFIG_DIR`, `PROJECT_ROOT`。`config/` の場所、YAML の読込み、存在しないファイルのエラー、`pyscf_backend`・`uma_backend` が `load_yaml`・`CONFIG_DIR`・`PROJECT_ROOT` を再エクスポートしていないことを検証する。
 
 - `test_energy.py`
 
@@ -1210,7 +1210,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_config.py`
 
-	対象: `pyscf_backend.load_yaml` と `config/purposes.yaml`, `functionals.yaml`, `basis_sets.yaml`, `defaults.yaml`。PySCF 用 YAML の必須キー、HF/B3LYP、基底関数、既定値を検証する。
+	対象: `common_backend.config_loader.load_yaml` と `config/purposes.yaml`, `functionals.yaml`, `basis_sets.yaml`, `defaults.yaml`。PySCF 用 YAML の必須キー、HF/B3LYP、基底関数、既定値を検証する。
 
 - `test_notebooks_hidden_code.py`
 
@@ -1222,11 +1222,11 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_package_layering.py`
 
-	対象: リポジトリのパッケージ構成と、import の依存の向き。ルート直下に `.py` が無いこと、`qchem_colab_app` の下が `common_backend`・`gui`・`pyscf_backend`・`uma_backend` だけであること、最上位と `gui` の `__init__.py` が何も import しないこと、各パッケージが許された依存先（`gui` → `pyscf_backend`・`uma_backend` → `common_backend`）だけを import していること（関数の中の import も含む。相対 import は不可）、バックエンドが `ipywidgets`・`IPython` を import しないこと、`gui` の共通部品が計算エンジンのパッケージを import せず、各画面が自分のエンジンだけを呼ぶこと、ノートブックが `gui` の画面と `uma_backend.uma_hf` だけを import し、各ノートブックが自分の画面を1つだけ読み込むことを、ソースの構文解析で検証する（ipywidgets などが無くても動く）。
+	対象: リポジトリのパッケージ構成と、import の依存の向き。ルート直下に `.py` が無いこと、`qchem_colab_app` の下が `common_backend`・`gui`・`pyscf_backend`・`uma_backend` だけであること、最上位と各パッケージの `__init__.py` が何も import しない（再エクスポートをしない）こと、各パッケージが許された依存先（`gui` → `pyscf_backend`・`uma_backend` → `common_backend`）だけを import していること（関数の中の import も含む。相対 import は不可）、バックエンドが `ipywidgets`・`IPython` を import しないこと、`gui` の共通部品が計算エンジンのパッケージを import せず、各画面が自分のエンジンだけを呼ぶこと、ノートブックが `gui` の画面と `uma_backend.uma_hf` だけを import し、各ノートブックが自分の画面を1つだけ読み込むことを、ソースの構文解析で検証する（ipywidgets などが無くても動く）。
 
 - `test_readme.py`
 
-	対象: `README.md`, `pyscf_backend.__version__`, `uma_backend.__version__`。両パッケージの版数と README 冒頭の表示、一対のコードフェンス、相対リンク、バッククォートで記載されたファイル、両 Colab ノートブックへのリンク、`README.md` に `build_notebook.py` が書かれていないことを検証する。
+	対象: `README.md`, `common_backend.version.__version__`。README 冒頭の版数の表示、一対のコードフェンス、相対リンク、バッククォートで記載されたファイル、両 Colab ノートブックへのリンク、`README.md` に `build_notebook.py` が書かれていないことを検証する。
 
 - `test_requirements.py`
 
@@ -1234,7 +1234,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_config.py`
 
-	対象: `uma_backend.load_yaml` と `config/uma_defaults.yaml`, `uma_models.yaml`。UMA の GUI・タスク・最適化・振動数・検証設定、モデルキーの一意性と非推奨モデルの除外、存在しない YAML のエラーを検証する。
+	対象: `common_backend.config_loader.load_yaml` と `config/uma_defaults.yaml`, `uma_models.yaml`。UMA の GUI・タスク・最適化・振動数・検証設定、モデルキーの一意性と非推奨モデルの除外、存在しない YAML のエラーを検証する。
 
 - `test_uma_engine.py`
 
@@ -1266,7 +1266,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_version_sync.py`
 
-	対象: `common_backend.version.__version__`, `pyscf_backend.__version__`, `uma_backend.__version__`。両パッケージの値が `common_backend.version` の値と一致し、`major.minor.patch` 形式のリリース番号であることを検証する。
+	対象: `common_backend.version.__version__`, `pyscf_backend`, `uma_backend`。`major.minor.patch` 形式のリリース番号であること、`pyscf_backend`・`uma_backend` が `__version__` を別に持たないことを検証する。
 
 - `test_visualizer.py`
 
