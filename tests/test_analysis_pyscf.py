@@ -14,6 +14,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from qchem_colab_app.common_backend import energy  # noqa: E402
 from qchem_colab_app.pyscf_backend import analysis_pyscf  # noqa: E402
 
 
@@ -145,7 +146,8 @@ class TestOrbitalEnergyDisplay(unittest.TestCase):
         self.assertTrue(self._label_of(5).endswith("  +5.44 eV"))       # +0.2 Hartree
 
     def test_conversion_uses_the_standard_hartree_to_ev_factor(self):
-        self.assertAlmostEqual(analysis_pyscf.HARTREE_TO_EV, 27.211386245988)
+        self.assertAlmostEqual(energy.HARTREE_TO_EV, 27.211386245988)
+        self.assertFalse(hasattr(analysis_pyscf, "HARTREE_TO_EV"))     # 換算係数は、common_backend.energyの1か所だけ
         self.assertTrue(self._label_of(0).endswith("  -557.83 eV"))     # -20.5 Hartree
 
     def test_energies_decrease_down_the_list(self):

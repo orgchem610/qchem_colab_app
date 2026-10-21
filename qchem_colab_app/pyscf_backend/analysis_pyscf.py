@@ -12,22 +12,10 @@ from collections import namedtuple
 
 import numpy as np
 
+from qchem_colab_app.common_backend import elements, energy
+
 # 軌道エネルギーの差がこの値(Hartree)以内なら、縮退している(同じエネルギー)とみなす
 DEGENERACY_TOLERANCE_HARTREE = 1.0e-4
-
-# 軌道エネルギーの単位換算(1 Hartree = 27.211386245988 eV)
-HARTREE_TO_EV = 27.211386245988
-
-# 原子番号 1〜54(H〜Xe)の元素記号。軌道の数え上げ(valence_space_size)に使う。
-_ELEMENT_SYMBOLS = (
-    "H", "He",
-    "Li", "Be", "B", "C", "N", "O", "F", "Ne",
-    "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar",
-    "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
-    "Ga", "Ge", "As", "Se", "Br", "Kr",
-    "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
-    "In", "Sn", "Sb", "Te", "I", "Xe",
-)
 
 # 分子軌道の選択肢(orbital_choices の戻り値)
 #   options       : [(表示名, 軌道番号), ...]。ドロップダウンの選択肢としてそのまま使える。
@@ -44,9 +32,8 @@ def _core_and_valence_orbital_counts(symbol):
     未対応)は、(n-1)d軌道も価電子殻に含める。Ga〜Kr・In〜Xeの(n-1)d軌道は、内殻とみなす。
     表にない記号は、内殻なし・価電子殻4軌道として扱う。
     """
-    try:
-        z = _ELEMENT_SYMBOLS.index(str(symbol).strip().capitalize()) + 1
-    except ValueError:
+    z = elements.ATOMIC_NUMBERS.get(str(symbol).strip().capitalize())
+    if z is None:
         return 0, 4
     if z <= 2:
         return 0, 1          # H, He: 1s
@@ -89,16 +76,16 @@ def _occupations(mf):
     開殻では、αスピンの軌道を基準に扱う(軌道の表示もαスピンの軌道)。
     """
     occ = np.asarray(mf.mo_occ, dtype=float)
-    energy = np.asarray(mf.mo_energy, dtype=float)
+    mo_energy = np.asarray(mf.mo_energy, dtype=float)
     if occ.ndim == 2:
         occ_alpha = occ[0]
         occ_total = occ[0] + occ[1]
     else:
         occ_total = occ
         occ_alpha = (occ > 0).astype(float)
-    if energy.ndim == 2:
-        energy = energy[0]
-    return occ_total, occ_alpha, energy
+    if mo_energy.ndim == 2:
+        mo_energy = mo_energy[0]
+    return occ_total, occ_alpha, mo_energy
 
 
 def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
@@ -123,7 +110,7 @@ def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
 
     最初に選んでおく軌道は、電子が入っている(αスピンの)軌道のうち、最も番号の大きいもの。
     """
-    occ_total, occ_alpha, energy = _occupations(mf)
+    occ_total, occ_alpha, mo_energy = _occupations(mf)
     n_mo = len(occ_total)
 
     occupied = [i for i in range(n_mo) if occ_alpha[i] > 0]
@@ -138,10 +125,10 @@ def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
         empty = [i for i in range(n_mo) if occ_total[i] <= 0]
         if filled:
             homo = max(filled)
-            homo_set = {i for i in filled if abs(energy[i] - energy[homo]) <= degeneracy_tolerance}
+            homo_set = {i for i in filled if abs(mo_energy[i] - mo_energy[homo]) <= degeneracy_tolerance}
         if empty:
             lumo = min(empty)
-            lumo_set = {i for i in empty if abs(energy[i] - energy[lumo]) <= degeneracy_tolerance}
+            lumo_set = {i for i in empty if abs(mo_energy[i] - mo_energy[lumo]) <= degeneracy_tolerance}
 
     n_core, n_valence = valence_space_size(mol)
     upper = max(n_core + n_valence, default_index + 1, max(lumo_set) + 1 if lumo_set else 0)
@@ -157,7 +144,7 @@ def orbital_choices(mol, mf, degeneracy_tolerance=DEGENERACY_TOLERANCE_HARTREE):
             label += "(HOMO)"
         elif i in lumo_set:
             label += "(LUMO)"
-        label += f"  {energy[i] * HARTREE_TO_EV:+.2f} eV"
+        label += f"  {mo_energy[i] * energy.HARTREE_TO_EV:+.2f} eV"
         options.append((label, i))
     options.reverse()   # エネルギーの低い軌道が、リストの下に来るようにする
     return OrbitalChoices(options, default_index, open_shell)
