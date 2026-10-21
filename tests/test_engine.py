@@ -1,16 +1,14 @@
 """
 tests/test_engine.py
 --------------------
-pyscf_backend.engine のうち、PySCF・GPUなしでテストできる部分(遷移金属の判定・GPUランタイムの判定)の単体テスト。
+pyscf_backend.engine のうち、PySCF・GPUなしでテストできる部分(遷移金属の判定)の単体テスト。
 Mole・SCFの構築と実行は、PySCFが必要なため、Colab上での実機確認が必要(README.md参照)。
 """
 
 import os
-import subprocess
 import sys
 import unittest
 from types import SimpleNamespace
-from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -40,24 +38,11 @@ class TestContainsTransitionMetal(unittest.TestCase):
         self.assertFalse(engine.contains_transition_metal(_structure([])))
 
 
-class TestGpuRuntimeDetected(unittest.TestCase):
-    def test_true_when_nvidia_smi_succeeds(self):
-        with mock.patch.object(engine.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
-            self.assertTrue(engine.gpu_runtime_detected())
-        self.assertEqual(run.call_args[0][0], ["nvidia-smi"])
-
-    def test_false_when_nvidia_smi_fails(self):
-        with mock.patch.object(engine.subprocess, "run", return_value=SimpleNamespace(returncode=9)):
-            self.assertFalse(engine.gpu_runtime_detected())
-
-    def test_false_when_the_command_does_not_exist(self):
-        with mock.patch.object(engine.subprocess, "run", side_effect=FileNotFoundError):
-            self.assertFalse(engine.gpu_runtime_detected())
-
-    def test_false_when_the_command_times_out(self):
-        with mock.patch.object(engine.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired("nvidia-smi", 15)):
-            self.assertFalse(engine.gpu_runtime_detected())
+class TestGpuDetectionIsNotHere(unittest.TestCase):
+    def test_gpu_runtime_detection_lives_in_common_backend(self):
+        # GPUランタイムの判定は common_backend.runtime(tests/test_runtime.py が検査)にあり、engineには置かない
+        self.assertFalse(hasattr(engine, "gpu_runtime_detected"))
+        self.assertFalse(hasattr(engine, "subprocess"))
 
 
 if __name__ == "__main__":

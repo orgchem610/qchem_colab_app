@@ -21,7 +21,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-from qchem_colab_app.common_backend import io_reader, version, writer_xyz
+from qchem_colab_app.common_backend import io_reader, runtime, version, writer_xyz
 from qchem_colab_app.pyscf_backend import engine, freq as freq_module, optimize, writer_molden
 
 
@@ -72,7 +72,7 @@ def run_calculation(structure, settings, defaults, log=print):
     t_total_start = time.perf_counter()
     functional_key = settings.functional_key
     basis_key = settings.basis_key
-    try_gpu = settings.try_gpu if settings.try_gpu is not None else engine.gpu_runtime_detected()
+    try_gpu = settings.try_gpu if settings.try_gpu is not None else runtime.nvidia_gpu_detected()
 
     if engine.contains_transition_metal(structure):
         raise io_reader.StructureError(

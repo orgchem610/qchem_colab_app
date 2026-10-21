@@ -2,7 +2,7 @@
 tests/test_pipeline.py
 ----------------------
 pyscf_backend.pipeline(PySCF版の計算の流れ)の単体テスト。
-PySCFは使わず、engine・optimize・freq・writer_molden を代用の関数に差し替えて、
+PySCFは使わず、engine・optimize・freq・writer_molden・runtime(GPUの判定)を代用の関数に差し替えて、
 各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
 PySCFによる実際の計算は、Colab上での実機確認が必要。
 """
@@ -91,7 +91,7 @@ class _Base(unittest.TestCase):
             mock.patch.object(pipeline.engine, "build_mole", build_mole),
             mock.patch.object(pipeline.engine, "build_scf", build_scf),
             mock.patch.object(pipeline.engine, "run_scf", run_scf),
-            mock.patch.object(pipeline.engine, "gpu_runtime_detected", lambda: self.gpu_detected),
+            mock.patch.object(pipeline.runtime, "nvidia_gpu_detected", lambda: self.gpu_detected),
             mock.patch.object(pipeline.optimize, "run_geometry_optimization", run_geometry_optimization),
             mock.patch.object(pipeline.freq_module, "run_frequency_analysis", run_frequency_analysis),
             mock.patch.object(pipeline.writer_molden, "write_molden", write_molden),

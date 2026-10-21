@@ -3,7 +3,7 @@ uma_backend.uma_engine
 ------------------
 UMA(fairchem-core)で計算するための土台となるモジュール。
 
-    - 計算デバイス(GPU/CPU)の判定
+    - 計算デバイスの説明文(ログ表示用)
     - 学習済みモデル(predictor)の読み込み(同じモデルは使い回す)
     - ASEのAtomsとCalculatorの構築
 
@@ -15,21 +15,13 @@ fairchem・torch・aseは、このファイルを読み込んだだけではimpo
 このモジュール自体は読み込め、単体テストできる。
 """
 
+from qchem_colab_app.common_backend import ase_bridge
 from qchem_colab_app.uma_backend import uma_hf
 
 
 # -----------------------------------------------------------------------------
 # デバイス・モデル・Calculator
 # -----------------------------------------------------------------------------
-
-def get_device():
-    """"cuda"(GPUあり)または"cpu"を返す。torchが無ければ"cpu"。"""
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
 
 def describe_device(device):
     """ログ表示用のデバイス説明文。"""
@@ -83,12 +75,11 @@ def make_calculator(predictor, task_name="omol"):
 def build_atoms(structure, charge, multiplicity):
     """common_backend.io_reader.Structure から、電荷・スピン多重度付きのASE Atomsを作る。
 
-    UMA(omolタスク)には、電荷を atoms.info["charge"]、スピン多重度を
-    atoms.info["spin"] として渡す(fairchemのREADME・ColabReactionと同じ方式)。
+    Atoms本体は common_backend.ase_bridge.structure_to_atoms で作り、ここでは、UMA(omolタスク)に
+    渡す電荷を atoms.info["charge"]、スピン多重度を atoms.info["spin"] に設定する
+    (fairchemのREADME・ColabReactionと同じ方式。このキー名はUMA固有の約束)。
     """
-    from ase import Atoms
-    atoms = Atoms(symbols=list(structure.symbols),
-                  positions=[list(c) for c in structure.coords])
+    atoms = ase_bridge.structure_to_atoms(structure)
     atoms.info["charge"] = int(charge)
     atoms.info["spin"] = int(multiplicity)
     return atoms

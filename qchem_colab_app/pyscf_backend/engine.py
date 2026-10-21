@@ -17,7 +17,6 @@ GPU4PySCF がインストールされ、かつ実際に初期化に成功した�
   固定していない(詳細はrequirements.txtのコメント参照)。
 """
 
-import subprocess
 import warnings
 
 from qchem_colab_app.common_backend import config_loader
@@ -90,20 +89,6 @@ def build_mole(structure: Structure, charge: int, multiplicity: int, basis_key: 
     mol.cart = True
     mol.build()
     return mol
-
-
-def gpu_runtime_detected() -> bool:
-    """GPUランタイム(NVIDIA GPU)が割り当てられているかを nvidia-smi の成否で判定する。
-
-    ColabApp.ipynb の Setup Section と同じ判定方法。CPUのみのランタイムでは
-    nvidia-smi コマンド自体が存在せず FileNotFoundError になるため、
-    その場合はGPUなしと判定する。GPU4PySCFの導入に失敗している場合などは、
-    build_scf() が自動的にCPU実行へフォールバックする。
-    """
-    try:
-        return subprocess.run(["nvidia-smi"], capture_output=True, timeout=15).returncode == 0
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return False
 
 
 def _try_import_gpu4pyscf():
