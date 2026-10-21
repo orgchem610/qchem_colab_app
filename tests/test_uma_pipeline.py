@@ -68,7 +68,7 @@ class _Base(unittest.TestCase):
             optimizer_name="LBFGS", fmax_target=0.01)
         self.freq_result = SimpleNamespace(
             elapsed_seconds=1.0, n_imaginary=0, warning_message="", frequencies_cm1=[1600.0],
-            thermo_summary={})
+            zpe_hartree=None)
 
         def check_model_access():
             self.calls.append(("check_model_access",))
