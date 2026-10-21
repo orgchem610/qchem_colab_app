@@ -23,18 +23,24 @@ pyscf.geomopt.geometric_solver.optimize() の callback に渡される辞書(env
 import time
 import warnings
 
+from qchem_colab_app.common_backend import optimization
 
-class OptimizationResult:
+
+class OptimizationResult(optimization.OptimizationResult):
+    """PySCF版の構造最適化の結果。共通の項目に、PySCF・GPUの項目を足す。
+
+    mol_final   : 最適化後の構造の pyscf Mole
+    used_gpu    : GPU4PySCFで最適化したか
+    gpu_message : GPUの使用・フォールバックについての説明
+    dm0_guess   : 最終ステップの密度行列(CPU再計算の初期値用。取得できない場合はNone)
+    """
+
     def __init__(self):
+        super().__init__()
         self.mol_final = None
         self.used_gpu = False
         self.gpu_message = ""
-        self.energies = []        # 各ステップのエネルギー(Hartree)
-        self.coords_history = []  # 各ステップの座標(Å)。要素は [[x,y,z], ...]
-        self.symbols = []
-        self.converged = False
-        self.elapsed_seconds = 0.0
-        self.dm0_guess = None     # 最終ステップの密度行列(CPU再計算の初期値用、取得できない場合はNone)
+        self.dm0_guess = None
 
 
 def _to_numpy(arr):

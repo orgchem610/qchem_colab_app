@@ -18,6 +18,10 @@ from qchem_colab_app.common_backend import io_reader  # noqa: E402
 from qchem_colab_app.gui import inputs as gui_input  # noqa: E402
 
 
+def _water():
+    return io_reader.Structure(symbols=["O", "H", "H"], coords=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]])
+
+
 class TestExtractUploadedFile(unittest.TestCase):
     CONTENT = b"3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"
 
@@ -58,7 +62,7 @@ class TestReadUploadedStructure(unittest.TestCase):
 
     def setUp(self):
         self.seen = {}
-        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+        self.structure = _water()
 
         def read_structure(path):
             self.seen["path"] = path
@@ -101,7 +105,7 @@ class TestReadUploadedStructure(unittest.TestCase):
 
 class TestDescribeStructure(unittest.TestCase):
     def test_file_name_atom_count_and_composition(self):
-        text = gui_input.describe_structure(SimpleNamespace(symbols=["O", "H", "H"]), "water.xyz")
+        text = gui_input.describe_structure(_water(), "water.xyz")
         self.assertEqual(text, "ファイル: water.xyz  原子数: 3  組成: H, O")
 
 
@@ -111,7 +115,7 @@ class TestLoadUploadedStructure(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.seen = {}
-        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+        self.structure = _water()
 
         def read_structure(path):
             self.seen["path"] = path

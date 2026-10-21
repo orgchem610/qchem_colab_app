@@ -20,8 +20,10 @@
   テストの対象)、上の「ディレクトリ構成」、`README.md`も更新する(`README.md`は利用者向けの内容だけ。
   実装に関するメモは、このファイルに書く)。仕様書の書き方は、「仕様(モジュールと関数)」の冒頭を参照する。
 - **修正が必要なテストを探すときは、変更した項目の「関連テスト」を見る**(`python3 tests/spec_analysis.py --fix`で、最新にしてから)。
-  結果クラス(`FrequencyResult`・`OptimizationResult`など)の代用品には、`SimpleNamespace`ではなく、実物のクラスを使う
-  (属性だけを真似る代用品は、属性名の変更や削除が、関連テストから見つからず、テストが古いまま残るため)。
+  このリポジトリで定義しているクラス(`Structure`・`FrequencyResult`・`OptimizationResult`など)の代用品には、`SimpleNamespace`ではなく、
+  実物のクラスを使う(属性だけを真似る代用品は、属性名の変更や削除が、関連テストから見つからず、テストが古いまま残るため)。
+  `gui`・`common_backend`のテストでは、エンジンのパッケージをimportしないため、共通の親クラス(`common_backend.optimization.OptimizationResult`等)を使う。
+  外部ライブラリのオブジェクト(PySCFのMole・SCF、py3Dmol、ipywidgetsのFileUploadの値など)は、このリポジトリに定義がないため、この対象外とする。
 - パッケージの依存の向きは、`gui` → `pyscf_backend`・`uma_backend` → `common_backend`(一方向)。`pyscf_backend/`と
   `uma_backend/`は、お互いをimportしない。バックエンド(`common_backend`・`pyscf_backend`・`uma_backend`)は、`gui`・
   `ipywidgets`・`IPython`をimportしない。`gui`の共通部品(`parts`など)は、`pyscf_backend`・`uma_backend`をimportしない。
@@ -41,10 +43,11 @@
     ダウンロード名の既定値、設定の読み込み(`common_backend.config_loader.load_yaml`)と`__version__`(`common_backend.version`)、
     エネルギーの単位換算(`common_backend.energy`)、cubeファイルの読み取り(`common_backend.cube`)、
     振動数解析の数値計算と結果の入れ物(`common_backend.vibration`。数値計算を使うのは現在UMA版だけ。`FrequencyResult`は両方が使い、
-    PySCF版は子クラスで熱力学量の項目を足す)、元素のデータ(`common_backend.elements`)、GPUの判定(`common_backend.runtime`)、
+    PySCF版は子クラスで熱力学量の項目を足す)、
+    最適化の結果の入れ物(`common_backend.optimization`。`OptimizationResult`は両方が使い、PySCF版・UMA版は子クラスでエンジン固有の項目を足す)、元素のデータ(`common_backend.elements`)、GPUの判定(`common_backend.runtime`)、
     ASEのAtomsへの変換(`common_backend.ase_bridge`)、原子電荷の描画(`gui.plot_common`)。
     1か所からしか呼ばれていなくても、特定のエンジンに依存しない部品は、共通のパッケージに置く方針である。
-  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、結果クラス(`OptimizationResult`等。共通の親クラスを作るかは、「今後の予定・検討中の事項」を参照)、
+  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、計算の流れの結果クラス(`CalculationResult`)、
     設定ファイル(`defaults.yaml`・`uma_defaults.yaml`)、扱える元素の範囲、ノートブックの「1-a〜1-c」セル(リポジトリ取得前に動くため)。
 - `AGENTS.md`は、`develop`・`feature/*`では追跡し、`main`では追跡しない。Claudeが`main`へのマージの手順を案内するときは、
   必ず「`AGENTS.md`のGit管理」と「`main`ブランチへのリリース(マージ)の手順」の4(`--no-ff --no-commit`でマージ →
@@ -99,6 +102,7 @@ qchem_colab_app/
 │   │   ├── io_reader.py             # 構造ファイルの読み込み・入力バリデーション
 │   │   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム・最適化の標準出力2ファイル)
 │   │   ├── energy.py                  # エネルギーの単位換算(Hartree・eV・kcal/mol)・相対エネルギー(バックエンドと画面の両方が使う)
+│   │   ├── optimization.py             # 構造最適化の結果の入れ物(OptimizationResult。PySCF版・UMA版の共通の親クラス。エンジンに依存しない)
 │   │   └── vibration.py                # 振動数解析の数値計算(中心差分のHessian・並進回転を除いた調和解析・ZPE。純粋なnumpy)
 │   ├── gui/                        # 画面の層(ipywidgets・ColabのJavaScript連携・3D表示・SVGグラフ)
 │   │   ├── __init__.py               # 説明だけ(何もimportしない)
@@ -132,6 +136,7 @@ qchem_colab_app/
     ├── test_io_reader.py / test_config.py / test_visualizer.py   # 入力・設定・分子軌道の可視化(PySCF非依存部分)
     ├── test_cube.py                  # cubeファイルの値の読み取り(common_backend)
     ├── test_plot_common.py          # 原子電荷の色分け・数値ラベル・電荷表(gui。py3Dmolの代用品を使用)
+    ├── test_optimization.py           # 最適化の結果の共通の親クラスと、PySCF版・UMA版の子クラス(common_backend)
     ├── test_vibration.py              # 振動数解析の数値計算・FrequencyResult(common_backend。バネのモデルの解析解・ASEとの照合)
     ├── test_elements.py / test_runtime.py / test_ase_bridge.py   # 元素表・GPU判定・ASEへの変換(common_backend。torch・ASEの代用品を使用)
     ├── test_freq.py                   # PySCF版の振動数解析の結果の組み立て(pyscf.hessian.thermoの代用品を使用)
@@ -173,7 +178,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 一方向に依存させるための構成である。
 
 - `common_backend`: 画面にも計算エンジンにも依存しない共通部品(設定の読み込み・バージョン・構造の読み込み・xyz出力・
-  エネルギーの換算・元素のデータ・GPUの判定・ASEへの変換・振動数解析の数値計算)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
+  エネルギーの換算・元素のデータ・GPUの判定・ASEへの変換・振動数解析の数値計算・最適化の結果の入れ物)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
 - `pyscf_backend`: PySCF専用。PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えない。
 - `uma_backend`: UMA専用。`pyscf_backend`を一切importしない(PySCFがインストールされていない環境でも動くようにするため)。
 - `gui`: 画面。共通の画面部品(`parts`・`inputs`・`outputs`・`colab_widgets`・`energy_plot`・`plot_common`)は、
@@ -316,9 +321,6 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
   最終構造のCPU再計算と振動数計算を、常にCPUで行う)。
 - **PySCF版の虚振動の扱いの確認**: `pyscf_backend/freq.py`は、PySCFが返す振動数を`float(f.real)`で実数にしている。
   虚振動のある構造で、Colab実機で、虚振動が負の値として数えられているかを確認する(PySCFの版による違いの可能性がある)。
-- **`OptimizationResult`の共通の親クラス**: `pyscf_backend.optimize`と`uma_backend.uma_optimize`に、`symbols`・`energies`・
-  `coords_history`・`converged`・`elapsed_seconds`が共通の結果クラスが2つある。`FrequencyResult`と同じ形(共通の親+エンジン固有の項目を
-  足す子)にするかを検討する。
 - **`io_reader._read_with_ase`の移動**: `ase_bridge`へ移すと、`io_reader`と`ase_bridge`が互いをimportする。`Structure`・`StructureError`を
   別のモジュールに分ければ移せるが、importする側が広く変わる。必要になった時点で検討する。
 
@@ -648,7 +650,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 元素記号、Å 単位座標、注釈を保持するデータクラス。PySCF/UMA 共通入力形式
     - 呼出先: なし
     - 呼出元: `_read_with_ase`、`read_xyz`
-    - 関連テスト: `tests/test_io_reader.py`
+    - 関連テスト: `tests/test_ase_bridge.py`、`tests/test_engine.py`、`tests/test_gui_input.py`、`tests/test_io_reader.py`、`tests/test_pipeline.py`、`tests/test_uma_pipeline.py`
 
   - `read_xyz(filepath: str) -> Structure`
     - 引数: XYZ ファイルパス
@@ -690,6 +692,18 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `gui.inputs.load_uploaded_structure`
     - 関連テスト: `tests/test_gui_input.py`、`tests/test_io_reader.py`
+
+- `optimization.py`
+
+  構造最適化の結果の入れ物。PySCF にも ASE にも UMA にも依存しない。PySCF 版・UMA 版の共通の親クラス `OptimizationResult` を置き、それぞれの `OptimizationResult`（`pyscf_backend.optimize`・`uma_backend.uma_optimize`）は、この親クラスの子クラスとして、エンジン固有の項目を足す（振動数解析の `common_backend.vibration.FrequencyResult` と同じ構成）。画面（`gui.parts.EnergyStructureViewer`）と出力関数（`common_backend.writer_xyz.write_optimization_outputs`）は、共通の項目だけを使う。
+
+  - `OptimizationResult()`
+    - 引数: なし
+    - 戻り値: `symbols`（元素記号のリスト）、`energies`（各ステップのエネルギー [Hartree]）、`coords_history`（各ステップの座標 [Å]。要素は `[[x, y, z], ...]`）、`converged`（収束したか）、`elapsed_seconds`（所要時間 [秒]）を持つ結果
+    - 目的: 構造最適化の結果を入れる、PySCF 版・UMA 版の共通の親クラス
+    - 呼出先: なし
+    - 呼出元: なし
+    - 関連テスト: `tests/test_gui_parts.py`、`tests/test_optimization.py`、`tests/test_writer_xyz.py`
 
 - `runtime.py`
 
@@ -758,7 +772,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 振動数解析の結果を入れる、PySCF 版・UMA 版の共通の親クラス。UMA 版はそのまま使い、PySCF 版は子クラスで熱力学量を足す。画面（`gui.parts.VibrationViewer`）は `frequencies_cm1` と `normal_modes` だけを使う
     - 呼出先: なし
     - 呼出元: `pyscf_backend.freq.FrequencyResult.__init__`、`uma_backend.uma_freq.run_frequency_analysis`
-    - 関連テスト: `tests/test_freq.py`、`tests/test_uma_freq.py`、`tests/test_uma_notice_report.py`、`tests/test_vibration.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_gui_parts.py`、`tests/test_uma_freq.py`、`tests/test_uma_notice_report.py`、`tests/test_uma_pipeline.py`、`tests/test_vibration.py`
     - `n_imaginary`（プロパティ）
       - 戻り値: 虚振動（負の振動数）の数
       - 目的: `frequencies_cm1` から求めるため、振動数と食い違わない
@@ -813,12 +827,12 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 関連テスト: `tests/test_writer_xyz.py`
 
   - `write_optimization_outputs(out_dir: str, final_symbols, final_coords, final_comment: str, opt_result) -> tuple[str, str]`
-    - 引数: 出力先フォルダ、最終構造の元素・座標・コメント、`symbols`・`coords_history`・`energies` を持つ最適化結果
+    - 引数: 出力先フォルダ、最終構造の元素・座標・コメント、`symbols`・`coords_history`・`energies` を持つ最適化結果（`common_backend.optimization.OptimizationResult`、またはその子クラス）
     - 戻り値: 最終構造とトラジェクトリのパス
     - 目的: 構造最適化の標準の出力 2 ファイルを同じ名前・形式で書き出す
     - 呼出先: `FINAL_STRUCTURE_FILENAME`（定数）、`write_final_structure`、`TRAJECTORY_FILENAME`（定数）、`write_trajectory`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`、`uma_backend.uma_pipeline.run_calculation`
-    - 関連テスト: `tests/test_writer_xyz.py`
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_writer_xyz.py`
 
   - `xyz_string(symbols, coords, comment: str = "") -> str`
     - 引数: 元素記号のリスト、座標のリスト、任意のコメント
@@ -1405,11 +1419,13 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
 
 - `optimize.py`
 
-  - `OptimizationResult`
-    - 目的: 最終 Mole、GPU 情報、エネルギー・座標履歴、収束状態、所要時間、再計算用密度行列を保持する結果コンテナ
+  - `OptimizationResult(common_backend.optimization.OptimizationResult)`
+    - 引数: なし
+    - 戻り値: 共通の項目に加えて、`mol_final`（最適化後の Mole）、`used_gpu`（GPU4PySCF で最適化したか）、`gpu_message`（GPU の使用・フォールバックの説明）、`dm0_guess`（再計算用の密度行列。取得できなければ `None`）を持つ結果
+    - 目的: PySCF 版の構造最適化の結果。共通の親クラスに、最終 Mole・GPU 情報・再計算用密度行列を足す
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_pipeline.py`
 
   - `_to_numpy(arr) -> numpy.ndarray`
     - 引数: NumPy または CuPy の配列
@@ -1434,7 +1450,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: 内部座標を使う geomeTRIC を採用し、有機分子の収束性を優先する
     - 呼出先: `OptimizationResult`、`pyscf_backend.engine.build_scf`、`_make_callback`、`_to_numpy`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_pipeline.py`
 
 - `freq.py`
 
@@ -1452,7 +1468,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: PySCF 版の振動数解析の結果。PySCF の `thermo.thermo` が求める熱力学量の項目を、共通の親に足す
     - 呼出先: `common_backend.vibration.FrequencyResult`
     - 呼出元: `run_frequency_analysis`
-    - 関連テスト: `tests/test_freq.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_pipeline.py`
 
   - `run_frequency_analysis(mf, defaults: dict) -> FrequencyResult`
     - 引数: 収束済み CPU SCF、周波数設定
@@ -1461,7 +1477,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: GPU Hessian は十分に検証されていないため CPU PySCF を用いる
     - 呼出先: `FrequencyResult`、`_get`、`common_backend.vibration.FrequencyResult.n_imaginary`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
-    - 関連テスト: `tests/test_freq.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_pipeline.py`
 
 - `analysis_pyscf.py`
 
@@ -1647,17 +1663,19 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 呼出元: `run_geometry_optimization`（定数）
     - 関連テスト: `tests/test_uma_config.py`
 
-  - `OptimizationResult`
-    - 目的: UMA 最適化の元素、座標・エネルギー・最大力履歴、最終 Atoms、収束状態、所要時間を保持するコンテナ。`final_fmax` プロパティは最終最大力[eV/Å]を返す
+  - `OptimizationResult(common_backend.optimization.OptimizationResult)`
+    - 引数: なし
+    - 戻り値: 共通の項目に加えて、`energies_ev`（各ステップのエネルギー [eV]）、`fmax_history`（各ステップの力の最大値 [eV/Å]）、`fmax_target`（収束条件 [eV/Å]）、`optimizer_name`（最適化アルゴリズム名）、`max_steps`（最大ステップ数）を持つ結果
+    - 目的: UMA 版の構造最適化の結果。共通の親クラスに、eV のエネルギー・最大力の履歴・最適化の条件を足す。`final_fmax` プロパティは最終最大力 [eV/Å] を返す
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_uma_notice_report.py`、`tests/test_uma_pipeline.py`
     - `final_fmax`（プロパティ）
       - 戻り値: 最後のステップの力の最大値 [eV/Å]（履歴がなければ `None`）
       - 目的: 収束の判定と、ログ・画面の表示に使う
       - 呼出先: なし
       - 呼出元: `run_geometry_optimization`（属性として参照）、`uma_backend.uma_pipeline.run_calculation`、`uma_backend.uma_report.build_log_text`
-      - 関連テスト: なし
+      - 関連テスト: `tests/test_optimization.py`
 
   - `run_geometry_optimization(atoms: ase.Atoms, calculator, opt_cfg: dict, progress = None) -> OptimizationResult`
     - 引数: 初期 Atoms、計算器、最適化設定、任意の進捗コールバック
@@ -1666,7 +1684,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: ASE 最適化器を用いて UMA Calculator と直結する
     - 呼出先: `ALLOWED_OPTIMIZERS`（定数）、`OptimizationResult`、`common_backend.energy.HARTREE_TO_EV`（定数）、`OptimizationResult.final_fmax`（属性として参照）
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
-    - 関連テスト: `tests/test_uma_optimize.py`
+    - 関連テスト: `tests/test_uma_optimize.py`、`tests/test_uma_pipeline.py`
 
 - `uma_freq.py`
 
@@ -1911,7 +1929,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_ase_bridge.py`
 
-	対象: `common_backend.ase_bridge.structure_to_atoms`。ASE を代用のモジュールに差し替えて、元素記号と座標が渡ること、入力の構造と座標を共有しないこと、電荷・スピン多重度を設定しないこと、ASE 未導入時に `ImportError` になることを検証する。ASE が入っている環境では、本物の `Atoms` でも確認する(入っていなければ、この部分だけスキップ)。
+	対象: `common_backend.ase_bridge.structure_to_atoms`。ASE を代用のモジュールに差し替えて、元素記号と座標が渡ること、入力の構造と座標を共有しないこと、電荷・スピン多重度を設定しないこと、ASE 未導入時に `ImportError` になることを検証する。ASE が入っている環境では、本物の `Atoms` でも確認する(入っていなければ、この部分だけスキップ)。構造は、実物の `common_backend.io_reader.Structure` で作る。
 
 - `test_cube.py`
 
@@ -1931,7 +1949,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_engine.py`
 
-	対象: `pyscf_backend.engine.contains_transition_metal`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、GPU ランタイムの判定が `engine` に残っていない（`common_backend.runtime` にある）ことを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。
+	対象: `pyscf_backend.engine.contains_transition_metal`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、GPU ランタイムの判定が `engine` に残っていない（`common_backend.runtime` にある）ことを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。構造は、実物の `common_backend.io_reader.Structure` で作る。
 
 - `test_freq.py`
 
@@ -1943,7 +1961,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_gui_input.py`
 
-	対象: `gui.inputs.extract_uploaded_file`, `load_uploaded_structure`, `format_charge`, `parse_charge`, `ChargeInputError`。ipywidgets 7/8 とドロップ入力の優先順位、構造の読込みと検証の順序・一時ファイルの拡張子と後始末、電荷の正負の表示・全角数字・Unicode のマイナス・空白・無効値を検証する。`load_uploaded_structure` は `io_reader` の関数を差し替え、受け渡しだけを確認する。 `read_uploaded_structure`（一時ファイルの拡張子・後始末・検証をしないこと）と `describe_structure` も検証する。
+	対象: `gui.inputs.extract_uploaded_file`, `load_uploaded_structure`, `format_charge`, `parse_charge`, `ChargeInputError`。ipywidgets 7/8 とドロップ入力の優先順位、構造の読込みと検証の順序・一時ファイルの拡張子と後始末、電荷の正負の表示・全角数字・Unicode のマイナス・空白・無効値を検証する。`load_uploaded_structure` は `io_reader` の関数を差し替え、受け渡しだけを確認する。 `read_uploaded_structure`（一時ファイルの拡張子・後始末・検証をしないこと）と `describe_structure` も検証する。構造は、実物の `common_backend.io_reader.Structure` で作る（ipywidgets のアップロード値だけを、代用品にする）。
 
 - `test_gui_output.py`
 
@@ -1952,7 +1970,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 - `test_gui_parts.py`
 
 	対象: `gui.parts.dropdown_from_list`; `StructureFileInput.__init__`, `_on_file_dropped`, `_on_upload_changed`, `read`; `EnergyStructureViewer.__init__`, `show`, `_show_structure_at_step`, `_draw_energy_plot`, `_on_slider_changed`, `_on_plot_clicked`; `VibrationViewer.__init__`, `setup`, `_on_button_clicked`; `DownloadPanel.__init__`, `show`; `ChargeInput.__init__`, `_on_text_changed`, `_step`; `MultiplicityInput.__init__`, `value`。Colab／非 Colab 入力、SVG コールバック、エネルギーと座標の対応、スライダー同期、描画失敗表示、振動モード、ダウンロード名と再描画、電荷入力の整形・無効値の巻き戻し・±1 ボタン、多重度入力の値の取得を検証する。 受け取った構造の自動表示（ドロップ・ボタン、概要、読み込めない内容の説明、表示の失敗がファイルの受取りを妨げないこと）、`EnergyStructureViewer`・`VibrationViewer`・`DownloadPanel` の `reset`、`VibrationViewer.setup` による前回のアニメーションの消去も検証する。
-Colab では、ファイル選択ボタンが画面に置かれていないこと（ドロップ領域だけ）、説明文が「枠をクリック」を案内すること、最後にドロップしたファイルが使われることを、Colab 以外では、ファイル選択ボタンが最初のウィジェットで、選んだファイルの読込み・構造の表示が動くことを検証する。
+Colab では、ファイル選択ボタンが画面に置かれていないこと（ドロップ領域だけ）、説明文が「枠をクリック」を案内すること、最後にドロップしたファイルが使われることを、Colab 以外では、ファイル選択ボタンが最初のウィジェットで、選んだファイルの読込み・構造の表示が動くことを検証する。最適化結果・振動数解析の結果は、実物の共通のクラス（`common_backend.optimization.OptimizationResult`・`common_backend.vibration.FrequencyResult`）で作る（`gui` は計算エンジンのパッケージを使わないため、親クラスを使う）。
 
 - `test_io_reader.py`
 
@@ -1966,9 +1984,13 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 	対象: `ColabApp.ipynb`, `ColabApp_UMA.ipynb`。すべてのコードセルが `cellView: form` と先頭行の `#@title 題名` を持ち（コード非表示）、題名が重複せず、セル ID が保持されていることを検証する。
 
+- `test_optimization.py`
+
+	対象: `common_backend.optimization.OptimizationResult`、および、その子クラス `pyscf_backend.optimize.OptimizationResult`・`uma_backend.uma_optimize.OptimizationResult`（`final_fmax` を含む）。空の状態、インスタンス間でリストを共有しないこと、子クラスが共通の項目を親から引き継ぎ、エンジン固有の項目だけを足していること（PySCF 版と UMA 版が、お互いの項目を持たないこと）、どちらのエンジンの結果も、共通の出力関数（`common_backend.writer_xyz.write_optimization_outputs`）が同じように受け取れることを検証する。PySCF・ASE・UMA は使わない。
+
 - `test_pipeline.py`
 
-	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`engine`・`optimize`・`freq`・`writer_molden`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。
+	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`engine`・`optimize`・`freq`・`writer_molden`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。構造・最適化結果・振動数結果は、実物のクラス（`common_backend.io_reader.Structure`・`pyscf_backend.optimize.OptimizationResult`・`pyscf_backend.freq.FrequencyResult`）で作り、PySCF の SCF オブジェクトだけを代用品にする。
 
 - `test_plot_common.py`
 
@@ -2008,7 +2030,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_pipeline.py`
 
-	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。
+	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。構造・最適化結果・振動数結果は、実物のクラス（`common_backend.io_reader.Structure`・`uma_backend.uma_optimize.OptimizationResult`・`common_backend.vibration.FrequencyResult`）で作る（虚振動の数は、振動数から求まる）。
 
 - `test_uma_notebook.py`
 
@@ -2016,7 +2038,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_notice_report.py`
 
-	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `common_backend.vibration.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。
+	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `common_backend.vibration.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。最適化結果・振動数結果は、実物のクラスで作る（最終の最大力は、`fmax_history` の最後の値から求まる）。
 
 - `test_uma_optimize.py`
 
@@ -2036,7 +2058,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_writer_xyz.py`
 
-	対象: `common_backend.writer_xyz.xyz_string`, `multiframe_xyz_string`, `write_final_structure`, `write_trajectory`, `write_optimization_outputs`。XYZ の形式、コメント、フレーム数、標準のファイル名と書出し先、最終構造がトラジェクトリの最終フレームと別でもよいことを検証する。
+	対象: `common_backend.writer_xyz.xyz_string`, `multiframe_xyz_string`, `write_final_structure`, `write_trajectory`, `write_optimization_outputs`。XYZ の形式、コメント、フレーム数、標準のファイル名と書出し先、最終構造がトラジェクトリの最終フレームと別でもよいことを検証する。最適化結果は、共通の親クラス `common_backend.optimization.OptimizationResult` の実物で作る。
 
 ### references
 

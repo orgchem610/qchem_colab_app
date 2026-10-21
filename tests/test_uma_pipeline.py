@@ -13,13 +13,12 @@ import os
 import shutil
 import sys
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qchem_colab_app.common_backend import version  # noqa: E402
-from qchem_colab_app.uma_backend import uma_hf, uma_pipeline  # noqa: E402
+from qchem_colab_app.common_backend import io_reader, version, vibration  # noqa: E402
+from qchem_colab_app.uma_backend import uma_hf, uma_optimize, uma_pipeline  # noqa: E402
 
 
 def _defaults(warn_natoms=60):
@@ -45,7 +44,29 @@ class FakeAtoms:
 
 
 def _structure(n=3):
-    return SimpleNamespace(symbols=["O"] + ["H"] * (n - 1), coords=[[0.0, 0.0, 0.0]] * n)
+    return io_reader.Structure(symbols=["O"] + ["H"] * (n - 1), coords=[[0.0, 0.0, 0.0]] * n)
+
+
+def _optimization_result(n_atoms, converged):
+    result = uma_optimize.OptimizationResult()
+    result.symbols = ["O"] + ["H"] * (n_atoms - 1)
+    result.coords_history = [[[0.0, 0.0, 0.0]] * n_atoms, [[0.0, 0.0, 0.1]] * n_atoms]
+    result.energies = [-76.0, -76.1]
+    result.energies_ev = [-2068.0, -2070.0]
+    result.fmax_history = [0.5, 0.005 if converged else 0.2]       # 最終の力の最大値(final_fmax)は、ここから求まる
+    result.converged = converged
+    result.elapsed_seconds = 2.0
+    result.max_steps = 500
+    result.optimizer_name = "LBFGS"
+    result.fmax_target = 0.01
+    return result
+
+
+def _frequency_result():
+    result = vibration.FrequencyResult()
+    result.frequencies_cm1 = [1600.0]
+    result.elapsed_seconds = 1.0
+    return result
 
 
 class _Base(unittest.TestCase):
@@ -60,15 +81,8 @@ class _Base(unittest.TestCase):
         self.predictor = object()
         self.calculator = object()
         n = self.n_atoms
-        self.opt_result = SimpleNamespace(
-            symbols=["O"] + ["H"] * (n - 1),
-            coords_history=[[[0.0, 0.0, 0.0]] * n, [[0.0, 0.0, 0.1]] * n],
-            energies=[-76.0, -76.1], energies_ev=[-2068.0, -2070.0], fmax_history=[0.5, 0.005],
-            converged=self.converged, elapsed_seconds=2.0, max_steps=500, final_fmax=0.005 if self.converged else 0.2,
-            optimizer_name="LBFGS", fmax_target=0.01)
-        self.freq_result = SimpleNamespace(
-            elapsed_seconds=1.0, n_imaginary=0, warning_message="", frequencies_cm1=[1600.0],
-            zpe_hartree=None)
+        self.opt_result = _optimization_result(n, self.converged)
+        self.freq_result = _frequency_result()
 
         def check_model_access():
             self.calls.append(("check_model_access",))
@@ -242,7 +256,7 @@ class TestLog(_Base):
         self.assertIn("収束しました。構造最適化 所要時間: 2.0 秒  (記録された点数: 2)", self.log_text)
 
     def test_frequency_summary_and_warning_are_logged(self):
-        self.freq_result.n_imaginary = 1
+        self.freq_result.frequencies_cm1 = [-35.0, 1600.0]          # 虚振動の数は、振動数から求まる
         self.freq_result.warning_message = "虚振動が1個検出されました。"
         self.run_pipeline()
         self.assertIn("振動数計算 所要時間: 1.0 秒  (虚振動: 1個)", self.log_text)

@@ -59,7 +59,8 @@ def write_optimization_outputs(out_dir, final_symbols, final_coords, final_comme
 
     PySCF版・UMA版の両方が、同じファイル名・同じ形式で出力するための関数。
     opt_result は、symbols・coords_history・energies を持つ最適化結果
-    (pyscf_backend.optimize・uma_backend.uma_optimize の OptimizationResult)。
+    (common_backend.optimization.OptimizationResult、または、その子クラスである
+    pyscf_backend.optimize・uma_backend.uma_optimize の OptimizationResult)。
     戻り値は (最終構造のパス, トラジェクトリのパス)。
     """
     final_path = os.path.join(out_dir, FINAL_STRUCTURE_FILENAME)

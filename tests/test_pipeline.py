@@ -19,7 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from qchem_colab_app.common_backend import io_reader, version  # noqa: E402
-from qchem_colab_app.pyscf_backend import pipeline  # noqa: E402
+from qchem_colab_app.pyscf_backend import freq, optimize, pipeline  # noqa: E402
 
 DEFAULTS = {"frequency": {"warn_natoms": 40}}
 
@@ -38,7 +38,26 @@ class FakeMol:
 
 
 def _structure(symbols=("O", "H", "H")):
-    return SimpleNamespace(symbols=list(symbols), coords=[[0.0, 0.0, 0.0]] * len(symbols))
+    return io_reader.Structure(symbols=list(symbols), coords=[[0.0, 0.0, 0.0]] * len(symbols))
+
+
+def _optimization_result(final_mol, n_atoms, energies):
+    result = optimize.OptimizationResult()
+    result.mol_final = final_mol
+    result.symbols = list(final_mol.symbols)
+    result.coords_history = [[[0.0, 0.0, 0.0]] * n_atoms] * 3
+    result.energies = list(energies)
+    result.gpu_message = "CPU (通常のPySCF) で計算します。"
+    result.elapsed_seconds = 1.5
+    result.dm0_guess = "dm0"
+    return result
+
+
+def _frequency_result(warning_message):
+    result = freq.FrequencyResult()
+    result.elapsed_seconds = 0.5
+    result.warning_message = warning_message
+    return result
 
 
 class _Base(unittest.TestCase):
@@ -53,13 +72,10 @@ class _Base(unittest.TestCase):
         self.logs = []
         self.mol = FakeMol()
         self.final_mol = FakeMol(("O",) + ("H",) * (self.n_atoms - 1))
-        self.opt_result = SimpleNamespace(
-            mol_final=self.final_mol, symbols=list(self.final_mol.symbols),
-            coords_history=[[[0.0, 0.0, 0.0]] * self.n_atoms] * 3, energies=list(self.energies),
-            gpu_message="CPU (通常のPySCF) で計算します。", elapsed_seconds=1.5, dm0_guess="dm0")
+        self.opt_result = _optimization_result(self.final_mol, self.n_atoms, self.energies)
         self.mf = SimpleNamespace(name="mf_cpu")
         self.mf_final = SimpleNamespace(name="mf_final")
-        self.freq_result = SimpleNamespace(elapsed_seconds=0.5, warning_message=self.freq_warning)
+        self.freq_result = _frequency_result(self.freq_warning)
         self.gpu_detected = False
 
         def build_mole(structure, charge, multiplicity, basis_key):
