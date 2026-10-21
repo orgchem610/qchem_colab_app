@@ -23,7 +23,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-from qchem_colab_app.common_backend import version, writer_xyz
+from qchem_colab_app.common_backend import runtime, version, writer_xyz
 from qchem_colab_app.uma_backend import uma_engine, uma_freq, uma_hf, uma_optimize, uma_report
 
 
@@ -42,7 +42,7 @@ class CalculationResult:
     """計算の結果と、書き出したファイルの場所。画面表示・ダウンロードに使う。"""
     structure: object            # common_backend.io_reader.Structure(読み込んだ構造)
     opt_result: object           # uma_backend.uma_optimize.OptimizationResult
-    freq_result: object          # uma_backend.uma_freq.FrequencyResult(振動数計算をしなかった場合は None)
+    freq_result: object          # common_backend.vibration.FrequencyResult(振動数計算をしなかった場合は None)
     final_symbols: list
     final_coords: list           # 単位 Å
     device_label: str            # 計算に使ったデバイスの説明(例: GPU(Tesla T4))
@@ -79,7 +79,7 @@ def run_calculation(structure, settings, defaults, log=print):
     uma_hf.check_model_access()
     log("  UMAへのアクセスを確認しました。")
 
-    device = uma_engine.get_device()
+    device = "cuda" if runtime.torch_cuda_available() else "cpu"
     device_label = uma_engine.describe_device(device)
     log(f"\n--- UMAモデル {model_key} を読み込みます(デバイス: {device_label}) ---")
     if device == "cpu":

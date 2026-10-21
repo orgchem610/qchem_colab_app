@@ -60,10 +60,9 @@ def build_log_text(*, version, model_key, task_name, device_label, input_filenam
         if freq_result.frequencies_cm1:
             for i, f in enumerate(freq_result.frequencies_cm1, start=1):
                 add(f"  モード{i:3d}: {f:10.2f}")
-            summary = freq_result.thermo_summary or {}
-            if "ZPE_Hartree" in summary:
-                add(f"ゼロ点エネルギー(ZPE): {summary['ZPE_Hartree']:.6f} Hartree"
-                    f"({summary['ZPE_kcal_per_mol']:.2f} kcal/mol)")
+            if freq_result.zpe_hartree is not None:
+                add(f"ゼロ点エネルギー(ZPE): {freq_result.zpe_hartree:.6f} Hartree"
+                    f"({freq_result.zpe_kcal_per_mol:.2f} kcal/mol)")
         if freq_result.warning_message:
             add(f"[注意] {freq_result.warning_message}")
         add("")

@@ -21,16 +21,7 @@ import os
 import re
 from dataclasses import dataclass
 
-# 元素記号 -> 原子番号 の対応表(H〜Xe程度まで用意)
-ATOMIC_NUMBERS = {
-    "H": 1, "He": 2, "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Ne": 10,
-    "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "Ar": 18,
-    "K": 19, "Ca": 20, "Sc": 21, "Ti": 22, "V": 23, "Cr": 24, "Mn": 25, "Fe": 26,
-    "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30, "Ga": 31, "Ge": 32, "As": 33, "Se": 34,
-    "Br": 35, "Kr": 36, "Rb": 37, "Sr": 38, "Y": 39, "Zr": 40, "Nb": 41, "Mo": 42,
-    "Tc": 43, "Ru": 44, "Rh": 45, "Pd": 46, "Ag": 47, "Cd": 48, "In": 49, "Sn": 50,
-    "Sb": 51, "Te": 52, "I": 53, "Xe": 54,
-}
+from qchem_colab_app.common_backend import elements
 
 # 拡張子 -> ASEに渡すformat名。ASEが標準対応している範囲のみ。
 _ASE_FORMAT_BY_EXTENSION = {
@@ -109,7 +100,7 @@ def read_xyz(filepath: str) -> Structure:
                 "読み取れません。"
             )
         symbol = parts[0][0].upper() + parts[0][1:].lower() if len(parts[0]) > 1 else parts[0].upper()
-        if symbol not in ATOMIC_NUMBERS:
+        if symbol not in elements.ATOMIC_NUMBERS:
             raise StructureError(
                 f"'{filepath}' の{i}行目にある元素記号 '{parts[0]}' を認識できません。"
                 "対応している元素か、スペルミスがないか確認してください。"
@@ -145,7 +136,7 @@ def _read_with_ase(filepath: str, ase_format: str) -> Structure:
     symbols = [str(s) for s in atoms.get_chemical_symbols()]
     coords = [list(pos) for pos in atoms.get_positions()]
 
-    unknown = sorted(set(s for s in symbols if s not in ATOMIC_NUMBERS))
+    unknown = sorted(set(s for s in symbols if s not in elements.ATOMIC_NUMBERS))
     if unknown:
         raise StructureError(
             f"'{filepath}' に対応していない元素記号が含まれています: {', '.join(unknown)}"
@@ -211,7 +202,7 @@ def validate_charge_and_multiplicity(structure: Structure, charge: int, multipli
             "不対電子のない閉殻分子であれば1を指定してください。"
         )
 
-    total_electrons = sum(ATOMIC_NUMBERS[s] for s in structure.symbols) - charge
+    total_electrons = sum(elements.ATOMIC_NUMBERS[s] for s in structure.symbols) - charge
     if total_electrons < 0:
         raise StructureError(
             f"電荷 {charge:+d} が大きすぎて、電子数が負の値({total_electrons})になります。"

@@ -34,6 +34,9 @@ class TestConstant(unittest.TestCase):
     def test_unit_conversion_constant(self):
         self.assertAlmostEqual(energy.HARTREE_TO_KCAL_MOL, 627.5094740631)
 
+    def test_hartree_to_ev(self):
+        self.assertAlmostEqual(energy.HARTREE_TO_EV, 27.211386245988, places=9)
+
 
 if __name__ == "__main__":
     unittest.main()

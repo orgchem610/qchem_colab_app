@@ -2,7 +2,7 @@
 tests/test_uma_pipeline.py
 --------------------------
 uma_backend.uma_pipeline(UMA版の計算の流れ)の単体テスト。
-UMA・fairchem・ASE・ネットワークは使わず、uma_hf・uma_engine・uma_optimize・uma_freq を
+UMA・fairchem・ASE・ネットワークは使わず、uma_hf・uma_engine・uma_optimize・uma_freq・runtime(GPUの判定)を
 代用の関数に差し替えて、各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
 UMAによる実際の計算は、Colab上での実機確認が必要。
 """
@@ -68,14 +68,14 @@ class _Base(unittest.TestCase):
             optimizer_name="LBFGS", fmax_target=0.01)
         self.freq_result = SimpleNamespace(
             elapsed_seconds=1.0, n_imaginary=0, warning_message="", frequencies_cm1=[1600.0],
-            thermo_summary={})
+            zpe_hartree=None)
 
         def check_model_access():
             self.calls.append(("check_model_access",))
 
-        def get_device():
-            self.calls.append(("get_device",))
-            return self.device
+        def torch_cuda_available():
+            self.calls.append(("torch_cuda_available",))
+            return self.device == "cuda"
 
         def describe_device(device):
             return "GPU(Test)" if device == "cuda" else "CPU(テスト)"
@@ -110,7 +110,7 @@ class _Base(unittest.TestCase):
 
         patches = [
             mock.patch.object(uma_pipeline.uma_hf, "check_model_access", check_model_access),
-            mock.patch.object(uma_pipeline.uma_engine, "get_device", get_device),
+            mock.patch.object(uma_pipeline.runtime, "torch_cuda_available", torch_cuda_available),
             mock.patch.object(uma_pipeline.uma_engine, "describe_device", describe_device),
             mock.patch.object(uma_pipeline.uma_engine, "load_predictor", load_predictor),
             mock.patch.object(uma_pipeline.uma_engine, "make_calculator", make_calculator),
@@ -149,7 +149,7 @@ class _Base(unittest.TestCase):
 class TestOrderAndHandOver(_Base):
     def test_stages_run_in_order_with_the_expected_arguments(self):
         self.run_pipeline()
-        self.assertEqual(self.names(), ["check_model_access", "get_device", "load_predictor",
+        self.assertEqual(self.names(), ["check_model_access", "torch_cuda_available", "load_predictor",
                                         "make_calculator", "build_atoms", "optimize", "frequency"])
         self.assertIn(("load_predictor", "uma-s-1p2p1", "cuda"), self.calls)
         self.assertIn(("make_calculator", True, "omol"), self.calls)      # タスク名は設定ファイルから

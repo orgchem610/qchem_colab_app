@@ -42,7 +42,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from qchem_colab_app.common_backend import config_loader, io_reader, version
-from qchem_colab_app.gui import parts, inputs, outputs
+from qchem_colab_app.gui import parts, inputs, outputs, plot_common
 from qchem_colab_app.pyscf_backend import engine, pipeline, visualizer_pyscf, analysis_pyscf
 
 
@@ -165,12 +165,13 @@ def build_app():
             view.show()
 
     def _render_charge_view():
-        mol_final = state["result"].final_mol
+        result = state["result"]
         charges = state["charges"]
         with charge_view_output:
             clear_output(wait=True)
-            view = visualizer_pyscf.render_charges(
-                mol_final, charges, show_labels=charge_labels_checkbox.value)
+            view = plot_common.render_charges(
+                result.final_symbols, result.final_coords, charges,
+                show_labels=charge_labels_checkbox.value)
             view.show()
 
     def _on_density_button_clicked(_):
@@ -183,7 +184,7 @@ def build_app():
             display(widgets.HTML(
                 "<b>原子ごとのMulliken電荷</b>"
                 "(球の色: 正電荷=青 ・ 中性付近=緑 ・ 負電荷=赤 のグラデーション)" +
-                visualizer_pyscf.atomic_charges_table_html(charges)))
+                plot_common.atomic_charges_table_html(charges)))
         charge_labels_checkbox.disabled = False
         _render_charge_view()
 

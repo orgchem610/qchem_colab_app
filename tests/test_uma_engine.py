@@ -1,7 +1,7 @@
 """
 tests/test_uma_engine.py
 ------------------------
-uma_backend.uma_engine(デバイス・モデルの読み込み・Calculator)のうち、fairchem・torch・ネットワークを
+uma_backend.uma_engine(デバイスの説明・モデルの読み込み・Calculator・Atoms)のうち、fairchem・torch・ネットワークを
 使わない部分の単体テスト。fairchemは、代用のモジュールに差し替えて、
 uma_hf(認証・例外)との受け渡しを確認する。
 モデルの実際の読み込みと推論は、Colab上での実機確認が必要。
@@ -21,6 +21,40 @@ from qchem_colab_app.uma_backend import uma_engine, uma_hf  # noqa: E402
 class TestDevice(unittest.TestCase):
     def test_cpu_description_mentions_the_slowness(self):
         self.assertIn("時間がかかります", uma_engine.describe_device("cpu"))
+
+    def test_gpu_description_names_the_device(self):
+        fake = types.ModuleType("torch")
+        fake.cuda = types.SimpleNamespace(get_device_name=lambda index: "Tesla T4")
+        with mock.patch.dict(sys.modules, {"torch": fake}):
+            self.assertEqual(uma_engine.describe_device("cuda"), "GPU(Tesla T4)")
+
+    def test_gpu_description_without_torch_falls_back_to_a_plain_label(self):
+        with mock.patch.dict(sys.modules, {"torch": None}):
+            self.assertEqual(uma_engine.describe_device("cuda"), "GPU")
+
+    def test_choosing_the_device_is_not_done_here(self):
+        # 使うデバイスの判定は common_backend.runtime.torch_cuda_available(tests/test_runtime.py が検査)
+        self.assertFalse(hasattr(uma_engine, "get_device"))
+
+
+class TestBuildAtoms(unittest.TestCase):
+    """Atoms本体の作成は ase_bridge に任せ、ここでは、電荷・スピン多重度の設定(UMA固有)を確認する。"""
+
+    def _build(self, charge, multiplicity):
+        atoms = types.SimpleNamespace(info={})
+        with mock.patch.object(uma_engine.ase_bridge, "structure_to_atoms", return_value=atoms) as convert:
+            result = uma_engine.build_atoms("STRUCTURE", charge, multiplicity)
+        convert.assert_called_once_with("STRUCTURE")
+        return result
+
+    def test_charge_and_spin_are_stored_in_the_info_for_the_omol_task(self):
+        atoms = self._build(-1, 2)
+        self.assertEqual(atoms.info, {"charge": -1, "spin": 2})
+
+    def test_values_are_converted_to_plain_integers(self):
+        atoms = self._build(1.0, 3.0)
+        self.assertIs(type(atoms.info["charge"]), int)
+        self.assertIs(type(atoms.info["spin"]), int)
 
 
 class GatedRepoError(Exception):
@@ -90,7 +124,7 @@ class TestModuleSplit(unittest.TestCase):
             self.assertFalse(hasattr(uma_engine, name), name)
 
     def test_device_model_and_atoms_functions_remain_in_uma_engine(self):
-        for name in ("get_device", "describe_device", "load_predictor", "clear_predictor_cache",
+        for name in ("describe_device", "load_predictor", "clear_predictor_cache",
                      "make_calculator", "build_atoms"):
             self.assertTrue(hasattr(uma_engine, name), name)
             self.assertFalse(hasattr(uma_hf, name), name)

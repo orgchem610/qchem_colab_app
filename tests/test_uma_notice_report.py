@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from qchem_colab_app.common_backend import vibration  # noqa: E402
 from qchem_colab_app.uma_backend import uma_notice, uma_report  # noqa: E402
 
 
@@ -54,10 +55,13 @@ def _opt_result(converged=True):
 
 
 def _freq_result():
-    return SimpleNamespace(
-        frequencies_cm1=[-35.0, 1600.5, 3700.2], elapsed_seconds=1.5,
-        thermo_summary={"ZPE_Hartree": 0.0215, "ZPE_kcal_per_mol": 13.49},
-        warning_message="虚振動が1個検出されました。")
+    # 代用品(SimpleNamespace)ではなく実物を使う: 属性名の変更に、テストが追従できる(AGENTS.mdの「関連テスト」でも検出できる)
+    result = vibration.FrequencyResult()
+    result.frequencies_cm1 = [-35.0, 1600.5, 3700.2]
+    result.elapsed_seconds = 1.5
+    result.zpe_hartree = 0.0215
+    result.warning_message = "虚振動が1個検出されました。"
+    return result
 
 
 def _build(**overrides):
@@ -92,6 +96,17 @@ class TestReport(unittest.TestCase):
         self.assertIn("3700.20", text)
         self.assertIn("ゼロ点エネルギー", text)
         self.assertIn("虚振動が1個検出されました。", text)
+
+    def test_zpe_is_shown_in_hartree_and_kcal_per_mol(self):
+        text = _build()
+        self.assertIn("ゼロ点エネルギー(ZPE): 0.021500 Hartree(13.49 kcal/mol)", text)
+
+    def test_zpe_line_is_omitted_when_it_was_not_calculated(self):
+        result = _freq_result()
+        result.zpe_hartree = None
+        text = _build(freq_result=result)
+        self.assertIn("3700.20", text)
+        self.assertNotIn("ゼロ点エネルギー", text)
 
     def test_frequency_section_is_omitted_when_not_calculated(self):
         text = _build(freq_result=None)

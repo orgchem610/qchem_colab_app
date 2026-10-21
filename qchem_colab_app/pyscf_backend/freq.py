@@ -20,6 +20,8 @@ _get() ヘルパーで複数の候補キー名を試す作りにしている。
 
 import time
 
+from qchem_colab_app.common_backend import vibration
+
 
 def _get(d: dict, *keys, default=None):
     for k in keys:
@@ -28,14 +30,17 @@ def _get(d: dict, *keys, default=None):
     return default
 
 
-class FrequencyResult:
+class FrequencyResult(vibration.FrequencyResult):
+    """PySCF版の振動数解析の結果。共通の項目に、PySCFの熱力学量の項目を足す。
+
+    gibbs_hartree : 全自由エネルギー G_tot [Hartree]。求められなかったときは None
+    temperature_K : 熱力学量を求めた温度 [K]。求められなかったときは None
+    """
+
     def __init__(self):
-        self.frequencies_cm1 = []   # 振動数(cm^-1)。虚振動は負の値で表す(PySCFの慣例)
-        self.normal_modes = None    # 基準振動モードの変位ベクトル。shape (n_modes, natom, 3) を想定
-        self.n_imaginary = 0
-        self.thermo_summary = {}
-        self.elapsed_seconds = 0.0
-        self.warning_message = ""
+        super().__init__()
+        self.gibbs_hartree = None
+        self.temperature_K = None
 
 
 def run_frequency_analysis(mf, defaults: dict) -> FrequencyResult:
@@ -56,7 +61,6 @@ def run_frequency_analysis(mf, defaults: dict) -> FrequencyResult:
 
     freqs = list(_get(freq_info, "freq_wavenumber", "freq_cm-1", default=[]))
     result.frequencies_cm1 = [float(f.real) if hasattr(f, "real") else float(f) for f in freqs]
-    result.n_imaginary = sum(1 for f in result.frequencies_cm1 if f < 0)
     result.normal_modes = _get(freq_info, "norm_mode", "normal_mode")
 
     freq_cfg = defaults["frequency"]
@@ -65,13 +69,11 @@ def run_frequency_analysis(mf, defaults: dict) -> FrequencyResult:
         if freq_au is None:
             raise KeyError("freq_au")
         thermo_info = thermo.thermo(mf, freq_au, freq_cfg["temperature_K"], freq_cfg["pressure_Pa"])
-        result.thermo_summary = {
-            "ZPE_Hartree": float(_get(thermo_info, "ZPE", default=(None,))[0]),
-            "G_tot_Hartree": float(_get(thermo_info, "G_tot", default=(None,))[0]),
-            "temperature_K": freq_cfg["temperature_K"],
-        }
+        result.zpe_hartree = float(_get(thermo_info, "ZPE", default=(None,))[0])
+        result.gibbs_hartree = float(_get(thermo_info, "G_tot", default=(None,))[0])
+        result.temperature_K = freq_cfg["temperature_K"]
     except Exception as e:
-        result.thermo_summary = {}
+        result.zpe_hartree = result.gibbs_hartree = result.temperature_K = None
         result.warning_message += (
             f"熱力学量(ZPE・自由エネルギー)の計算に失敗しました(振動数自体は取得できています): {e}\n"
         )
