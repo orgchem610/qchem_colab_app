@@ -19,6 +19,9 @@
 - ソースコードを変更するときは、同時に、このファイル末尾の「仕様書」(各モジュールと関数の仕様[引数・戻り値・目的・呼出先・呼出元]・
   テストの対象)、上の「ディレクトリ構成」、`README.md`も更新する(`README.md`は利用者向けの内容だけ。
   実装に関するメモは、このファイルに書く)。仕様書の書き方は、「仕様(モジュールと関数)」の冒頭を参照する。
+- **修正が必要なテストを探すときは、変更した項目の「関連テスト」を見る**(`python3 tests/spec_analysis.py --fix`で、最新にしてから)。
+  結果クラス(`FrequencyResult`・`OptimizationResult`など)の代用品には、`SimpleNamespace`ではなく、実物のクラスを使う
+  (属性だけを真似る代用品は、属性名の変更や削除が、関連テストから見つからず、テストが古いまま残るため)。
 - パッケージの依存の向きは、`gui` → `pyscf_backend`・`uma_backend` → `common_backend`(一方向)。`pyscf_backend/`と
   `uma_backend/`は、お互いをimportしない。バックエンド(`common_backend`・`pyscf_backend`・`uma_backend`)は、`gui`・
   `ipywidgets`・`IPython`をimportしない。`gui`の共通部品(`parts`など)は、`pyscf_backend`・`uma_backend`をimportしない。
@@ -132,6 +135,8 @@ qchem_colab_app/
     ├── test_vibration.py              # 振動数解析の数値計算・FrequencyResult(common_backend。バネのモデルの解析解・ASEとの照合)
     ├── test_elements.py / test_runtime.py / test_ase_bridge.py   # 元素表・GPU判定・ASEへの変換(common_backend。torch・ASEの代用品を使用)
     ├── test_freq.py                   # PySCF版の振動数解析の結果の組み立て(pyscf.hessian.thermoの代用品を使用)
+    ├── test_agents_spec.py            # AGENTS.mdの仕様書が、ソース・テストと合っているか(spec_analysis.pyの解析を使用)
+    ├── spec_analysis.py               # 開発用の道具(テストではない): 呼出先・呼出元・関連テストの解析と、AGENTS.mdの更新
     ├── test_analysis_pyscf.py       # 分子軌道の選択肢・Mulliken電荷(PySCFなしの代用オブジェクトで確認)
     ├── test_engine.py                # GPUランタイムの判定(PySCFなし)
     ├── test_pipeline.py              # PySCF版の計算の流れ(engine等を代用の関数に差し替えて確認)
@@ -494,10 +499,11 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 - 技術選定・例外: 技術・方式を選んだ理由、送出する例外(ある場合のみ)
 - 呼出先: この項目が呼び出す、プロジェクト内の項目(ない場合は「なし」)
 - 呼出元: この項目を呼び出す、プロジェクト内の項目(ない場合は「なし」)
+- 関連テスト: この項目を参照しているテストファイル(ない場合は「なし」。呼出元には、テストを含めない)
 
 呼出先・呼出元は、プロジェクト内のものだけを、テストを除いて書く。他のモジュールの項目は`gui.parts.ChargeInput`のようにパッケージ名からの名前で、同じモジュールの項目は短い名前で書く。名前の後ろの括弧は、呼出しの種類を表す(「定数」: 定数の参照、「コールバックとして登録」: 呼出しをイベントやコールバックに任せる登録、「例外の捕捉」: `except`での捕捉、「属性として参照」: プロパティの参照)。クラスの「呼出先」は、`__init__`の呼出先、「呼出元」は、そのクラスを生成する箇所である。モジュール内の項目は、ソースファイルの定義の順に並べる。
 
-呼出関係は、ソースを構文解析して得た結果と突き合わせて書く(型が分からない引数の属性の参照など、構文解析では分からないものは、手で補う)。関数・クラス・メソッド・公開定数を追加・変更・削除したときは、その項目と、相手側の項目の「呼出先」「呼出元」の両方を更新する。
+「呼出先」「呼出元」「関連テスト」の行は、**手で書かず**、`python3 tests/spec_analysis.py --fix`が、ソースとテストの構文解析から更新する。`tests/test_agents_spec.py`が、これらの行が最新か、ソースの定義すべてに項目があるか(逆も同じ)を検査する(`AGENTS.md`がない`main`ブランチでは、スキップする)。構文解析では分からない呼出し(型の分からない変数の属性の参照など)は、`tests/spec_analysis.py`の`MANUAL_EDGES`に足す。関連テストは、テストに、その名前があり、かつ、(名前がプロジェクト全体で1つだけ、またはテストがそのモジュールをimportしている)ときに挙げる(メソッド・プロパティは、モジュールのimportと、クラス名・メソッド名の両方が必要)。関数・クラス・メソッド・公開定数を追加・変更・削除したときは、項目の文章(引数・戻り値・目的など)を手で直してから、`--fix`を実行する。
 
 - `ColabApp.ipynb`
   - 目的: PySCF 版の Colab 実行入口。実行環境の表示、GitHub からのブランチ／タグ選択取得、依存関係と任意 GPU4PySCF の導入、lock ファイルの生成、サンプル構造の作成、`gui.pyscf_screen.build_app()` の表示を順に行う。目的はブラウザだけで PySCF 計算を実行可能にすること。すべてのコードセルは、メタデータ `cellView: form` と先頭行の `#@title 題名` により、既定でコードを折りたたんで題名だけを表示する（ColabReaction と同じ方式。クリックすればコードを開ける）
@@ -549,6 +555,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 共通の構造を、ASE のオブジェクトに変換する。電荷・スピン多重度は、計算器ごとの約束のため、ここでは設定しない。ase は関数の中で import する
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_engine.build_atoms`
+    - 関連テスト: `tests/test_ase_bridge.py`、`tests/test_uma_engine.py`
 
 - `config_loader.py`
 
@@ -558,11 +565,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: リポジトリのルートの場所を `pathlib.Path` で保持する。このファイルは `<リポジトリ>/qchem_colab_app/common_backend/` にあるため、3つ上をルートとする
     - 呼出先: なし
     - 呼出元: `CONFIG_DIR`（定数）
+    - 関連テスト: `tests/test_config_loader.py`
 
   - `CONFIG_DIR`
     - 目的: `config/` の場所（`PROJECT_ROOT` の直下）を `pathlib.Path` で保持する
     - 呼出先: `PROJECT_ROOT`（定数）
     - 呼出元: `load_yaml`（定数）
+    - 関連テスト: `tests/test_config_loader.py`
 
   - `load_yaml(filename: str) -> dict | list`
     - 引数: `config/` 内の YAML ファイル名
@@ -570,6 +579,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 設定読込みを一元化し、ファイルが無いときは配置を確認する日本語メッセージの `FileNotFoundError` にする
     - 呼出先: `CONFIG_DIR`（定数）
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`、`pyscf_backend.engine._load_basis`、`pyscf_backend.engine._load_functional`
+    - 関連テスト: `tests/test_config.py`、`tests/test_config_loader.py`、`tests/test_uma_config.py`
 
 - `cube.py`
 
@@ -582,6 +592,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 標準ライブラリだけで読む。PySCF の `cubegen.orbital` が値の配列を返さない版でも、書き出した cube ファイルから閾値のもとを得られるようにするため
     - 呼出先: なし
     - 呼出元: `pyscf_backend.visualizer_pyscf.render_orbital`
+    - 関連テスト: `tests/test_cube.py`
 
 - `elements.py`
 
@@ -591,6 +602,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 元素記号から原子番号への表（H〜Xe）。読み込める元素の範囲の判定、電荷・スピン多重度の検証で使う全電子数の計算、軌道の数え上げに使う。表はここだけに置く
     - 呼出先: なし
     - 呼出元: `common_backend.io_reader._read_with_ase`（定数）、`common_backend.io_reader.read_xyz`（定数）、`common_backend.io_reader.validate_charge_and_multiplicity`（定数）、`pyscf_backend.analysis_pyscf._core_and_valence_orbital_counts`（定数）
+    - 関連テスト: `tests/test_elements.py`
 
 - `energy.py`
 
@@ -600,11 +612,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: エネルギーの単位換算（1 Hartree = 627.5094740631 kcal/mol）を 1 か所で定義する
     - 呼出先: なし
     - 呼出元: `relative_energies_kcal`（定数）、`common_backend.vibration.FrequencyResult.zpe_kcal_per_mol`（定数）、`gui.parts.EnergyStructureViewer._show_structure_at_step`（定数）、`uma_backend.uma_report.build_log_text`（定数）
+    - 関連テスト: `tests/test_energy.py`、`tests/test_energy_plot.py`、`tests/test_uma_freq.py`、`tests/test_vibration.py`
 
   - `HARTREE_TO_EV`
     - 目的: エネルギーの単位換算（1 Hartree = 27.211386245988 eV、CODATA 2018）を 1 か所で定義する。`uma_backend`・`pyscf_backend` は、Hartree と eV の換算に、この定数だけを使う
     - 呼出先: なし
     - 呼出元: `pyscf_backend.analysis_pyscf.orbital_choices`（定数）、`uma_backend.uma_freq.run_frequency_analysis`（定数）、`uma_backend.uma_optimize.run_geometry_optimization`（定数）
+    - 関連テスト: `tests/test_analysis_pyscf.py`、`tests/test_energy.py`、`tests/test_uma_freq.py`、`tests/test_uma_optimize.py`
 
   - `relative_energies_kcal(energies_hartree) -> list[float]`
     - 引数: 各最適化点の全エネルギー[Hartree]
@@ -612,6 +626,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: グラフと構造表示で同じエネルギー基準を使う
     - 呼出先: `HARTREE_TO_KCAL_MOL`（定数）
     - 呼出元: `gui.energy_plot.build_energy_plot_html`
+    - 関連テスト: `tests/test_energy.py`、`tests/test_energy_plot.py`
 
 - `io_reader.py`
 
@@ -621,16 +636,19 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: `read_structure` が受け付ける拡張子（`.xyz`・`.com`・`.gjf`・`.pdb`）の集合。エラーメッセージで、対応形式を案内するために使う
     - 呼出先: なし
     - 呼出元: `read_structure`（定数）
+    - 関連テスト: なし
 
   - `StructureError(ValueError)`
     - 目的: 利用者に表示可能な構造入力エラーを表す例外
     - 呼出先: なし
     - 呼出元: `_read_with_ase`、`read_structure`、`read_xyz`、`validate_charge_and_multiplicity`、`validate_structure`、`gui.inputs.extract_uploaded_file`、`gui.parts.StructureFileInput._update_preview`（例外の捕捉）、`gui.pyscf_screen.build_app`（例外の捕捉）、`gui.uma_screen.build_app`（例外の捕捉）、`pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_gui_input.py`、`tests/test_gui_parts.py`、`tests/test_io_reader.py`、`tests/test_pipeline.py`
 
   - `Structure(symbols: list[str], coords: list[list[float]], comment: str = "")`
     - 目的: 元素記号、Å 単位座標、注釈を保持するデータクラス。PySCF/UMA 共通入力形式
     - 呼出先: なし
     - 呼出元: `_read_with_ase`、`read_xyz`
+    - 関連テスト: `tests/test_io_reader.py`
 
   - `read_xyz(filepath: str) -> Structure`
     - 引数: XYZ ファイルパス
@@ -639,6 +657,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 最小形式を自前実装し、基本入力の依存関係を減らす
     - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）、`Structure`
     - 呼出元: `read_structure`
+    - 関連テスト: `tests/test_io_reader.py`
 
   - `_read_with_ase(filepath: str, ase_format: str) -> Structure`
     - 引数: ファイルのパス、ASE に渡す形式名
@@ -646,6 +665,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: .com／.gjf／.pdb を ASE（`ase.io.read`）で読み込み、H〜Xe 以外の元素記号があればエラーにする。ASE が入っていない場合・読み込めない場合は、`StructureError` を送出する。内部補助関数
     - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）、`Structure`
     - 呼出元: `read_structure`
+    - 関連テスト: なし
 
   - `read_structure(filepath: str) -> Structure`
     - 引数: 入力ファイルパス
@@ -653,6 +673,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: `.xyz` は `read_xyz`、`.com`/`.gjf`/`.pdb` は ASE に振り分ける
     - 呼出先: `read_xyz`、`_read_with_ase`、`StructureError`、`SUPPORTED_EXTENSIONS`（定数）
     - 呼出元: `gui.inputs.read_uploaded_structure`
+    - 関連テスト: `tests/test_gui_input.py`、`tests/test_io_reader.py`
 
   - `validate_structure(structure: Structure, min_distance: float = 0.4) -> None`
     - 引数: 構造、原子間最小距離[Å]
@@ -660,6 +681,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 空構造、配列不整合、原子重なりを検出する
     - 呼出先: `StructureError`
     - 呼出元: `gui.inputs.load_uploaded_structure`
+    - 関連テスト: `tests/test_gui_input.py`、`tests/test_io_reader.py`
 
   - `validate_charge_and_multiplicity(structure: Structure, charge: int, multiplicity: int) -> None`
     - 引数: 構造、総電荷、スピン多重度
@@ -667,6 +689,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 電子数・多重度の化学的整合性を確認する
     - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `gui.inputs.load_uploaded_structure`
+    - 関連テスト: `tests/test_gui_input.py`、`tests/test_io_reader.py`
 
 - `runtime.py`
 
@@ -679,6 +702,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: torch が入っていない環境（PySCF 版）でも動くよう、コマンドの成否で判定する
     - 呼出先: なし
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_pipeline.py`、`tests/test_runtime.py`
 
   - `torch_cuda_available() -> bool`
     - 引数: なし
@@ -686,6 +710,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: UMA の推論に使うデバイス（GPU か CPU）を決める。GPU ランタイムでも、CPU 版の torch が入っていれば `False` になる。torch は関数の中で import する
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_runtime.py`、`tests/test_uma_pipeline.py`
 
 - `version.py`
 
@@ -695,6 +720,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: リポジトリ全体のリリース番号（Git タグと同じ値）を保持する
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`（定数）、`gui.uma_screen.build_app`（定数）、`pyscf_backend.pipeline.run_calculation`（定数）、`uma_backend.uma_pipeline.run_calculation`（定数）
+    - 関連テスト: `tests/test_pipeline.py`、`tests/test_readme.py`、`tests/test_uma_pipeline.py`、`tests/test_version_sync.py`
 
 - `vibration.py`
 
@@ -707,6 +733,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: UMA は解析的な Hessian を返さず力だけを返すため、数値微分を使う。ASE にも UMA にも依存しない純粋な numpy の関数なので、バネのモデルで厳密な値と照合できる
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_freq.run_frequency_analysis`
+    - 関連テスト: `tests/test_vibration.py`
 
   - `harmonic_analysis(masses, positions, hessian, rank_tol: float = 1e-8) -> tuple[numpy.ndarray, numpy.ndarray]`
     - 引数: 原子質量 [amu]、座標 [Å]、Hessian [eV/Å²]、並進・回転の次元を判定する特異値の閾値
@@ -715,6 +742,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 特異値でランクを判定し、直線分子でも正しい個数のモードを得る。ASE の `Vibrations` は並進・回転に由来するゼロ付近のモードが混ざり、虚振動の数え方が紛らわしくなるため使わない
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_freq.run_frequency_analysis`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_vibration.py`
 
   - `zero_point_energy_ev(frequencies_cm1) -> float`
     - 引数: 調和振動数 [cm⁻¹] のリスト
@@ -722,6 +750,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ZPE = (1/2)Σhν を求める。虚振動（負の値）は含めない。Hartree・kcal/mol への換算は、呼出し側が `common_backend.energy` の係数で行う
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_freq.run_frequency_analysis`
+    - 関連テスト: `tests/test_vibration.py`
 
   - `FrequencyResult()`
     - 引数: なし
@@ -729,16 +758,19 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 振動数解析の結果を入れる、PySCF 版・UMA 版の共通の親クラス。UMA 版はそのまま使い、PySCF 版は子クラスで熱力学量を足す。画面（`gui.parts.VibrationViewer`）は `frequencies_cm1` と `normal_modes` だけを使う
     - 呼出先: なし
     - 呼出元: `pyscf_backend.freq.FrequencyResult.__init__`、`uma_backend.uma_freq.run_frequency_analysis`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_uma_freq.py`、`tests/test_uma_notice_report.py`、`tests/test_vibration.py`
     - `n_imaginary`（プロパティ）
       - 戻り値: 虚振動（負の振動数）の数
       - 目的: `frequencies_cm1` から求めるため、振動数と食い違わない
       - 呼出先: なし
       - 呼出元: `pyscf_backend.freq.run_frequency_analysis`、`uma_backend.uma_freq.run_frequency_analysis`（属性として参照）、`uma_backend.uma_pipeline.run_calculation`
+      - 関連テスト: `tests/test_freq.py`、`tests/test_uma_freq.py`、`tests/test_vibration.py`
     - `zpe_kcal_per_mol`（プロパティ）
       - 戻り値: ゼロ点エネルギー [kcal/mol]。`zpe_hartree` が `None` なら `None`
       - 目的: `zpe_hartree` を、`common_backend.energy.HARTREE_TO_KCAL_MOL` で換算する
       - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）
       - 呼出元: `uma_backend.uma_report.build_log_text`
+      - 関連テスト: `tests/test_freq.py`、`tests/test_uma_freq.py`、`tests/test_vibration.py`
 
 - `writer_xyz.py`
 
@@ -748,11 +780,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 最終構造の出力ファイル名（`final_structure_for_ColabReaction.xyz`）を PySCF 版・UMA 版で共通にする
     - 呼出先: なし
     - 呼出元: `write_optimization_outputs`（定数）
+    - 関連テスト: なし
 
   - `TRAJECTORY_FILENAME`
     - 目的: 最適化トラジェクトリの出力ファイル名（`optimization_trajectory.xyz`）を PySCF 版・UMA 版で共通にする
     - 呼出先: なし
     - 呼出元: `write_optimization_outputs`（定数）
+    - 関連テスト: なし
 
   - `_format_xyz_block(symbols, coords, comment: str = "") -> str`
     - 引数: 元素記号のリスト、座標のリスト、コメント
@@ -760,6 +794,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: すべての XYZ 出力（ファイル・文字列・アニメーション）の整形を 1 か所にまとめる内部補助関数
     - 呼出先: なし
     - 呼出元: `multiframe_xyz_string`、`write_final_structure`、`write_trajectory`、`xyz_string`
+    - 関連テスト: なし
 
   - `write_final_structure(symbols, coords, filepath: str, comment: str = "Optimized structure") -> None`
     - 引数: 元素、座標、出力先、コメント
@@ -767,6 +802,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 最終構造 XYZ を保存する
     - 呼出先: `_format_xyz_block`
     - 呼出元: `write_optimization_outputs`
+    - 関連テスト: `tests/test_writer_xyz.py`
 
   - `write_trajectory(symbols, coords_history, filepath: str, energies = None) -> None`
     - 引数: 元素、座標履歴、出力先、任意のエネルギー
@@ -774,6 +810,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 最適化履歴を多フレーム XYZ として保存する
     - 呼出先: `_format_xyz_block`
     - 呼出元: `write_optimization_outputs`
+    - 関連テスト: `tests/test_writer_xyz.py`
 
   - `write_optimization_outputs(out_dir: str, final_symbols, final_coords, final_comment: str, opt_result) -> tuple[str, str]`
     - 引数: 出力先フォルダ、最終構造の元素・座標・コメント、`symbols`・`coords_history`・`energies` を持つ最適化結果
@@ -781,6 +818,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 構造最適化の標準の出力 2 ファイルを同じ名前・形式で書き出す
     - 呼出先: `FINAL_STRUCTURE_FILENAME`（定数）、`write_final_structure`、`TRAJECTORY_FILENAME`（定数）、`write_trajectory`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`、`uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_writer_xyz.py`
 
   - `xyz_string(symbols, coords, comment: str = "") -> str`
     - 引数: 元素記号のリスト、座標のリスト、任意のコメント
@@ -788,6 +826,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ファイルに書き出さず、py3Dmol などへ直接渡すための XYZ 文字列を作る
     - 呼出先: `_format_xyz_block`
     - 呼出元: なし
+    - 関連テスト: `tests/test_writer_xyz.py`
 
   - `multiframe_xyz_string(symbols, coords_list, comments = None) -> str`
     - 引数: 元素記号のリスト、複数フレームの座標、任意のコメントのリスト
@@ -795,6 +834,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: py3Dmol の振動アニメーション用に、複数フレームを 1 つの文字列にまとめる
     - 呼出先: `_format_xyz_block`
     - 呼出元: `gui.plot_common.render_vibration`
+    - 関連テスト: `tests/test_writer_xyz.py`
 
 ### gui
 
@@ -812,11 +852,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ドロップ・選択を受け付ける構造ファイルの拡張子（`.xyz`・`.com`・`.gjf`・`.pdb`）
     - 呼出先: なし
     - 呼出元: `build_drop_zone_html`（定数）、`parse_dropped_payload`（定数）
+    - 関連テスト: なし
 
   - `MAX_DROPPED_FILE_BYTES`
     - 目的: ドロップされる構造ファイルの大きさの上限（5 MB）
     - 呼出先: なし
     - 呼出元: `build_drop_zone_html`（定数）、`parse_dropped_payload`（定数）
+    - 関連テスト: `tests/test_colab_widgets.py`
 
   - `is_colab() -> bool`
     - 引数: なし
@@ -824,6 +866,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: Colab 専用 UI の表示可否を判定する
     - 呼出先: なし
     - 呼出元: なし
+    - 関連テスト: なし
 
   - `register_callback(func, prefix: str = "qchem_cb") -> str | None`
     - 引数: JavaScript から呼ばれる関数、登録名接頭辞
@@ -831,6 +874,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: `google.colab.output.register_callback` を安全に隠蔽する
     - 呼出先: なし
     - 呼出元: `gui.parts.EnergyStructureViewer.__init__`、`gui.parts.StructureFileInput.__init__`
+    - 関連テスト: なし
 
   - `check_safe_id(value: str, label: str) -> str`
     - 引数: DOM 識別子・コールバック名と表示名
@@ -838,6 +882,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: JavaScript に埋め込む識別子を英数字とアンダースコアに限定し、注入を防ぐ
     - 呼出先: なし
     - 呼出元: `build_drop_zone_html`、`gui.energy_plot.build_energy_plot_html`
+    - 関連テスト: `tests/test_colab_widgets.py`、`tests/test_energy_plot.py`
 
   - `parse_dropped_payload(payload: dict, allowed_extensions = ALLOWED_STRUCTURE_EXTENSIONS, max_bytes: int = MAX_DROPPED_FILE_BYTES) -> tuple[str, bytes]`
     - 引数: ファイル名と Base64 本文を含むブラウザ通知、許可拡張子、最大サイズ
@@ -846,6 +891,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: ブラウザからの入力を直接ファイルとして扱わず、上限を設けて安全にする
     - 呼出先: `ALLOWED_STRUCTURE_EXTENSIONS`（定数）、`MAX_DROPPED_FILE_BYTES`（定数）
     - 呼出元: `gui.parts.StructureFileInput._on_file_dropped`
+    - 関連テスト: `tests/test_colab_widgets.py`
 
   - `build_drop_zone_html(callback_name: str, uid: str | None = None, extensions = ALLOWED_STRUCTURE_EXTENSIONS, max_bytes: int = MAX_DROPPED_FILE_BYTES) -> str`
     - 引数: 登録済みコールバック名、DOM 識別子、許可拡張子、最大サイズ
@@ -853,6 +899,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ドロップとクリック選択の両方を受け付ける Colab UI を作る
     - 呼出先: `ALLOWED_STRUCTURE_EXTENSIONS`（定数）、`MAX_DROPPED_FILE_BYTES`（定数）、`check_safe_id`
     - 呼出元: `gui.parts.StructureFileInput.__init__`
+    - 関連テスト: `tests/test_colab_widgets.py`
 
 - `energy_plot.py`
 
@@ -864,6 +911,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: SVG 軸の目盛りを、きりの良い間隔にする内部補助関数
     - 呼出先: なし
     - 呼出元: `nice_ticks`
+    - 関連テスト: なし
 
   - `nice_ticks(vmin: float, vmax: float, target: int = 5, integer_only: bool = False) -> tuple[list[float], float]`
     - 引数: 値域、目標目盛り数、整数目盛り限定フラグ
@@ -871,6 +919,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: SVG グラフの読みやすい軸目盛りを作る
     - 呼出先: `_nice_step`
     - 呼出元: `build_energy_plot_html`
+    - 関連テスト: `tests/test_energy_plot.py`
 
   - `_format_tick(value: float, step: float) -> str`
     - 引数: 目盛り値、刻み幅
@@ -878,6 +927,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: SVG 軸の目盛りの表示を安定させる内部補助関数
     - 呼出先: なし
     - 呼出元: `build_energy_plot_html`
+    - 関連テスト: なし
 
   - `build_energy_plot_html(energies_hartree, selected_index: int | None = None, callback_name: str | None = None, uid: str | None = None, width: int = 640, height: int = 360) -> str`
     - 引数: エネルギー履歴、選択点、任意のクリックコールバック、DOM 識別子、描画サイズ
@@ -886,6 +936,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: Colab で FigureWidget が空表示になる事例を避け、素の SVG を採用する
     - 呼出先: `common_backend.energy.relative_energies_kcal`、`gui.colab_widgets.check_safe_id`、`nice_ticks`、`_format_tick`
     - 呼出元: `gui.parts.EnergyStructureViewer._draw_energy_plot`
+    - 関連テスト: `tests/test_energy_plot.py`
 
 - `inputs.py`
 
@@ -897,6 +948,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ipywidgets 7/8 の異なる値形式を吸収し、ドロップ入力を優先する
     - 呼出先: `common_backend.io_reader.StructureError`
     - 呼出元: `gui.parts.StructureFileInput.read`
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `read_uploaded_structure(content: bytes, filename: str) -> Structure`
     - 引数: 構造ファイルの中身、ファイル名
@@ -904,6 +956,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 拡張子つきの一時ファイルへ書き出して読み込み、一時ファイルを削除する。原子間距離や電荷・多重度の検証はしない（受け取った構造の自動表示に使う）
     - 呼出先: `common_backend.io_reader.read_structure`
     - 呼出元: `load_uploaded_structure`、`gui.parts.StructureFileInput._update_preview`
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `describe_structure(structure: Structure, filename: str) -> str`
     - 引数: 構造、ファイル名
@@ -911,6 +964,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 計算前のログと、受け取った構造の表示で、同じ概要文を使う
     - 呼出先: なし
     - 呼出元: `load_uploaded_structure`、`gui.parts.StructureFileInput._update_preview`
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `load_uploaded_structure(content: bytes, filename: str, charge: int, multiplicity: int, min_distance: float, log = print) -> Structure`
     - 引数: 構造ファイルの中身、ファイル名、電荷、スピン多重度、原子間距離の下限[Å]、ログ出力関数
@@ -918,11 +972,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 構造の読込み（`read_uploaded_structure`）、概要のログ出力（`describe_structure`）、原子間距離の検証、電荷・多重度の検証を、PySCF 版・UMA 版で同じ手順にする。エンジンごとに異なる確認（遷移金属の判定など）は呼出元で行う
     - 呼出先: `read_uploaded_structure`、`describe_structure`、`common_backend.io_reader.validate_structure`、`common_backend.io_reader.validate_charge_and_multiplicity`
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `ChargeInputError(ValueError)`
     - 目的: GUI の電荷文字列が整数として読めないことを示す例外。メッセージはそのまま画面に表示できる
     - 呼出先: なし
     - 呼出元: `parse_charge`、`gui.parts.ChargeInput._on_text_changed`（例外の捕捉）
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `format_charge(value: int) -> str`
     - 引数: 電荷の整数
@@ -930,6 +986,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 電荷の入力欄の表示を `+1` の形にそろえる
     - 呼出先: なし
     - 呼出元: `gui.parts.ChargeInput.__init__`、`gui.parts.ChargeInput._on_text_changed`、`gui.parts.ChargeInput._step`
+    - 関連テスト: `tests/test_gui_input.py`
 
   - `parse_charge(text: str) -> int`
     - 引数: 利用者が入力した文字列
@@ -937,6 +994,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: `+1`、全角数字、Unicode の符号、符号と数字の間の空白を含む電荷入力を安全に読み取る。整数として読み取れないときは `ChargeInputError` を送出する
     - 呼出先: `ChargeInputError`
     - 呼出元: `gui.parts.ChargeInput._on_text_changed`
+    - 関連テスト: `tests/test_gui_input.py`
 
 - `outputs.py`
 
@@ -948,6 +1006,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ダウンロード名を安全にする
     - 呼出先: なし
     - 呼出元: `gui.parts.DownloadPanel.show`
+    - 関連テスト: `tests/test_gui_output.py`
 
   - `default_download_stem(input_filename: str) -> str`
     - 引数: 入力ファイル名
@@ -955,6 +1014,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 出力ファイル群の名前を入力に対応付ける。PySCF 版・UMA 版の両方で同じ既定名（`<入力名>_result`）を使う
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_output.py`
 
   - `xyz_download_items(final_xyz_path: str, trajectory_path: str) -> list[tuple[str, str, str, str]]`
     - 引数: 最終構造・トラジェクトリのパス
@@ -962,6 +1022,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 両 GUI で共通の 2 つのダウンロード項目を 1 か所で定義する。エンジンごとの項目（molden・計算ログ）は呼出元が足す
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_output.py`
 
 - `parts.py`
 
@@ -973,6 +1034,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: YAML の選択肢を画面へ変換する
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
 
   - `ChargeInput(value: int = 0, description: str = "電荷")`
     - 引数: 初期電荷、表示名
@@ -981,23 +1043,27 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 数値ウィジェット（IntText）では正の値に `+` を付けて表示できないため、Text と関数（`gui.inputs.format_charge`, `parse_charge`）を組み合わせる
     - 呼出先: `gui.inputs.format_charge`、`ChargeInput._on_text_changed`（コールバックとして登録）、`ChargeInput._step`
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `value`（プロパティ）
       - 戻り値: 現在の電荷（整数）
       - 目的: 入力欄で読み取れた最後の値を返す。読み取れない入力があっても、直前の有効な値のままになる
       - 呼出先: なし
       - 呼出元: `gui.pyscf_screen.build_app`（属性として参照）、`gui.uma_screen.build_app`（属性として参照）
+      - 関連テスト: なし
     - `_on_text_changed(change: dict) -> None`
       - 引数: ipywidgets の値変更通知
       - 戻り値: なし
       - 目的: 入力文字列を `parse_charge` で読み取り、読み取れたら「+1」の形に整え、読み取れなければ直前の値に戻してメッセージを出す内部イベント処理
       - 呼出先: `gui.inputs.parse_charge`、`gui.inputs.ChargeInputError`（例外の捕捉）、`gui.inputs.format_charge`
       - 呼出元: `ChargeInput.__init__`（コールバックとして登録）
+      - 関連テスト: なし
     - `_step(delta: int) -> None`
       - 引数: 増減量（−1／+1 ボタンから ±1）
       - 戻り値: なし
       - 目的: −1／+1 ボタンの処理。値を増減して、入力欄を「+1」の形で更新する内部イベント処理
       - 呼出先: `gui.inputs.format_charge`
       - 呼出元: `ChargeInput.__init__`
+      - 関連テスト: なし
 
   - `MultiplicityInput(value: int = 1, description: str = "スピン多重度")`
     - 引数: 初期スピン多重度、表示名
@@ -1005,11 +1071,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 電荷の入力欄と同じ幅・説明欄の幅にそろえ、PySCF 版・UMA 版で同じ見た目にする。値の範囲や電子数との整合は、この部品ではなく計算前の検証（`gui.inputs.load_uploaded_structure`）で確認する
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `value`（プロパティ）
       - 戻り値: 現在のスピン多重度（整数）
       - 目的: 入力欄（`IntText`）の値を整数で返す
       - 呼出先: なし
       - 呼出元: `gui.pyscf_screen.build_app`（属性として参照）、`gui.uma_screen.build_app`（属性として参照）
+      - 関連テスト: なし
 
   - `StructureFileInput(callback_prefix: str = "qchem_drop")`
     - 引数: Colab コールバック名接頭辞
@@ -1018,36 +1086,42 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: Colab では `gui.colab_widgets`、それ以外では標準 FileUpload をフォールバックにする。Colab では、枠をクリックしても選べるため、枠の下のファイル選択ボタンは置かない
     - 呼出先: `gui.colab_widgets.register_callback`、`StructureFileInput._on_file_dropped`（コールバックとして登録）、`gui.colab_widgets.build_drop_zone_html`、`StructureFileInput._on_upload_changed`（コールバックとして登録）
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `_on_file_dropped(payload: dict) -> None`
       - 引数: Colab の JavaScript から渡されるペイロード（ファイル名と Base64 本文）
       - 戻り値: なし（Colab のコールバックとして、受取結果を返す）
       - 目的: ドロップされたファイルを検証して最新の入力として記録し、構造の表示を更新する。検証に失敗したときは、理由を表示して、記録を無効にする
       - 呼出先: `gui.colab_widgets.parse_dropped_payload`、`StructureFileInput._clear_preview`、`StructureFileInput._update_preview`
       - 呼出元: `StructureFileInput.__init__`（コールバックとして登録）
+      - 関連テスト: なし
     - `_on_upload_changed(change: dict) -> None`
       - 引数: ipywidgets の値変更通知
       - 戻り値: なし
       - 目的: ボタンで選び直されたファイルを最新の入力とし、前のドロップ入力を無効にして、入力方法間の優先順位（最後に受け取ったものを使う）を保つ。構造の表示も更新する
       - 呼出先: `StructureFileInput._update_preview`、`StructureFileInput._clear_preview`
       - 呼出元: `StructureFileInput.__init__`（コールバックとして登録）
+      - 関連テスト: なし
     - `_clear_preview() -> None`
       - 引数: なし
       - 戻り値: なし
       - 目的: `preview_output` の表示を消す（ファイルの受取りに失敗したとき、ボタンの選択が空になったとき）
       - 呼出先: なし
       - 呼出元: `StructureFileInput._on_file_dropped`、`StructureFileInput._on_upload_changed`
+      - 関連テスト: なし
     - `_update_preview() -> None`
       - 引数: なし
       - 戻り値: なし
       - 目的: 受け取った構造ファイルを（計算前の検証はせずに）読み込み、概要（原子数・組成）と 3D 表示を `preview_output`（`widgets` の最後）に出す。読み込めないときは理由を表示し、ファイルの受取り自体は妨げない
       - 呼出先: `StructureFileInput.read`、`gui.inputs.read_uploaded_structure`、`gui.inputs.describe_structure`、`gui.plot_common.render_single_structure`、`common_backend.io_reader.StructureError`（例外の捕捉）
       - 呼出元: `StructureFileInput._on_file_dropped`、`StructureFileInput._on_upload_changed`
+      - 関連テスト: なし
     - `read() -> tuple[bytes, str]`
       - 引数: なし
       - 戻り値: 最後に選択された構造ファイルの内容と名前
       - 目的: 計算パイプラインに入力を渡す
       - 呼出先: `gui.inputs.extract_uploaded_file`
       - 呼出元: `StructureFileInput._update_preview`、`gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
 
   - `default_step_label(step_index: int, relative_energy_kcal: float, result) -> str`
     - 引数: ステップ番号、相対エネルギー、最適化結果
@@ -1055,6 +1129,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 共通の標準ラベルを作る
     - 呼出先: なし
     - 呼出元: `EnergyStructureViewer.__init__`（コールバックとして登録）
+    - 関連テスト: なし
 
   - `EnergyStructureViewer(callback_prefix: str = "qchem_plot", step_label = None)`
     - 引数: Colab コールバック接頭辞、任意の構造表示ラベル生成関数
@@ -1063,42 +1138,49 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: SVG のクリック連携とスライダーの双方を提供し、通信失敗時も構造選択を可能にする
     - 呼出先: `default_step_label`（コールバックとして登録）、`EnergyStructureViewer._on_slider_changed`（コールバックとして登録）、`gui.colab_widgets.register_callback`、`EnergyStructureViewer._on_plot_clicked`（コールバックとして登録）
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `show(result) -> None`
       - 引数: `energies` と `coords_history` を持つ最適化結果
       - 戻り値: なし
       - 目的: 対応するエネルギー・座標だけを UI に反映する
       - 呼出先: `EnergyStructureViewer._draw_energy_plot`、`EnergyStructureViewer._show_structure_at_step`
       - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
     - `reset() -> None`
       - 引数: なし
       - 戻り値: なし
       - 目的: 前回の結果（グラフ・構造・スライダー・保持している結果）を消す。新しい計算を始めるときに呼ぶ
       - 呼出先: なし
       - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
     - `_show_structure_at_step(step_index: int) -> None`
       - 引数: 表示するステップの番号
       - 戻り値: なし
       - 目的: そのステップの構造を、見出し（相対エネルギーなど）つきで 3D 表示する内部処理
       - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）、`gui.plot_common.render_single_structure`
       - 呼出元: `EnergyStructureViewer._on_plot_clicked`、`EnergyStructureViewer._on_slider_changed`、`EnergyStructureViewer.show`
+      - 関連テスト: なし
     - `_draw_energy_plot(selected_index: int) -> None`
       - 引数: 赤い菱形で強調するステップの番号
       - 戻り値: なし
       - 目的: エネルギー収束グラフ（クリックできる SVG）を描き直す内部処理。描画に失敗しても、スライダーで構造を切り替えられるよう、メッセージだけを出す
       - 呼出先: `gui.energy_plot.build_energy_plot_html`
       - 呼出元: `EnergyStructureViewer._on_slider_changed`、`EnergyStructureViewer.show`
+      - 関連テスト: なし
     - `_on_slider_changed(change: dict) -> None`
       - 引数: ipywidgets の値変更通知
       - 戻り値: なし
       - 目的: スライダーの変更に合わせて、構造とグラフを同期する内部イベント処理。点のクリックが原因の変更では、JavaScript 側がすでに赤い菱形を動かしているため、グラフは描き直さない
       - 呼出先: `EnergyStructureViewer._show_structure_at_step`、`EnergyStructureViewer._draw_energy_plot`
       - 呼出元: `EnergyStructureViewer.__init__`（コールバックとして登録）
+      - 関連テスト: なし
     - `_on_plot_clicked(index: int) -> None`
       - 引数: クリックされた点の番号（Colab の JavaScript から渡される）
       - 戻り値: なし（Colab のコールバックとして、結果を返す）
       - 目的: グラフ上の点のクリックを受けて、スライダーを動かし、その構造を表示する内部イベント処理。失敗したときは、スライダーを使うよう案内するメッセージを出す
       - 呼出先: `EnergyStructureViewer._show_structure_at_step`
       - 呼出元: `EnergyStructureViewer.__init__`（コールバックとして登録）
+      - 関連テスト: なし
 
   - `VibrationViewer()`
     - 引数: なし
@@ -1106,24 +1188,28 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 振動数解析結果に基づく振動アニメーションを表示する
     - 呼出先: `VibrationViewer._on_button_clicked`（コールバックとして登録）
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `reset() -> None`
       - 引数: なし
       - 戻り値: なし
       - 目的: 前回の振動アニメーションの表示を消す。`setup(None, None, None)` と同じ
       - 呼出先: `VibrationViewer.setup`
       - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
     - `setup(freq_result, symbols, coords) -> None`
       - 引数: 振動数結果、元素記号、最終座標
       - 戻り値: なし
       - 目的: 計算の有無とモードに応じて操作部を有効化する
       - 呼出先: なし
       - 呼出元: `VibrationViewer.reset`、`gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
     - `_on_button_clicked(_) -> None`
       - 引数: ボタンのクリック通知
       - 戻り値: なし
       - 目的: 選択されたモードの振動アニメーションを 3D ビューへ描画する内部イベント処理
       - 呼出先: `gui.plot_common.render_vibration`
       - 呼出元: `VibrationViewer.__init__`（コールバックとして登録）
+      - 関連テスト: なし
 
   - `DownloadPanel(tmp_prefix: str = "qchem_dl_", description_width: str = "280px")`
     - 引数: 一時保存先接頭辞、説明欄の幅
@@ -1131,18 +1217,21 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: Colab では任意名でダウンロードし、ローカルでは出力パスを表示する
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_gui_parts.py`
     - `reset() -> None`
       - 引数: なし
       - 戻り値: なし
       - 目的: 前回のダウンロードボタンを消す。新しい計算を始めるときに呼ぶ
       - 呼出先: なし
       - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
     - `show(items, default_stem: str = "") -> None`
       - 引数: （説明、ファイルのパス、ダウンロード名の末尾、ボタンの表示名）の一覧、ファイル名の既定の幹
       - 戻り値: なし
       - 目的: 現在の計算結果に対応するダウンロードの画面を作り直す。各ボタンに、Colab の `files.download` の呼出しを束縛し、すべての出力に同じ安全なファイル名の規則を適用する
       - 呼出先: `gui.outputs.sanitize_filename_stem`
       - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
+      - 関連テスト: なし
 
 - `plot_common.py`
 
@@ -1154,6 +1243,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 選択した最適化ステップを表示する
     - 呼出先: なし
     - 呼出元: `gui.parts.EnergyStructureViewer._show_structure_at_step`、`gui.parts.StructureFileInput._update_preview`
+    - 関連テスト: `tests/test_gui_parts.py`
 
   - `render_vibration(symbols, final_coords, frequencies_cm1, normal_modes, mode_index: int = 0, amplitude: float = 0.6, n_frames: int = 20, width: int = 500, height: int = 400) -> tuple[py3Dmol.view, str]`
     - 引数: 最終構造、振動数、正規モード、表示モード、振幅、フレーム数、サイズ
@@ -1161,6 +1251,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 選択モードの変位をループ表示する
     - 呼出先: `common_backend.writer_xyz.multiframe_xyz_string`
     - 呼出元: `gui.parts.VibrationViewer._on_button_clicked`
+    - 関連テスト: `tests/test_gui_parts.py`
 
   - `atomic_charges_table_html(charges) -> str`
     - 引数: 原子電荷 [(元素記号, 電荷), ...]（原子と同じ順）
@@ -1168,6 +1259,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 原子電荷を、符号つきの数値の表で示す
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_plot_common.py`、`tests/test_visualizer.py`
 
   - `add_atom_charge_labels(view, coords, charges, font_size: int = 12) -> view`
     - 引数: py3Dmol のビュー、Å 単位の座標のリスト、原子電荷 [(元素記号, 電荷), ...]、フォントの大きさ
@@ -1176,6 +1268,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: PySCF の Mole ではなく、座標と電荷だけを受け取るため、電荷を出すエンジンから独立している
     - 呼出先: なし
     - 呼出元: `render_charges`
+    - 関連テスト: `tests/test_plot_common.py`、`tests/test_visualizer.py`
 
   - `_charge_gradient_color(charge: float, max_abs_charge: float) -> str`
     - 引数: 電荷、その分子の最大絶対電荷
@@ -1183,6 +1276,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 電荷を、青（正）・緑（中性付近）・赤（負）のグラデーション色にする内部補助関数。最大絶対電荷を基準に −1〜+1 に正規化して、緑から青または赤へ線形補間する
     - 呼出先: なし
     - 呼出元: `add_atom_charge_spheres`
+    - 関連テスト: `tests/test_plot_common.py`、`tests/test_visualizer.py`
 
   - `add_atom_charge_spheres(view, coords, charges, opacity: float = 0.85, size_variation: float = 0.2) -> view`
     - 引数: py3Dmol のビュー、Å 単位の座標のリスト、原子電荷 [(元素記号, 電荷), ...]、不透明度、大きさの変化の幅
@@ -1191,6 +1285,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 電子密度そのものは符号を持たないため、符号を持つ量として Mulliken 電荷を使う。静電ポテンシャルで表面を塗り分ける方法（ESP マッピング）は、3Dmol.js 側の API を実機で検証できていないため、確実に動くこの球の表示にしている
     - 呼出先: `_charge_gradient_color`
     - 呼出元: `render_charges`
+    - 関連テスト: `tests/test_plot_common.py`、`tests/test_visualizer.py`
 
   - `render_charges(symbols, coords, charges, show_labels: bool = True, width: int = 500, height: int = 400) -> py3Dmol.view`
     - 引数: 元素記号のリスト、Å 単位の座標のリスト、原子電荷 [(元素記号, 電荷), ...]、ラベルの表示の有無、表示の大きさ
@@ -1198,6 +1293,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 構造（ball and stick）の上に、電荷に応じた色の球と、（任意で）数値ラベルを重ねて表示する。原子数が多いと、ラベルが重なって見づらいため、ラベルは非表示にできる
     - 呼出先: `add_atom_charge_spheres`、`add_atom_charge_labels`
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_plot_common.py`、`tests/test_visualizer.py`
 
 - `pyscf_screen.py`
 
@@ -1210,6 +1306,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: GUI は薄いエントリーポイントに留め、再利用可能な画面部品・計算部品を分離する
     - 呼出先: `common_backend.config_loader.load_yaml`、`common_backend.version.__version__`（定数）、`gui.parts.StructureFileInput`、`gui.parts.dropdown_from_list`、`gui.parts.ChargeInput`、`gui.parts.MultiplicityInput`、`gui.parts.EnergyStructureViewer`、`gui.parts.VibrationViewer`、`gui.parts.DownloadPanel`、`gui.parts.EnergyStructureViewer.reset`、`gui.parts.VibrationViewer.reset`、`gui.parts.DownloadPanel.reset`、`pyscf_backend.analysis_pyscf.orbital_choices`、`pyscf_backend.visualizer_pyscf.render_orbital`、`gui.plot_common.render_charges`、`pyscf_backend.analysis_pyscf.compute_mulliken_charges`、`gui.plot_common.atomic_charges_table_html`、`gui.parts.ChargeInput.value`（属性として参照）、`gui.parts.MultiplicityInput.value`（属性として参照）、`gui.parts.StructureFileInput.read`、`gui.inputs.load_uploaded_structure`、`pyscf_backend.pipeline.CalculationSettings`、`pyscf_backend.pipeline.run_calculation`、`gui.parts.EnergyStructureViewer.show`、`gui.parts.VibrationViewer.setup`、`gui.parts.DownloadPanel.show`、`gui.outputs.xyz_download_items`、`gui.outputs.default_download_stem`、`common_backend.io_reader.StructureError`（例外の捕捉）、`pyscf_backend.engine.SCFConvergenceError`（例外の捕捉）
     - 呼出元: `ColabApp.ipynb`
+    - 関連テスト: なし
 
 - `uma_screen.py`
 
@@ -1222,6 +1319,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: トークンは GUI で保持せず環境変数だけから読むため、ノートブック保存時の漏えいを避ける
     - 呼出先: `common_backend.config_loader.load_yaml`、`common_backend.version.__version__`（定数）、`gui.parts.StructureFileInput`、`gui.parts.dropdown_from_list`、`gui.parts.ChargeInput`、`gui.parts.MultiplicityInput`、`gui.parts.EnergyStructureViewer`、`gui.parts.VibrationViewer`、`gui.parts.DownloadPanel`、`gui.parts.EnergyStructureViewer.reset`、`gui.parts.VibrationViewer.reset`、`gui.parts.DownloadPanel.reset`、`gui.parts.ChargeInput.value`（属性として参照）、`gui.parts.MultiplicityInput.value`（属性として参照）、`gui.parts.StructureFileInput.read`、`gui.inputs.load_uploaded_structure`、`uma_backend.uma_pipeline.CalculationSettings`、`uma_backend.uma_pipeline.run_calculation`、`gui.parts.EnergyStructureViewer.show`、`gui.parts.VibrationViewer.setup`、`gui.parts.DownloadPanel.show`、`gui.outputs.xyz_download_items`、`gui.outputs.default_download_stem`、`common_backend.io_reader.StructureError`（例外の捕捉）、`uma_backend.uma_hf.UmaSetupError`（例外の捕捉）
     - 呼出元: `ColabApp_UMA.ipynb`
+    - 関連テスト: なし
 
 ### pyscf_backend
 
@@ -1239,6 +1337,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: PySCF 版が未対応の遷移金属元素（3d・4d・5d の一部）の元素記号の集合。扱える元素の範囲はエンジンごとに決まるため、UMA 版とは別に、このパッケージに置く
     - 呼出先: なし
     - 呼出元: `contains_transition_metal`（定数）
+    - 関連テスト: なし
 
   - `contains_transition_metal(structure: Structure) -> bool`
     - 引数: 構造
@@ -1246,11 +1345,13 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 計算を始める前に、ECP 付きの基底関数が未登録の元素を、利用者へ案内するために判定する。扱える元素の範囲はエンジンごとに決まるため、このパッケージに置く
     - 呼出先: `TRANSITION_METAL_SYMBOLS`（定数）
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_engine.py`
 
   - `SCFConvergenceError(RuntimeError)`
     - 目的: 再試行後にも SCF が収束しない場合の利用者向け例外
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`（例外の捕捉）、`run_scf`
+    - 関連テスト: なし
 
   - `_load_functional(functional_key: str) -> dict`
     - 引数: `functionals.yaml` の手法キー
@@ -1258,6 +1359,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: YAML から計算手法の設定を探す内部補助関数
     - 呼出先: `common_backend.config_loader.load_yaml`
     - 呼出元: `build_scf`
+    - 関連テスト: なし
 
   - `_load_basis(basis_key: str) -> dict`
     - 引数: `basis_sets.yaml` の基底関数キー
@@ -1265,6 +1367,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: YAML から基底関数の設定を探す内部補助関数
     - 呼出先: `common_backend.config_loader.load_yaml`
     - 呼出元: `build_mole`
+    - 関連テスト: なし
 
   - `build_mole(structure: common_backend.io_reader.Structure, charge: int, multiplicity: int, basis_key: str, verbose: int = 0) -> pyscf.gto.Mole`
     - 引数: 共通構造、電荷、多重度、基底関数キー、PySCF 詳細度
@@ -1273,6 +1376,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: `cart=True` により 6D/10F の Molden 互換出力を優先する
     - 呼出先: `_load_basis`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_pipeline.py`
 
   - `_try_import_gpu4pyscf() -> module | None`
     - 引数: なし
@@ -1280,6 +1384,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: GPU の任意依存を分離する内部補助関数。インポートできなくても、例外は出さず、CPU の計算に切り替えさせる
     - 呼出先: なし
     - 呼出元: `build_scf`
+    - 関連テスト: なし
 
   - `build_scf(mol, functional_key: str, try_gpu: bool = True) -> tuple[object, bool, str]`
     - 引数: Mole、手法キー、GPU 試行フラグ
@@ -1288,6 +1393,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: GPU 初期化失敗は計算を中断せず CPU にフォールバックする
     - 呼出先: `_load_functional`、`_try_import_gpu4pyscf`
     - 呼出元: `pyscf_backend.optimize.run_geometry_optimization`、`pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_pipeline.py`
 
   - `run_scf(mf, defaults: dict, dm0 = None) -> object`
     - 引数: SCF オブジェクト、収束設定、任意の初期密度行列
@@ -1295,6 +1401,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 既定条件で SCF を実行し、失敗時は緩和条件とレベルシフトで一度再試行する
     - 呼出先: `SCFConvergenceError`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_pipeline.py`
 
 - `optimize.py`
 
@@ -1302,6 +1409,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 最終 Mole、GPU 情報、エネルギー・座標履歴、収束状態、所要時間、再計算用密度行列を保持する結果コンテナ
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
+    - 関連テスト: なし
 
   - `_to_numpy(arr) -> numpy.ndarray`
     - 引数: NumPy または CuPy の配列
@@ -1309,6 +1417,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: GPU4PySCF が返す CuPy 配列を、CPU に転送して NumPy 配列にそろえる内部補助関数
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
+    - 関連テスト: なし
 
   - `_make_callback(result: OptimizationResult) -> callable`
     - 引数: 結果を入れる `OptimizationResult`
@@ -1316,6 +1425,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 各最適化点のエネルギーと座標を、結果に記録する。1 ステップの記録に失敗しても、最適化自体は止めない
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
+    - 関連テスト: なし
 
   - `run_geometry_optimization(mol, functional_key: str, defaults: dict, try_gpu: bool = True) -> OptimizationResult`
     - 引数: 初期 Mole、手法キー、設定、GPU 試行フラグ
@@ -1324,6 +1434,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: 内部座標を使う geomeTRIC を採用し、有機分子の収束性を優先する
     - 呼出先: `OptimizationResult`、`pyscf_backend.engine.build_scf`、`_make_callback`、`_to_numpy`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: なし
 
 - `freq.py`
 
@@ -1333,6 +1444,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: PySCF の版により変わる結果キーを吸収する内部補助関数
     - 呼出先: なし
     - 呼出元: `run_frequency_analysis`
+    - 関連テスト: なし
 
   - `FrequencyResult(common_backend.vibration.FrequencyResult)`
     - 引数: なし
@@ -1340,6 +1452,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: PySCF 版の振動数解析の結果。PySCF の `thermo.thermo` が求める熱力学量の項目を、共通の親に足す
     - 呼出先: `common_backend.vibration.FrequencyResult`
     - 呼出元: `run_frequency_analysis`
+    - 関連テスト: `tests/test_freq.py`
 
   - `run_frequency_analysis(mf, defaults: dict) -> FrequencyResult`
     - 引数: 収束済み CPU SCF、周波数設定
@@ -1348,6 +1461,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: GPU Hessian は十分に検証されていないため CPU PySCF を用いる
     - 呼出先: `FrequencyResult`、`_get`、`common_backend.vibration.FrequencyResult.n_imaginary`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_freq.py`
 
 - `analysis_pyscf.py`
 
@@ -1357,11 +1471,13 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 軌道エネルギーが縮退しているとみなす差（既定 1e-4 Hartree）
     - 呼出先: なし
     - 呼出元: `orbital_choices`（定数）
+    - 関連テスト: なし
 
   - `OrbitalChoices(options, default_index, open_shell)`
     - 目的: 軌道の選択肢の戻り値（表示名と軌道番号の組のリスト、最初に選ぶ軌道番号、開殻かどうか）の `namedtuple`
     - 呼出先: なし
     - 呼出元: `orbital_choices`
+    - 関連テスト: なし
 
   - `_core_and_valence_orbital_counts(symbol: str) -> tuple[int, int]`
     - 引数: 元素記号
@@ -1369,6 +1485,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 軌道の数え上げの内部補助関数。原子番号は `common_backend.elements.ATOMIC_NUMBERS` から求める
     - 呼出先: `common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `valence_space_size`
+    - 関連テスト: `tests/test_elements.py`
 
   - `_atom_symbols(mol) -> list[str]`
     - 引数: PySCF の Mole
@@ -1376,6 +1493,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 軌道の数え上げのために、Mole から元素記号を取り出す内部補助関数
     - 呼出先: なし
     - 呼出元: `valence_space_size`
+    - 関連テスト: なし
 
   - `valence_space_size(mol) -> tuple[int, int]`
     - 引数: Mole
@@ -1383,6 +1501,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 「各原子の最外殻だけからできる軌道」の数を、原子ごとの値の合計で数える（H・He は 1s の 1 軌道、そのほかは最外殻の s と p の 4 軌道。Ga〜Kr・In〜Xe の (n-1)d 軌道は内殻とみなす）
     - 呼出先: `_atom_symbols`、`_core_and_valence_orbital_counts`
     - 呼出元: `orbital_choices`
+    - 関連テスト: `tests/test_analysis_pyscf.py`
 
   - `_occupations(mf) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]`
     - 引数: SCF オブジェクト
@@ -1390,6 +1509,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 閉殻・開殻（ROHF を含む）の配列の形の違いを吸収する内部補助関数
     - 呼出先: なし
     - 呼出元: `orbital_choices`
+    - 関連テスト: なし
 
   - `orbital_choices(mol, mf, degeneracy_tolerance: float = DEGENERACY_TOLERANCE_HARTREE) -> OrbitalChoices`
     - 引数: Mole、収束済み SCF オブジェクト、縮退とみなすエネルギー差
@@ -1398,6 +1518,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: 開殻（UHF/UKS）の `mo_occ`・`mo_energy` は 2 行の配列で保持されるため、α スピンの軌道を基準にする。最外殻の空軌道は軌道の数で近似する
     - 呼出先: `DEGENERACY_TOLERANCE_HARTREE`（定数）、`_occupations`、`valence_space_size`、`common_backend.energy.HARTREE_TO_EV`（定数）、`OrbitalChoices`
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_analysis_pyscf.py`
 
   - `compute_mulliken_charges(mol, mf) -> list[tuple[str, float]]`
     - 引数: Mole、SCF
@@ -1405,6 +1526,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 原子電荷表と色分け表示の基礎データを得る
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_analysis_pyscf.py`
 
 - `pipeline.py`
 
@@ -1414,11 +1536,13 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 利用者が指定する計算条件を保持する。`try_gpu` が `None` のときは、GPU ランタイムかどうかを自動で判定する
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_pipeline.py`
 
   - `CalculationResult(structure, opt_result, final_mol, mf_final, freq_result, final_symbols, final_coords, out_dir, final_xyz_path, traj_xyz_path, molden_path, total_seconds)`
     - 目的: 計算結果（最適化結果、最終構造の Mole、CPU で収束させた SCF、振動数結果）と、書き出したファイルの場所を保持する。画面表示・ダウンロードにそのまま使う
     - 呼出先: なし
     - 呼出元: `run_calculation`
+    - 関連テスト: なし
 
   - `run_calculation(structure, settings: CalculationSettings, defaults: dict, log = print) -> CalculationResult`
     - 引数: 読込みと入力検証が済んだ構造、計算条件、`config/defaults.yaml` の辞書、ログ出力関数
@@ -1428,6 +1552,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 例外: 遷移金属を含む構造は `io_reader.StructureError`、SCF 不収束は `engine.SCFConvergenceError`、構造最適化の不収束は `RuntimeError`
     - 呼出先: `common_backend.runtime.nvidia_gpu_detected`、`pyscf_backend.engine.contains_transition_metal`、`common_backend.io_reader.StructureError`、`pyscf_backend.engine.build_mole`、`pyscf_backend.optimize.run_geometry_optimization`、`pyscf_backend.engine.build_scf`、`pyscf_backend.engine.run_scf`、`pyscf_backend.freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`pyscf_backend.writer_molden.write_molden`、`CalculationResult`
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: `tests/test_pipeline.py`
 
 - `visualizer_pyscf.py`
 
@@ -1439,6 +1564,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 開殻（UHF/UKS）で 3 次元（または α・β の組）になる軌道係数から、α スピンの軌道を取り出す内部補助関数
     - 呼出先: なし
     - 呼出元: `render_orbital`
+    - 関連テスト: `tests/test_visualizer.py`
 
   - `render_orbital(mol, mf, orbital_index: int, isoval_fraction: float = 0.12, width: int = 500, height: int = 400) -> py3Dmol.view`
     - 引数: Mole、SCF、軌道番号、等値面比率、サイズ
@@ -1447,6 +1573,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: PySCF cube 出力を py3Dmol へ渡す
     - 呼出先: `_mo_coeff_for_cube`、`common_backend.cube.max_abs_value`
     - 呼出元: `gui.pyscf_screen.build_app`
+    - 関連テスト: なし
 
 - `writer_molden.py`
 
@@ -1457,6 +1584,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: PySCF の版差を吸収するため高水準 API を順に試し、最後に低水準 API へフォールバックする
     - 呼出先: なし
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
+    - 関連テスト: `tests/test_pipeline.py`
 
 ### uma_backend
 
@@ -1476,6 +1604,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 利用者へ、計算デバイスと性能上の注意を示す
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_pipeline.py`
 
   - `load_predictor(model_name: str, device: str) -> object`
     - 引数: FAIR-Chem モデル名、デバイス
@@ -1484,6 +1613,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: `fairchem.core.pretrained_mlip` の公開 API を使う。ゲート付きモデルの拒否は `uma_hf.explain_hf_error` で利用者向けの文面にし、`uma_hf.UmaSetupError` として送出する（再エクスポートはしない）
     - 呼出先: `uma_backend.uma_hf.UmaSetupError`、`uma_backend.uma_hf.explain_hf_error`
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_pipeline.py`
 
   - `clear_predictor_cache() -> None`
     - 引数: なし
@@ -1491,6 +1621,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 読み込み済みのモデルを解放する（GPU メモリを空けたいとき用）
     - 呼出先: なし
     - 呼出元: なし
+    - 関連テスト: `tests/test_uma_engine.py`
 
   - `make_calculator(predictor, task_name: str = "omol") -> object`
     - 引数: 学習済みモデル（predict unit）、タスク名
@@ -1498,6 +1629,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: UMA の予測を、ASE の最適化器から使える計算器にする
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_pipeline.py`
 
   - `build_atoms(structure, charge: int, multiplicity: int) -> ase.Atoms`
     - 引数: 共通の構造（`Structure`）、電荷、スピン多重度
@@ -1505,6 +1637,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: UMA（omol タスク）へ渡す入力を作る。Atoms 本体は `common_backend.ase_bridge.structure_to_atoms` で作り、ここでは、電荷を `atoms.info["charge"]`、スピン多重度を `atoms.info["spin"]` に設定する（fairchem の README・ColabReaction と同じ方式。このキー名は UMA 固有の約束）
     - 呼出先: `common_backend.ase_bridge.structure_to_atoms`
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_pipeline.py`
 
 - `uma_optimize.py`
 
@@ -1512,16 +1645,19 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 設定ファイルで指定できる ASE の最適化アルゴリズム（`LBFGS`・`BFGS`・`FIRE`）
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`（定数）
+    - 関連テスト: `tests/test_uma_config.py`
 
   - `OptimizationResult`
     - 目的: UMA 最適化の元素、座標・エネルギー・最大力履歴、最終 Atoms、収束状態、所要時間を保持するコンテナ。`final_fmax` プロパティは最終最大力[eV/Å]を返す
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
+    - 関連テスト: なし
     - `final_fmax`（プロパティ）
       - 戻り値: 最後のステップの力の最大値 [eV/Å]（履歴がなければ `None`）
       - 目的: 収束の判定と、ログ・画面の表示に使う
       - 呼出先: なし
       - 呼出元: `run_geometry_optimization`（属性として参照）、`uma_backend.uma_pipeline.run_calculation`、`uma_backend.uma_report.build_log_text`
+      - 関連テスト: なし
 
   - `run_geometry_optimization(atoms: ase.Atoms, calculator, opt_cfg: dict, progress = None) -> OptimizationResult`
     - 引数: 初期 Atoms、計算器、最適化設定、任意の進捗コールバック
@@ -1530,6 +1666,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: ASE 最適化器を用いて UMA Calculator と直結する
     - 呼出先: `ALLOWED_OPTIMIZERS`（定数）、`OptimizationResult`、`common_backend.energy.HARTREE_TO_EV`（定数）、`OptimizationResult.final_fmax`（属性として参照）
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_optimize.py`
 
 - `uma_freq.py`
 
@@ -1542,6 +1679,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: ASE の `Vibrations` を使わず、並進・回転を除いた振動モードだけを、PySCF 版と同じ個数・同じ形式で返す
     - 呼出先: `common_backend.vibration.FrequencyResult`、`common_backend.vibration.compute_hessian_fd`、`common_backend.vibration.harmonic_analysis`、`common_backend.vibration.zero_point_energy_ev`、`common_backend.energy.HARTREE_TO_EV`（定数）、`common_backend.vibration.FrequencyResult.n_imaginary`（属性として参照）
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_freq.py`
 
 - `uma_hf.py`
 
@@ -1551,21 +1689,25 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: UMA の Hugging Face のリポジトリ名（`facebook/UMA`）
     - 呼出先: なし
     - 呼出元: `check_model_access`（定数）、`explain_hf_error`（定数）
+    - 関連テスト: `tests/test_uma_engine.py`
 
   - `HF_TOKEN_ENV`
     - 目的: トークンの受け渡しに使う環境変数名（`HF_TOKEN`。Hugging Face 公式の標準）
     - 呼出先: なし
     - 呼出元: `login_from_environment`（定数）
+    - 関連テスト: `tests/test_uma_engine.py`
 
   - `LICENSE_FILENAME`
     - 目的: アクセス確認のために取得する、小さなファイルの名前（`LICENSE`。約 6.5 kB）
     - 呼出先: なし
     - 呼出元: `check_model_access`（定数）
+    - 関連テスト: `tests/test_uma_engine.py`
 
   - `UmaSetupError(RuntimeError)`
     - 目的: Hugging Face 認証、アクセス権、ライブラリ未導入など、UMA を使うための準備の問題に関する利用者向け例外。`uma_engine.py` からは再エクスポートせず、利用側は `uma_hf.UmaSetupError` と書く
     - 呼出先: なし
     - 呼出元: `ColabApp_UMA.ipynb`（例外の捕捉）、`gui.uma_screen.build_app`（例外の捕捉）、`uma_backend.uma_engine.load_predictor`、`check_model_access`、`login_from_environment`、`login_with_token`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`、`tests/test_uma_pipeline.py`
 
   - `login_with_token(token: str) -> None`
     - 引数: Hugging Face のトークン
@@ -1573,6 +1715,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: トークンで Hugging Face にログインし、環境変数 `HF_TOKEN` にも設定する（fairchem がモデルを取得するときに参照するため）。トークンは、画面やログに出さない
     - 呼出先: `UmaSetupError`
     - 呼出元: `login_from_environment`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`
 
   - `login_from_environment() -> None`
     - 引数: なし
@@ -1581,6 +1724,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: 環境変数 `HF_TOKEN` を使い、ノートブックの入力方法（`getpass`・シークレット）を、このモジュールから見えなくする。入力欄を GUI（ipywidgets）に置くと、入力値が保存されるノートブックに残りうるため、採用しない
     - 呼出先: `HF_TOKEN_ENV`（定数）、`UmaSetupError`、`login_with_token`
     - 呼出元: `ColabApp_UMA.ipynb`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`、`tests/test_uma_notebook.py`
 
   - `has_hf_token() -> bool`
     - 引数: なし
@@ -1588,6 +1732,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: アクセスの確認の前に、トークンの有無を調べる
     - 呼出先: なし
     - 呼出元: `check_model_access`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`
 
   - `explain_hf_error(error: Exception) -> str`
     - 引数: Hugging Face 関連の例外
@@ -1595,6 +1740,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: ゲート付きモデルへの未同意・認証エラー、接続エラー、その他を区別して案内する
     - 呼出先: `MODEL_REPO_ID`（定数）
     - 呼出元: `uma_backend.uma_engine.load_predictor`、`check_model_access`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`
 
   - `check_model_access() -> str`
     - 引数: なし
@@ -1602,6 +1748,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: UMA のゲート付きモデルへのアクセス権を、モデル本体を取得する前に確認する
     - 呼出先: `has_hf_token`、`UmaSetupError`、`MODEL_REPO_ID`（定数）、`LICENSE_FILENAME`（定数）、`explain_hf_error`
     - 呼出元: `ColabApp_UMA.ipynb`、`uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_engine.py`、`tests/test_uma_hf.py`、`tests/test_uma_notebook.py`、`tests/test_uma_pipeline.py`
 
 - `uma_notice.py`
 
@@ -1609,31 +1756,37 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: UMA のライセンス名（FAIR Chemistry License v1）
     - 呼出先: なし
     - 呼出元: `notice_text`（定数）
+    - 関連テスト: `tests/test_uma_notice_report.py`
 
   - `LICENSE_URL`
     - 目的: ライセンス全文（一次情報）の URL
     - 呼出先: なし
     - 呼出元: `notice_text`（定数）
+    - 関連テスト: `tests/test_uma_notebook.py`、`tests/test_uma_notice_report.py`
 
   - `MODEL_CARD_URL`
     - 目的: モデルカード（Acceptable Use Policy・引用の依頼を含む。一次情報）の URL
     - 呼出先: なし
     - 呼出元: `notice_text`（定数）
+    - 関連テスト: `tests/test_uma_notebook.py`、`tests/test_uma_notice_report.py`
 
   - `PAPER_URL`
     - 目的: UMA の論文（arXiv）の URL
     - 呼出先: なし
     - 呼出元: `notice_text`（定数）
+    - 関連テスト: `tests/test_uma_notebook.py`、`tests/test_uma_notice_report.py`
 
   - `FAIRCHEM_URL`
     - 目的: fairchem のリポジトリの URL
     - 呼出先: なし
     - 呼出元: なし
+    - 関連テスト: `tests/test_uma_notebook.py`
 
   - `CITATION`
     - 目的: モデルカードが引用を求めている論文の書誌。ノートブック冒頭の文面と同じ内容に保つ（`tests/test_uma_notebook.py` が検査する）
     - 呼出先: なし
     - 呼出元: `notice_text`（定数）
+    - 関連テスト: `tests/test_uma_notice_report.py`
 
   - `notice_text() -> str`
     - 引数: なし
@@ -1641,6 +1794,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 計算ログの末尾に入れる。我々の解釈や要約を加えず、一次情報の所在と、求められている引用の形だけを伝える
     - 呼出先: `UMA_LICENSE_NAME`（定数）、`LICENSE_URL`（定数）、`MODEL_CARD_URL`（定数）、`CITATION`（定数）、`PAPER_URL`（定数）
     - 呼出元: `uma_backend.uma_report.build_log_text`
+    - 関連テスト: `tests/test_uma_notice_report.py`
 
 - `uma_pipeline.py`
 
@@ -1650,11 +1804,13 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 利用者が指定する計算条件を保持する。`input_filename` は計算ログに記載する
     - 呼出先: なし
     - 呼出元: `gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_uma_pipeline.py`
 
   - `CalculationResult(structure, opt_result, freq_result, final_symbols, final_coords, device_label, out_dir, final_xyz_path, traj_xyz_path, log_path, total_seconds)`
     - 目的: 計算結果（最適化結果、振動数結果、最終構造、デバイスの説明）と、書き出したファイルの場所を保持する。画面表示・ダウンロードにそのまま使う
     - 呼出先: なし
     - 呼出元: `run_calculation`
+    - 関連テスト: なし
 
   - `run_calculation(structure, settings: CalculationSettings, defaults: dict, log = print) -> CalculationResult`
     - 引数: 読込みと入力検証が済んだ構造、計算条件、`config/uma_defaults.yaml` の辞書、ログ出力関数
@@ -1662,8 +1818,9 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 上記の流れを最初から最後まで実行し、進捗（最適化の各ステップ、Hessian 計算の進み具合）・注意（CPU での低速、収束しなかった場合、原子数が多い場合）・所要時間を `log` へ出す
     - 技術選定: 計算の流れを画面から分け、UMA・fairchem・Colab なしで、段階の呼出し順序と受渡しを単体テストできるようにする
     - 例外: トークン・アクセス権・ライブラリ未導入は `uma_hf.UmaSetupError`、ライブラリを読み込めない場合は `ImportError`、設定の誤りは `ValueError`
-    - 呼出先: `uma_backend.uma_hf.check_model_access`、`common_backend.runtime.torch_cuda_available`、`uma_backend.uma_engine.describe_device`、`uma_backend.uma_engine.load_predictor`、`uma_backend.uma_engine.make_calculator`、`uma_backend.uma_engine.build_atoms`、`uma_backend.uma_optimize.run_geometry_optimization`、`uma_backend.uma_freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`uma_backend.uma_report.build_log_text`、`CalculationResult`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`、`common_backend.vibration.FrequencyResult.n_imaginary`
+    - 呼出先: `uma_backend.uma_hf.check_model_access`、`common_backend.runtime.torch_cuda_available`、`uma_backend.uma_engine.describe_device`、`uma_backend.uma_engine.load_predictor`、`uma_backend.uma_engine.make_calculator`、`uma_backend.uma_engine.build_atoms`、`uma_backend.uma_optimize.run_geometry_optimization`、`uma_backend.uma_freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`uma_backend.uma_report.build_log_text`、`CalculationResult`、`common_backend.vibration.FrequencyResult.n_imaginary`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`
     - 呼出元: `gui.uma_screen.build_app`
+    - 関連テスト: `tests/test_uma_pipeline.py`
 
 - `uma_report.py`
 
@@ -1671,8 +1828,9 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 引数: バージョン、計算条件、入力名、電荷・多重度、最適化結果、任意の振動数結果・合計時間
     - 戻り値: UTF-8 テキストログ
     - 目的: 再現に必要な条件、履歴、振動数、UMA 通知をひとつの出力にまとめる
-    - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）、`uma_backend.uma_notice.notice_text`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`、`common_backend.vibration.FrequencyResult.zpe_kcal_per_mol`
+    - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）、`uma_backend.uma_notice.notice_text`、`common_backend.vibration.FrequencyResult.zpe_kcal_per_mol`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
+    - 関連テスト: `tests/test_uma_notice_report.py`、`tests/test_uma_pipeline.py`
 
 ### config
 
@@ -1734,6 +1892,10 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 - `fake_gui_env.py`
 
 	`fake_gui_env(colab: bool = True)`、`_build_ipywidgets`、`_build_ipython_display`、`_Env` は、`test_gui_parts.py` で `gui.parts` をブラウザや Colab 接続なしで検証するための代用品（`qchem_colab_app.gui.parts` などを読み込み直す際、`sys.modules` だけでなく、親パッケージの属性も消す）（Text・IntText・Button・Dropdown などの代用ウィジェットを含む）を提供する。
+
+- `test_agents_spec.py`
+
+	対象: `AGENTS.md`の仕様書(`tests/spec_analysis.py`の解析と突き合わせる)。ソースの定義すべてに仕様書の項目があること(逆も同じ)、「呼出先」「呼出元」「関連テスト」の行が最新であること(古ければ`python3 tests/spec_analysis.py --fix`で更新する)、`tests/`のテストファイルすべてに、この節の項目があること(逆も同じ)を検査する。`AGENTS.md`がない`main`ブランチでは、スキップする。
 
 - `test_analysis_pyscf.py`
 
