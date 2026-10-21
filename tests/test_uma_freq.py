@@ -5,7 +5,7 @@ uma_backend.uma_freq.run_frequency_analysis と FrequencyResult の単体テス�
 
 数値計算そのもの(中心差分のHessian・調和解析・ZPEの式)は、common_backend/vibration.py に移したため、
 tests/test_vibration.py で確認している。ここでは、UMAの計算器から力を取り出して結果にまとめる部分
-(振動数の個数・ZPEの単位換算・虚振動の注意文・原子が1個のときの扱い)を確認する。
+(振動数の個数・ZPEの単位換算・虚振動の注意文・原子が1個のときの扱い・結果が共通の FrequencyResult であること)を確認する。
 
     - TestRunFrequencyAnalysis : ASEもUMAも使わず、バネのモデルを返す代用のAtoms・計算器で確認する
     - TestAgainstAse           : ASEが入っている環境では、ASE付属の簡易ポテンシャル(EMT)を使い、ASEの
@@ -25,7 +25,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))     # 同じフォルダの test_vibration.py を読むため
 
-from qchem_colab_app.common_backend import energy  # noqa: E402
+from qchem_colab_app.common_backend import energy, vibration  # noqa: E402
 from qchem_colab_app.uma_backend import uma_freq  # noqa: E402
 from test_vibration import (  # noqa: E402
     DELTA, equilibrium_pairs, select_vibrational, signed_frequencies, spring_forces_fn)
@@ -82,11 +82,16 @@ class TestRunFrequencyAnalysis(unittest.TestCase):
         self.assertEqual(result.normal_modes.shape, (1, 2, 3))
         self.assertEqual(result.n_imaginary, 0)
         self.assertEqual(result.warning_message, "")
-        zpe = result.thermo_summary
         zpe_ev = 0.5 * result.frequencies_cm1[0] * 1.239841984e-4
-        self.assertAlmostEqual(zpe["ZPE_Hartree"] * energy.HARTREE_TO_EV, zpe_ev, places=12)
-        self.assertAlmostEqual(zpe["ZPE_kcal_per_mol"] / zpe["ZPE_Hartree"],
+        self.assertAlmostEqual(result.zpe_hartree * energy.HARTREE_TO_EV, zpe_ev, places=12)
+        self.assertAlmostEqual(result.zpe_kcal_per_mol / result.zpe_hartree,
                                energy.HARTREE_TO_KCAL_MOL, places=6)
+
+    def test_the_result_is_the_common_frequency_result(self):
+        atoms, calculator = diatomic(30.0)
+        result = uma_freq.run_frequency_analysis(atoms, calculator, self.CFG)
+        self.assertIs(type(result), vibration.FrequencyResult)
+        self.assertFalse(hasattr(uma_freq, "FrequencyResult"))
 
     def test_input_atoms_are_not_modified(self):
         atoms, calculator = diatomic(30.0)

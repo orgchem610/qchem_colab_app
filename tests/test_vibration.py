@@ -1,7 +1,7 @@
 """
 tests/test_vibration.py
 -----------------------
-common_backend.vibration の数値計算(中心差分によるHessian・並進回転を除いた調和解析・ゼロ点エネルギー)の
+common_backend.vibration の数値計算(中心差分によるHessian・並進回転を除いた調和解析・ゼロ点エネルギー・結果の入れ物 FrequencyResult)の
 単体テスト。ASEにもUMAにも依存せず、numpyだけで動く。
 
 「原子間をバネでつないだモデル」の解析解や、物理的に成り立つべき性質
@@ -221,6 +221,36 @@ class TestZeroPointEnergy(unittest.TestCase):
 
     def test_no_modes_gives_zero(self):
         self.assertEqual(vibration.zero_point_energy_ev([]), 0.0)
+
+
+class TestFrequencyResult(unittest.TestCase):
+    def test_a_new_result_is_empty(self):
+        result = vibration.FrequencyResult()
+        self.assertEqual(result.frequencies_cm1, [])
+        self.assertIsNone(result.normal_modes)
+        self.assertIsNone(result.zpe_hartree)
+        self.assertEqual(result.elapsed_seconds, 0.0)
+        self.assertEqual(result.warning_message, "")
+        self.assertEqual(result.n_imaginary, 0)
+        self.assertIsNone(result.zpe_kcal_per_mol)
+
+    def test_the_number_of_imaginary_frequencies_follows_the_frequencies(self):
+        result = vibration.FrequencyResult()
+        result.frequencies_cm1 = [-120.0, -3.0, 0.0, 450.0, 1600.0]
+        self.assertEqual(result.n_imaginary, 2)
+        result.frequencies_cm1 = [450.0]
+        self.assertEqual(result.n_imaginary, 0)
+
+    def test_zpe_in_kcal_per_mol_is_converted_from_hartree(self):
+        from qchem_colab_app.common_backend import energy
+        result = vibration.FrequencyResult()
+        result.zpe_hartree = 0.02
+        self.assertAlmostEqual(result.zpe_kcal_per_mol, 0.02 * energy.HARTREE_TO_KCAL_MOL, places=12)
+
+    def test_instances_do_not_share_their_lists(self):
+        first, second = vibration.FrequencyResult(), vibration.FrequencyResult()
+        first.frequencies_cm1.append(1.0)
+        self.assertEqual(second.frequencies_cm1, [])
 
 
 # -----------------------------------------------------------------------------

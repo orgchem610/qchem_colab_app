@@ -41,10 +41,3 @@ if __name__ == "__main__":
 class TestUnitConversions(unittest.TestCase):
     def test_hartree_to_ev(self):
         self.assertAlmostEqual(energy.HARTREE_TO_EV, 27.211386245988, places=9)
-
-    def test_ev_to_kcal_mol_is_consistent_with_the_other_two_factors(self):
-        self.assertAlmostEqual(energy.EV_TO_KCAL_MOL * energy.HARTREE_TO_EV,
-                               energy.HARTREE_TO_KCAL_MOL, places=9)
-
-    def test_ev_to_kcal_mol_value(self):
-        self.assertAlmostEqual(energy.EV_TO_KCAL_MOL, 23.0605, places=4)

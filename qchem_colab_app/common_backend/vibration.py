@@ -6,9 +6,13 @@ common_backend.vibration
     - compute_hessian_fd()     : 力の中心差分から、Hessian(エネルギーの2次微分行列)を作る
     - harmonic_analysis()      : Hessianから、並進・回転を除いた調和振動数と基準振動モードを求める
     - zero_point_energy_ev()   : 振動数からゼロ点エネルギー(ZPE)を求める
+    - FrequencyResult          : 振動数解析の結果を入れる入れ物(PySCF版・UMA版の共通の親)
 
-ASEにも、UMAにも、PySCFにも依存しない。現在は uma_backend/uma_freq.py だけが使う
+ASEにも、UMAにも、PySCFにも依存しない。数値計算の関数は、現在は uma_backend/uma_freq.py だけが使う
 (PySCF版は、PySCF自身の解析的Hessianと pyscf.hessian.thermo を使う)。
+FrequencyResult は、両方のエンジンが使う。UMA版はそのまま使い、PySCF版は子クラス
+(pyscf_backend/freq.py の FrequencyResult)で、PySCFが求める熱力学量(自由エネルギー・温度)の項目を足す。
+画面(gui/parts.py の VibrationViewer)は frequencies_cm1 と normal_modes だけを使う。
 数値の正しさは、tests/test_vibration.py で、バネのモデルの解析解・同位体効果・回転不変性、
 およびASEの Vibrations・VibrationsData との照合で確認している。
 
@@ -21,6 +25,8 @@ ASEにも、UMAにも、PySCFにも依存しない。現在は uma_backend/uma_f
 import math
 
 import numpy as np
+
+from qchem_colab_app.common_backend import energy
 
 # 物理定数(CODATA 2018)
 _EV_J = 1.602176634e-19
@@ -118,3 +124,33 @@ def zero_point_energy_ev(frequencies_cm1):
     Hartree・kcal/molへの換算は、common_backend.energy の係数を使う。
     """
     return 0.5 * sum(f for f in frequencies_cm1 if f > 0) * _HC_EV_CM
+
+
+class FrequencyResult:
+    """振動数解析の結果。PySCF版・UMA版で共通の項目を持つ(エンジン固有の項目は、子クラスで足す)。
+
+    frequencies_cm1 : 振動数 [cm^-1] のリスト。虚振動は負の値
+    normal_modes    : 基準振動モードの原子変位。shape (モード数, 原子数, 3)。求めていなければ None
+    zpe_hartree     : ゼロ点エネルギー [Hartree]。求めていなければ None
+    elapsed_seconds : 所要時間 [秒]
+    warning_message : 利用者に示す注意文(なければ空文字)
+    n_imaginary     : 虚振動の数(frequencies_cm1 から求める)
+    zpe_kcal_per_mol: ゼロ点エネルギー [kcal/mol](zpe_hartree から求める)
+    """
+
+    def __init__(self):
+        self.frequencies_cm1 = []
+        self.normal_modes = None
+        self.zpe_hartree = None
+        self.elapsed_seconds = 0.0
+        self.warning_message = ""
+
+    @property
+    def n_imaginary(self):
+        return sum(1 for f in self.frequencies_cm1 if f < 0)
+
+    @property
+    def zpe_kcal_per_mol(self):
+        if self.zpe_hartree is None:
+            return None
+        return self.zpe_hartree * energy.HARTREE_TO_KCAL_MOL

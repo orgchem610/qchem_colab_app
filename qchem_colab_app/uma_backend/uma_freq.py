@@ -19,25 +19,15 @@ UMAを使った振動数解析(調和近似)。
 【単位】 座標[Å]、力[eV/Å]、Hessian[eV/Å^2]、質量[amu]、振動数[cm^-1]
 虚振動は、PySCF版と同じく負の値で表す。
 
-【結果の形式】(qchem_colab_app/pyscf_backend/freq.py の FrequencyResult と項目名をそろえている)
+【結果の形式】(common_backend/vibration.py の FrequencyResult を、そのまま使う。PySCF版は、その子クラス)
     frequencies_cm1 : 振動数のリスト(昇順。虚振動は負)
     normal_modes    : 各モードの原子変位ベクトル。shape (モード数, 原子数, 3)
-    n_imaginary, thermo_summary, elapsed_seconds, warning_message
+    zpe_hartree, elapsed_seconds, warning_message(n_imaginary・zpe_kcal_per_mol は、そこから求まる)
 """
 
 import time
 
 from qchem_colab_app.common_backend import energy, vibration
-
-
-class FrequencyResult:
-    def __init__(self):
-        self.frequencies_cm1 = []
-        self.normal_modes = None
-        self.n_imaginary = 0
-        self.thermo_summary = {}
-        self.elapsed_seconds = 0.0
-        self.warning_message = ""
 
 
 def run_frequency_analysis(atoms, calculator, freq_cfg, progress=None):
@@ -50,7 +40,7 @@ def run_frequency_analysis(atoms, calculator, freq_cfg, progress=None):
     freq_cfg : config/uma_defaults.yaml の frequency 節
     progress : progress(完了した原子数, 全原子数) を呼ぶ関数(省略可)
     """
-    result = FrequencyResult()
+    result = vibration.FrequencyResult()
     t0 = time.perf_counter()
 
     if len(atoms) < 2:
@@ -71,13 +61,8 @@ def run_frequency_analysis(atoms, calculator, freq_cfg, progress=None):
 
     result.frequencies_cm1 = [float(f) for f in freqs]
     result.normal_modes = modes
-    result.n_imaginary = sum(1 for f in result.frequencies_cm1 if f < 0)
 
-    zpe_ev = vibration.zero_point_energy_ev(result.frequencies_cm1)
-    result.thermo_summary = {
-        "ZPE_Hartree": zpe_ev / energy.HARTREE_TO_EV,
-        "ZPE_kcal_per_mol": zpe_ev * energy.EV_TO_KCAL_MOL,
-    }
+    result.zpe_hartree = vibration.zero_point_energy_ev(result.frequencies_cm1) / energy.HARTREE_TO_EV
 
     if result.n_imaginary > 0:
         imaginary = [f for f in result.frequencies_cm1 if f < 0]

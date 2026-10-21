@@ -2,26 +2,23 @@
 qchem_colab_app.common_backend.energy
 -------------------------------------
 エネルギーの単位換算と、相対エネルギー。画面にも計算エンジンにも依存しない純粋な関数で、
-バックエンド(uma_backend/uma_report.py)と画面(gui/parts.py・gui/energy_plot.py)の
-両方が使う。
+バックエンド(pyscf_backend/analysis_pyscf.py・uma_backend/・common_backend/vibration.py)と
+画面(gui/parts.py・gui/energy_plot.py)の両方が使う。
 
 (v0.2.2で、旧 common/energy_plot.py から分けた。クリックできるSVGグラフと、その目盛りの計算は、
 画面の層の gui/energy_plot.py にある。)
 
     HARTREE_TO_KCAL_MOL     : エネルギーの単位換算(1 Hartree = 627.5094740631 kcal/mol)
     HARTREE_TO_EV           : エネルギーの単位換算(1 Hartree = 27.211386245988 eV)
-    EV_TO_KCAL_MOL          : エネルギーの単位換算(1 eV = 約23.0605 kcal/mol。上の2つから求める)
     relative_energies_kcal(): 最終点を基準にした相対エネルギー[kcal/mol]
 
-(v0.2.2で、Hartree↔eVの換算係数を、uma_backendの2つのモジュールと pyscf_backend/analysis_pyscf.py に
-別々に書かれていたものから、ここに集めた。)
+Hartree↔eVの換算係数は、uma_backend・pyscf_backend のどちらも、ここの HARTREE_TO_EV を使う。
 """
 
 import math
 
 HARTREE_TO_KCAL_MOL = 627.5094740631
 HARTREE_TO_EV = 27.211386245988
-EV_TO_KCAL_MOL = HARTREE_TO_KCAL_MOL / HARTREE_TO_EV
 
 
 def relative_energies_kcal(energies_hartree):
