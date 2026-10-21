@@ -37,9 +37,11 @@
   - 共通化しているもの: 電荷・スピン多重度の入力欄、構造の読み込みと検証、最適化の標準出力2ファイルとダウンロード項目、
     ダウンロード名の既定値、設定の読み込み(`common_backend.config_loader.load_yaml`)と`__version__`(`common_backend.version`)、
     エネルギーの単位換算(`common_backend.energy`)、cubeファイルの読み取り(`common_backend.cube`)、
-    振動数解析の数値計算(`common_backend.vibration`。現在使うのはUMA版だけ)、原子電荷の描画(`gui.plot_common`)。
+    振動数解析の数値計算と結果の入れ物(`common_backend.vibration`。数値計算を使うのは現在UMA版だけ。`FrequencyResult`は両方が使い、
+    PySCF版は子クラスで熱力学量の項目を足す)、元素のデータ(`common_backend.elements`)、GPUの判定(`common_backend.runtime`)、
+    ASEのAtomsへの変換(`common_backend.ase_bridge`)、原子電荷の描画(`gui.plot_common`)。
     1か所からしか呼ばれていなくても、特定のエンジンに依存しない部品は、共通のパッケージに置く方針である。
-  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、結果クラス(`OptimizationResult`・`FrequencyResult`等。共通化の是非は、「今後の予定・検討中の事項」を参照)、
+  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、結果クラス(`OptimizationResult`等。共通の親クラスを作るかは、「今後の予定・検討中の事項」を参照)、
     設定ファイル(`defaults.yaml`・`uma_defaults.yaml`)、扱える元素の範囲、ノートブックの「1-a〜1-c」セル(リポジトリ取得前に動くため)。
 - `AGENTS.md`は、`develop`・`feature/*`では追跡し、`main`では追跡しない。Claudeが`main`へのマージの手順を案内するときは、
   必ず「`AGENTS.md`のGit管理」と「`main`ブランチへのリリース(マージ)の手順」の4(`--no-ff --no-commit`でマージ →
@@ -87,6 +89,9 @@ qchem_colab_app/
 │   │   ├── __init__.py
 │   │   ├── config_loader.py          # config/のYAMLの読み込み(pyscf_backend・uma_backendの両方が使う)
 │   │   ├── cube.py                    # cubeファイルの値の読み取り(PySCFに依存しない)
+│   │   ├── elements.py                # 元素のデータ(元素記号→原子番号。H〜Xe)
+│   │   ├── runtime.py                  # GPUの判定(nvidia-smi・torch.cuda)
+│   │   ├── ase_bridge.py               # 共通の構造→ASEのAtoms
 │   │   ├── version.py                 # バージョン番号(__version__。リポジトリ全体で1か所だけ)
 │   │   ├── io_reader.py             # 構造ファイルの読み込み・入力バリデーション
 │   │   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム・最適化の標準出力2ファイル)
@@ -124,7 +129,9 @@ qchem_colab_app/
     ├── test_io_reader.py / test_config.py / test_visualizer.py   # 入力・設定・分子軌道の可視化(PySCF非依存部分)
     ├── test_cube.py                  # cubeファイルの値の読み取り(common_backend)
     ├── test_plot_common.py          # 原子電荷の色分け・数値ラベル・電荷表(gui。py3Dmolの代用品を使用)
-    ├── test_vibration.py              # 振動数解析の数値計算(common_backend。バネのモデルの解析解・ASEとの照合)
+    ├── test_vibration.py              # 振動数解析の数値計算・FrequencyResult(common_backend。バネのモデルの解析解・ASEとの照合)
+    ├── test_elements.py / test_runtime.py / test_ase_bridge.py   # 元素表・GPU判定・ASEへの変換(common_backend。torch・ASEの代用品を使用)
+    ├── test_freq.py                   # PySCF版の振動数解析の結果の組み立て(pyscf.hessian.thermoの代用品を使用)
     ├── test_analysis_pyscf.py       # 分子軌道の選択肢・Mulliken電荷(PySCFなしの代用オブジェクトで確認)
     ├── test_engine.py                # GPUランタイムの判定(PySCFなし)
     ├── test_pipeline.py              # PySCF版の計算の流れ(engine等を代用の関数に差し替えて確認)
@@ -161,7 +168,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 一方向に依存させるための構成である。
 
 - `common_backend`: 画面にも計算エンジンにも依存しない共通部品(設定の読み込み・バージョン・構造の読み込み・xyz出力・
-  エネルギーの換算)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
+  エネルギーの換算・元素のデータ・GPUの判定・ASEへの変換・振動数解析の数値計算)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
 - `pyscf_backend`: PySCF専用。PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えない。
 - `uma_backend`: UMA専用。`pyscf_backend`を一切importしない(PySCFがインストールされていない環境でも動くようにするため)。
 - `gui`: 画面。共通の画面部品(`parts`・`inputs`・`outputs`・`colab_widgets`・`energy_plot`・`plot_common`)は、
@@ -302,15 +309,13 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 - **UMAで最適化した構造への、PySCFによる一点計算**: UMA版の画面から、分子軌道・原子電荷を見られるようにする案。
 - **PySCF版の振動数計算でのGPU利用**: Hessian計算だけ試験的にGPUを使い、失敗したらCPUにフォールバックする案(現在は、
   最終構造のCPU再計算と振動数計算を、常にCPUで行う)。
-- **`analysis_pyscf.HARTREE_TO_EV`の置き換え**: `common_backend.energy.HARTREE_TO_EV`に置き換え、定義を1か所にする。
-  `tests/test_analysis_pyscf.py`が`analysis_pyscf.HARTREE_TO_EV`を参照していないかを確認してから行う。
 - **PySCF版の虚振動の扱いの確認**: `pyscf_backend/freq.py`は、PySCFが返す振動数を`float(f.real)`で実数にしている。
   虚振動のある構造で、Colab実機で、虚振動が負の値として数えられているかを確認する(PySCFの版による違いの可能性がある)。
-- **共通化の検討(判断待ち)**: (1)`FrequencyResult`(`pyscf_backend.freq`と`uma_backend.uma_freq`に同じ項目のクラスが2つある。
-  共通の基底・単一のクラス・`typing.Protocol`の案があり、`thermo_summary`のキーの違いが論点)、(2)元素記号の表
-  (`analysis_pyscf._ELEMENT_SYMBOLS`と`io_reader.ATOMIC_NUMBERS`の重複)、(3)GPU・デバイスの判定(`engine.gpu_runtime_detected`の
-  `nvidia-smi`と、`uma_engine.get_device`の`torch.cuda`)、(4)ASEに関する部品(`uma_engine.build_atoms`のうちASEの`Atoms`を作る部分と、
-  `io_reader._read_with_ase`)。
+- **`OptimizationResult`の共通の親クラス**: `pyscf_backend.optimize`と`uma_backend.uma_optimize`に、`symbols`・`energies`・
+  `coords_history`・`converged`・`elapsed_seconds`が共通の結果クラスが2つある。`FrequencyResult`と同じ形(共通の親+エンジン固有の項目を
+  足す子)にするかを検討する。
+- **`io_reader._read_with_ase`の移動**: `ase_bridge`へ移すと、`io_reader`と`ase_bridge`が互いをimportする。`Structure`・`StructureError`を
+  別のモジュールに分ければ移せるが、importする側が広く変わる。必要になった時点で検討する。
 
 ## バージョン管理・ブランチ運用
 
@@ -457,7 +462,8 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 - **構造最適化のエネルギー履歴がほぼ1点しかない場合**: `pyscf_backend/optimize.py`の`_make_callback()`内で、PySCFのgeomeTRIC連携が渡す
   コールバック引数のキー名(`energy`・`e_tot`・`mol`・`coords`等)が、使っているPySCFの版と一致していない可能性がある。
   `pyscf.geomopt.geometric_solver`のソースと照らし合わせて調整する。
-- **GPU**: GPUを使うかどうかは、GPUランタイムかどうか(`nvidia-smi`が成功するか)で自動的に判定する(GUIにチェックボックスは置かない)。
+- **GPU**: GPUを使うかどうかは、GPUランタイムかどうか(`common_backend.runtime.nvidia_gpu_detected`が、`nvidia-smi`が成功するかで判定する)で
+  自動的に決める(GUIにチェックボックスは置かない)。UMA版は、torchがGPUを使えるか(`runtime.torch_cuda_available`)で決める。
   GPU4PySCFのインストールに失敗する場合は、ColabのCUDAバージョンと`gpu4pyscf-cuda12x`・`gpu4pyscf-cuda11x`の対応を確認し、
   `ColabApp.ipynb`のGPU4PySCFインストールセルのパッケージ名を読み替える。GPUが使えなくても、CPU実行として計算は継続する。
 - **最終構造のCPU再計算・振動数計算をCPUで行う理由**: GPU4PySCFの解析的Hessian・分子軌道(cubegen)・Mulliken電荷計算の対応状況は、
@@ -533,6 +539,17 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
   共通部品パッケージの識別用モジュール。公開関数は持たない。
 
+- `ase_bridge.py`
+
+  共通の構造（`io_reader.Structure`）を ASE のオブジェクトに変換する。画面にも計算エンジンにも依存しない。電荷・スピン多重度の設定は、計算器ごとの約束のため、含まない。
+
+  - `structure_to_atoms(structure) -> ase.Atoms`
+    - 引数: 共通の構造（`symbols`・`coords`［Å］を持つ `Structure`）
+    - 戻り値: 元素記号と座標だけを設定した ASE `Atoms`
+    - 目的: 共通の構造を、ASE のオブジェクトに変換する。電荷・スピン多重度は、計算器ごとの約束のため、ここでは設定しない。ase は関数の中で import する
+    - 呼出先: なし
+    - 呼出元: `uma_backend.uma_engine.build_atoms`
+
 - `config_loader.py`
 
   `config/` 配下の YAML 設定を読み込む共通関数。PySCF 版・UMA 版が同じ関数を使う。
@@ -566,24 +583,28 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 呼出先: なし
     - 呼出元: `pyscf_backend.visualizer_pyscf.render_orbital`
 
+- `elements.py`
+
+  元素に関するデータ（元素記号 → 原子番号の表。H〜Xe）。画面にも計算エンジンにも依存しない。扱える元素の範囲は、この表で決まる。特定のエンジンが扱えない元素の判定（例: PySCF 版の遷移金属）は、そのエンジンのパッケージにある。
+
+  - `ATOMIC_NUMBERS`
+    - 目的: 元素記号から原子番号への表（H〜Xe）。読み込める元素の範囲の判定、電荷・スピン多重度の検証で使う全電子数の計算、軌道の数え上げに使う。表はここだけに置く
+    - 呼出先: なし
+    - 呼出元: `common_backend.io_reader._read_with_ase`（定数）、`common_backend.io_reader.read_xyz`（定数）、`common_backend.io_reader.validate_charge_and_multiplicity`（定数）、`pyscf_backend.analysis_pyscf._core_and_valence_orbital_counts`（定数）
+
 - `energy.py`
 
-  エネルギーの単位換算（Hartree・eV・kcal/mol）と相対エネルギー。画面にも計算エンジンにも依存しない純粋な値と関数で、バックエンド（`uma_backend`）と画面（`gui.parts`・`gui.energy_plot`）の両方が使う。
+  エネルギーの単位換算（Hartree・kcal/mol・eV）と相対エネルギー。画面にも計算エンジンにも依存しない純粋な値と関数で、バックエンド（`uma_backend`）と画面（`gui.parts`・`gui.energy_plot`）の両方が使う。
 
   - `HARTREE_TO_KCAL_MOL`
     - 目的: エネルギーの単位換算（1 Hartree = 627.5094740631 kcal/mol）を 1 か所で定義する
     - 呼出先: なし
-    - 呼出元: `EV_TO_KCAL_MOL`（定数）、`relative_energies_kcal`（定数）、`gui.parts.EnergyStructureViewer._show_structure_at_step`（定数）、`uma_backend.uma_report.build_log_text`（定数）
+    - 呼出元: `relative_energies_kcal`（定数）、`common_backend.vibration.FrequencyResult.zpe_kcal_per_mol`（定数）、`gui.parts.EnergyStructureViewer._show_structure_at_step`（定数）、`uma_backend.uma_report.build_log_text`（定数）
 
   - `HARTREE_TO_EV`
-    - 目的: エネルギーの単位換算（1 Hartree = 27.211386245988 eV、CODATA 2018）を 1 か所で定義する。`uma_backend` は、この定数だけを使う。`pyscf_backend.analysis_pyscf.HARTREE_TO_EV` に同じ値の重複があり、置き換える予定（「今後の予定・検討中の事項」を参照）
+    - 目的: エネルギーの単位換算（1 Hartree = 27.211386245988 eV、CODATA 2018）を 1 か所で定義する。`uma_backend`・`pyscf_backend` は、Hartree と eV の換算に、この定数だけを使う
     - 呼出先: なし
-    - 呼出元: `EV_TO_KCAL_MOL`（定数）、`uma_backend.uma_freq.run_frequency_analysis`（定数）、`uma_backend.uma_optimize.run_geometry_optimization`（定数）
-
-  - `EV_TO_KCAL_MOL`
-    - 目的: 1 eV あたりの kcal/mol（約 23.0605）。`HARTREE_TO_KCAL_MOL / HARTREE_TO_EV` として求めるため、2つの換算係数と常に整合する
-    - 呼出先: `HARTREE_TO_KCAL_MOL`（定数）、`HARTREE_TO_EV`（定数）
-    - 呼出元: `uma_backend.uma_freq.run_frequency_analysis`（定数）
+    - 呼出元: `pyscf_backend.analysis_pyscf.orbital_choices`（定数）、`uma_backend.uma_freq.run_frequency_analysis`（定数）、`uma_backend.uma_optimize.run_geometry_optimization`（定数）
 
   - `relative_energies_kcal(energies_hartree) -> list[float]`
     - 引数: 各最適化点の全エネルギー[Hartree]
@@ -594,12 +615,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 - `io_reader.py`
 
-  構造ファイルの読込みと、計算前の元素・座標・電荷・スピン検証を担当する。`.xyz` は自前のパーサー、`.com`・`.gjf`・`.pdb` は ASE 経由で読み込む。特定のエンジンが扱えない元素の判定は、そのエンジンのパッケージにある。
-
-  - `ATOMIC_NUMBERS`
-    - 目的: 元素記号から原子番号への表（H〜Xe）。読み込める元素の範囲の判定と、電荷・スピン多重度の検証で使う全電子数の計算に使う
-    - 呼出先: なし
-    - 呼出元: `_read_with_ase`（定数）、`read_xyz`（定数）、`validate_charge_and_multiplicity`（定数）
+  構造ファイルの読込みと、計算前の元素・座標・電荷・スピン検証を担当する。元素の表は `common_backend.elements` を使う。`.xyz` は自前のパーサー、`.com`・`.gjf`・`.pdb` は ASE 経由で読み込む。特定のエンジンが扱えない元素の判定は、そのエンジンのパッケージにある。
 
   - `SUPPORTED_EXTENSIONS`
     - 目的: `read_structure` が受け付ける拡張子（`.xyz`・`.com`・`.gjf`・`.pdb`）の集合。エラーメッセージで、対応形式を案内するために使う
@@ -621,14 +637,14 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 戻り値: `Structure`
     - 目的: 外部ライブラリなしで標準 XYZ を読む
     - 技術選定: 最小形式を自前実装し、基本入力の依存関係を減らす
-    - 呼出先: `StructureError`、`ATOMIC_NUMBERS`（定数）、`Structure`
+    - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）、`Structure`
     - 呼出元: `read_structure`
 
   - `_read_with_ase(filepath: str, ase_format: str) -> Structure`
     - 引数: ファイルのパス、ASE に渡す形式名
     - 戻り値: 読み込んだ構造
     - 目的: .com／.gjf／.pdb を ASE（`ase.io.read`）で読み込み、H〜Xe 以外の元素記号があればエラーにする。ASE が入っていない場合・読み込めない場合は、`StructureError` を送出する。内部補助関数
-    - 呼出先: `StructureError`、`ATOMIC_NUMBERS`（定数）、`Structure`
+    - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）、`Structure`
     - 呼出元: `read_structure`
 
   - `read_structure(filepath: str) -> Structure`
@@ -649,8 +665,27 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 引数: 構造、総電荷、スピン多重度
     - 戻り値: 正常時はなし、矛盾時は `StructureError`
     - 目的: 電子数・多重度の化学的整合性を確認する
-    - 呼出先: `StructureError`、`ATOMIC_NUMBERS`（定数）
+    - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `gui.inputs.load_uploaded_structure`
+
+- `runtime.py`
+
+  計算を実行する環境（GPU の有無）の判定。画面にも計算エンジンにも依存しない。`nvidia_gpu_detected`（GPU ランタイムが割り当てられているか）と `torch_cuda_available`（PyTorch が CUDA を使えるか）は、答える問いが違う。PySCF 版は、GPU4PySCF を読み込む前に決めるため前者を、UMA 版は、推論が torch で動くため後者を使う。
+
+  - `nvidia_gpu_detected() -> bool`
+    - 引数: なし
+    - 戻り値: GPU ランタイム（NVIDIA GPU）が割り当てられていれば `True`
+    - 目的: Colab の実行環境で GPU4PySCF を試す可否を、`nvidia-smi` の成否で判定する。`nvidia-smi` が無い・失敗・タイムアウトのときは `False`
+    - 技術選定: torch が入っていない環境（PySCF 版）でも動くよう、コマンドの成否で判定する
+    - 呼出先: なし
+    - 呼出元: `pyscf_backend.pipeline.run_calculation`
+
+  - `torch_cuda_available() -> bool`
+    - 引数: なし
+    - 戻り値: PyTorch が CUDA（GPU）を使えれば `True`。torch が入っていなければ `False`
+    - 目的: UMA の推論に使うデバイス（GPU か CPU）を決める。GPU ランタイムでも、CPU 版の torch が入っていれば `False` になる。torch は関数の中で import する
+    - 呼出先: なし
+    - 呼出元: `uma_backend.uma_pipeline.run_calculation`
 
 - `version.py`
 
@@ -663,7 +698,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 - `vibration.py`
 
-  振動数解析の、計算エンジンに依存しない数値計算（中心差分による Hessian、並進・回転を除いた調和解析、ゼロ点エネルギー）。純粋な numpy で、ASE にも UMA にも PySCF にも依存しない。現在使うのは `uma_backend.uma_freq` だけで、PySCF 版は PySCF 自身の解析的 Hessian と `pyscf.hessian.thermo` を使う。数値の検証は `tests/test_vibration.py` が行う。
+  振動数解析の、計算エンジンに依存しない数値計算（中心差分による Hessian、並進・回転を除いた調和解析、ゼロ点エネルギー）。純粋な numpy で、ASE にも UMA にも PySCF にも依存しない。現在使うのは `uma_backend.uma_freq` だけで、PySCF 版は PySCF 自身の解析的 Hessian と `pyscf.hessian.thermo` を使う。結果の入れ物 `FrequencyResult` は、PySCF 版・UMA 版の共通の親で、PySCF 版は子クラスで熱力学量を足す。数値の検証は `tests/test_vibration.py` が行う。
 
   - `compute_hessian_fd(forces_fn, positions, delta: float = 0.01, progress = None) -> numpy.ndarray`
     - 引数: 座標（N,3）[Å] から力（N,3）[eV/Å] を返す関数、平衡座標、変位幅 [Å]、任意の進捗コールバック（完了した原子数, 全原子数）
@@ -687,6 +722,23 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: ZPE = (1/2)Σhν を求める。虚振動（負の値）は含めない。Hartree・kcal/mol への換算は、呼出し側が `common_backend.energy` の係数で行う
     - 呼出先: なし
     - 呼出元: `uma_backend.uma_freq.run_frequency_analysis`
+
+  - `FrequencyResult()`
+    - 引数: なし
+    - 戻り値: `frequencies_cm1`（振動数 [cm⁻¹]、虚振動は負）、`normal_modes`（shape (モード数, 原子数, 3)。なければ `None`）、`zpe_hartree`（ゼロ点エネルギー。なければ `None`）、`elapsed_seconds`、`warning_message` を持つ結果
+    - 目的: 振動数解析の結果を入れる、PySCF 版・UMA 版の共通の親クラス。UMA 版はそのまま使い、PySCF 版は子クラスで熱力学量を足す。画面（`gui.parts.VibrationViewer`）は `frequencies_cm1` と `normal_modes` だけを使う
+    - 呼出先: なし
+    - 呼出元: `pyscf_backend.freq.FrequencyResult.__init__`、`uma_backend.uma_freq.run_frequency_analysis`
+    - `n_imaginary`（プロパティ）
+      - 戻り値: 虚振動（負の振動数）の数
+      - 目的: `frequencies_cm1` から求めるため、振動数と食い違わない
+      - 呼出先: なし
+      - 呼出元: `pyscf_backend.freq.run_frequency_analysis`、`uma_backend.uma_freq.run_frequency_analysis`（属性として参照）、`uma_backend.uma_pipeline.run_calculation`
+    - `zpe_kcal_per_mol`（プロパティ）
+      - 戻り値: ゼロ点エネルギー [kcal/mol]。`zpe_hartree` が `None` なら `None`
+      - 目的: `zpe_hartree` を、`common_backend.energy.HARTREE_TO_KCAL_MOL` で換算する
+      - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）
+      - 呼出元: `uma_backend.uma_report.build_log_text`
 
 - `writer_xyz.py`
 
@@ -930,7 +982,6 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 呼出先: `gui.inputs.format_charge`、`ChargeInput._on_text_changed`（コールバックとして登録）、`ChargeInput._step`
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
     - `value`（プロパティ）
-      - 引数: なし
       - 戻り値: 現在の電荷（整数）
       - 目的: 入力欄で読み取れた最後の値を返す。読み取れない入力があっても、直前の有効な値のままになる
       - 呼出先: なし
@@ -955,7 +1006,6 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 呼出先: なし
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`
     - `value`（プロパティ）
-      - 引数: なし
       - 戻り値: 現在のスピン多重度（整数）
       - 目的: 入力欄（`IntText`）の値を整数で返す
       - 呼出先: なし
@@ -1224,13 +1274,6 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 呼出先: `_load_basis`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
 
-  - `gpu_runtime_detected() -> bool`
-    - 引数: なし
-    - 戻り値: GPU ランタイムが割り当てられていれば `True`
-    - 目的: Colab の実行環境で GPU4PySCF を試す可否を `nvidia-smi` の成否で判定する。`nvidia-smi` が無い・失敗・タイムアウトのときは `False`
-    - 呼出先: なし
-    - 呼出元: `pyscf_backend.pipeline.run_calculation`
-
   - `_try_import_gpu4pyscf() -> module | None`
     - 引数: なし
     - 戻り値: GPU4PySCF のモジュール。インポートに失敗したら `None`
@@ -1291,9 +1334,11 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 呼出先: なし
     - 呼出元: `run_frequency_analysis`
 
-  - `FrequencyResult`
-    - 目的: 振動数、正規モード、虚振動数、熱力学量、警告、所要時間を保持する結果コンテナ
-    - 呼出先: なし
+  - `FrequencyResult(common_backend.vibration.FrequencyResult)`
+    - 引数: なし
+    - 戻り値: 共通の項目に加えて、`gibbs_hartree`（全自由エネルギー G_tot [Hartree]）と `temperature_K`（熱力学量を求めた温度 [K]）を持つ結果。どちらも、求められなかったときは `None`
+    - 目的: PySCF 版の振動数解析の結果。PySCF の `thermo.thermo` が求める熱力学量の項目を、共通の親に足す
+    - 呼出先: `common_backend.vibration.FrequencyResult`
     - 呼出元: `run_frequency_analysis`
 
   - `run_frequency_analysis(mf, defaults: dict) -> FrequencyResult`
@@ -1301,7 +1346,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 戻り値: 振動数解析結果
     - 目的: Hessian、調和振動数、ZPE と自由エネルギーを計算する
     - 技術選定: GPU Hessian は十分に検証されていないため CPU PySCF を用いる
-    - 呼出先: `FrequencyResult`、`_get`
+    - 呼出先: `FrequencyResult`、`_get`、`common_backend.vibration.FrequencyResult.n_imaginary`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
 
 - `analysis_pyscf.py`
@@ -1313,11 +1358,6 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 呼出先: なし
     - 呼出元: `orbital_choices`（定数）
 
-  - `HARTREE_TO_EV`
-    - 目的: Hartree から eV への換算係数。軌道エネルギーを eV で併記するために使う。`common_backend.energy.HARTREE_TO_EV` と同じ値の重複で、そちらに置き換える予定（「今後の予定・検討中の事項」を参照）
-    - 呼出先: なし
-    - 呼出元: `orbital_choices`（定数）
-
   - `OrbitalChoices(options, default_index, open_shell)`
     - 目的: 軌道の選択肢の戻り値（表示名と軌道番号の組のリスト、最初に選ぶ軌道番号、開殻かどうか）の `namedtuple`
     - 呼出先: なし
@@ -1326,8 +1366,8 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
   - `_core_and_valence_orbital_counts(symbol: str) -> tuple[int, int]`
     - 引数: 元素記号
     - 戻り値: 1 原子あたりの（内殻軌道の数, 価電子殻の軌道の数）。表にない記号は、内殻なし・価電子殻 4 軌道とする
-    - 目的: 軌道の数え上げの内部補助関数
-    - 呼出先: なし
+    - 目的: 軌道の数え上げの内部補助関数。原子番号は `common_backend.elements.ATOMIC_NUMBERS` から求める
+    - 呼出先: `common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `valence_space_size`
 
   - `_atom_symbols(mol) -> list[str]`
@@ -1356,7 +1396,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 戻り値: ドロップダウン用の選択肢、既定の軌道番号、開殻かどうか
     - 目的: 軌道 0 番から「内殻軌道数＋価電子殻の軌道数」番目まで（電子が入っているすべての軌道を含む）を一覧にし、表示名を「軌道n番」とする。閉殻は HOMO・LUMO に「(HOMO)」「(LUMO)」を付け（縮退する軌道すべてに付ける）、開殻は電子が 1 個だけ入っている軌道に「(SOMO)」を付ける。表示名の末尾に軌道エネルギーを eV で併記し（例: 「軌道4番(HOMO)  -13.61 eV」。開殻は α 軌道のエネルギー）、選択肢はエネルギーの低い軌道ほど下に並べる（軌道番号の大きい順）。既定は、電子が入っている（α スピンの）軌道のうち最も高いもの
     - 技術選定: 開殻（UHF/UKS）の `mo_occ`・`mo_energy` は 2 行の配列で保持されるため、α スピンの軌道を基準にする。最外殻の空軌道は軌道の数で近似する
-    - 呼出先: `DEGENERACY_TOLERANCE_HARTREE`（定数）、`_occupations`、`valence_space_size`、`HARTREE_TO_EV`（定数）、`OrbitalChoices`
+    - 呼出先: `DEGENERACY_TOLERANCE_HARTREE`（定数）、`_occupations`、`valence_space_size`、`common_backend.energy.HARTREE_TO_EV`（定数）、`OrbitalChoices`
     - 呼出元: `gui.pyscf_screen.build_app`
 
   - `compute_mulliken_charges(mol, mf) -> list[tuple[str, float]]`
@@ -1386,7 +1426,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 目的: 上記の流れを最初から最後まで実行し、進捗・注意・所要時間を `log` へ出す
     - 技術選定: 計算の流れを画面から分け、PySCF や Colab なしで、段階の呼出し順序と受渡しを単体テストできるようにする
     - 例外: 遷移金属を含む構造は `io_reader.StructureError`、SCF 不収束は `engine.SCFConvergenceError`、構造最適化の不収束は `RuntimeError`
-    - 呼出先: `pyscf_backend.engine.gpu_runtime_detected`、`pyscf_backend.engine.contains_transition_metal`、`common_backend.io_reader.StructureError`、`pyscf_backend.engine.build_mole`、`pyscf_backend.optimize.run_geometry_optimization`、`pyscf_backend.engine.build_scf`、`pyscf_backend.engine.run_scf`、`pyscf_backend.freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`pyscf_backend.writer_molden.write_molden`、`CalculationResult`
+    - 呼出先: `common_backend.runtime.nvidia_gpu_detected`、`pyscf_backend.engine.contains_transition_metal`、`common_backend.io_reader.StructureError`、`pyscf_backend.engine.build_mole`、`pyscf_backend.optimize.run_geometry_optimization`、`pyscf_backend.engine.build_scf`、`pyscf_backend.engine.run_scf`、`pyscf_backend.freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`pyscf_backend.writer_molden.write_molden`、`CalculationResult`
     - 呼出元: `gui.pyscf_screen.build_app`
 
 - `visualizer_pyscf.py`
@@ -1430,15 +1470,8 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
 
   UMA（fairchem-core）で計算するための土台。計算デバイスの判定、学習済みモデルの読込み、ASE の Atoms・Calculator の構築を行う。Hugging Face の認証は `uma_hf.py` が担当する。
 
-  - `get_device() -> str`
-    - 引数: なし
-    - 戻り値: `"cuda"`（GPU が使える）または `"cpu"`。torch が入っていなければ `"cpu"`
-    - 目的: 推論に使うデバイスを選ぶ
-    - 呼出先: なし
-    - 呼出元: `uma_backend.uma_pipeline.run_calculation`
-
   - `describe_device(device: str) -> str`
-    - 引数: デバイス名（`get_device` の戻り値）
+    - 引数: デバイス名（`"cuda"` または `"cpu"`）
     - 戻り値: ログ表示用の説明文（GPU の名前、または CPU で時間がかかる旨の注意）
     - 目的: 利用者へ、計算デバイスと性能上の注意を示す
     - 呼出先: なし
@@ -1469,8 +1502,8 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
   - `build_atoms(structure, charge: int, multiplicity: int) -> ase.Atoms`
     - 引数: 共通の構造（`Structure`）、電荷、スピン多重度
     - 戻り値: 電荷とスピン多重度つきの ASE `Atoms`
-    - 目的: UMA（omol タスク）へ渡す入力を作る。電荷を `atoms.info["charge"]`、スピン多重度を `atoms.info["spin"]` に設定する（fairchem の README・ColabReaction と同じ方式）
-    - 呼出先: なし
+    - 目的: UMA（omol タスク）へ渡す入力を作る。Atoms 本体は `common_backend.ase_bridge.structure_to_atoms` で作り、ここでは、電荷を `atoms.info["charge"]`、スピン多重度を `atoms.info["spin"]` に設定する（fairchem の README・ColabReaction と同じ方式。このキー名は UMA 固有の約束）
+    - 呼出先: `common_backend.ase_bridge.structure_to_atoms`
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
 
 - `uma_optimize.py`
@@ -1485,7 +1518,6 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
     - `final_fmax`（プロパティ）
-      - 引数: なし
       - 戻り値: 最後のステップの力の最大値 [eV/Å]（履歴がなければ `None`）
       - 目的: 収束の判定と、ログ・画面の表示に使う
       - 呼出先: なし
@@ -1501,19 +1533,14 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
 
 - `uma_freq.py`
 
-  UMA を使った振動数解析（調和近似）。数値計算の本体は `common_backend.vibration` にあり、このモジュールは、UMA の計算器から力の関数を作り、結果を PySCF 版と同じ項目名の `FrequencyResult` にまとめる。
-
-  - `FrequencyResult`
-    - 目的: 振動数、正規モード、虚振動数、警告、所要時間を保持するコンテナ
-    - 呼出先: なし
-    - 呼出元: `run_frequency_analysis`
+  UMA を使った振動数解析（調和近似）。数値計算の本体は `common_backend.vibration` にあり、このモジュールは、UMA の計算器から力の関数を作り、結果を共通の `common_backend.vibration.FrequencyResult` にまとめる。
 
   - `run_frequency_analysis(atoms, calculator, freq_cfg: dict, progress = None) -> FrequencyResult`
     - 引数: 電荷・スピンつきの最適化後の ASE `Atoms`、UMA の計算器、`uma_defaults.yaml` の `frequency` 節、任意の進捗コールバック
-    - 戻り値: 振動数・基準振動モード・虚振動の数・ZPE（Hartree と kcal/mol）・注意文を持つ `FrequencyResult`
+    - 戻り値: 振動数・基準振動モード・ZPE・注意文を持つ共通の `FrequencyResult`（`common_backend.vibration`）
     - 目的: UMA の力から数値 Hessian を作り、調和解析して結果をまとめる。虚振動が出たときは、小さい場合（収束不足・数値誤差の可能性）と大きい場合（極小構造でない可能性）で、注意文を変える。原子が 1 個だけのときは、振動モードがない旨の注意文を返す
     - 技術選定: ASE の `Vibrations` を使わず、並進・回転を除いた振動モードだけを、PySCF 版と同じ個数・同じ形式で返す
-    - 呼出先: `FrequencyResult`、`common_backend.vibration.compute_hessian_fd`、`common_backend.vibration.harmonic_analysis`、`common_backend.vibration.zero_point_energy_ev`、`common_backend.energy.HARTREE_TO_EV`（定数）、`common_backend.energy.EV_TO_KCAL_MOL`（定数）
+    - 呼出先: `common_backend.vibration.FrequencyResult`、`common_backend.vibration.compute_hessian_fd`、`common_backend.vibration.harmonic_analysis`、`common_backend.vibration.zero_point_energy_ev`、`common_backend.energy.HARTREE_TO_EV`（定数）、`common_backend.vibration.FrequencyResult.n_imaginary`（属性として参照）
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
 
 - `uma_hf.py`
@@ -1635,7 +1662,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 目的: 上記の流れを最初から最後まで実行し、進捗（最適化の各ステップ、Hessian 計算の進み具合）・注意（CPU での低速、収束しなかった場合、原子数が多い場合）・所要時間を `log` へ出す
     - 技術選定: 計算の流れを画面から分け、UMA・fairchem・Colab なしで、段階の呼出し順序と受渡しを単体テストできるようにする
     - 例外: トークン・アクセス権・ライブラリ未導入は `uma_hf.UmaSetupError`、ライブラリを読み込めない場合は `ImportError`、設定の誤りは `ValueError`
-    - 呼出先: `uma_backend.uma_hf.check_model_access`、`uma_backend.uma_engine.get_device`、`uma_backend.uma_engine.describe_device`、`uma_backend.uma_engine.load_predictor`、`uma_backend.uma_engine.make_calculator`、`uma_backend.uma_engine.build_atoms`、`uma_backend.uma_optimize.run_geometry_optimization`、`uma_backend.uma_freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`uma_backend.uma_report.build_log_text`、`CalculationResult`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`
+    - 呼出先: `uma_backend.uma_hf.check_model_access`、`common_backend.runtime.torch_cuda_available`、`uma_backend.uma_engine.describe_device`、`uma_backend.uma_engine.load_predictor`、`uma_backend.uma_engine.make_calculator`、`uma_backend.uma_engine.build_atoms`、`uma_backend.uma_optimize.run_geometry_optimization`、`uma_backend.uma_freq.run_frequency_analysis`、`common_backend.version.__version__`（定数）、`common_backend.writer_xyz.write_optimization_outputs`、`uma_backend.uma_report.build_log_text`、`CalculationResult`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`、`common_backend.vibration.FrequencyResult.n_imaginary`
     - 呼出元: `gui.uma_screen.build_app`
 
 - `uma_report.py`
@@ -1644,7 +1671,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 引数: バージョン、計算条件、入力名、電荷・多重度、最適化結果、任意の振動数結果・合計時間
     - 戻り値: UTF-8 テキストログ
     - 目的: 再現に必要な条件、履歴、振動数、UMA 通知をひとつの出力にまとめる
-    - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）、`uma_backend.uma_notice.notice_text`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`
+    - 呼出先: `common_backend.energy.HARTREE_TO_KCAL_MOL`（定数）、`uma_backend.uma_notice.notice_text`、`uma_backend.uma_optimize.OptimizationResult.final_fmax`、`common_backend.vibration.FrequencyResult.zpe_kcal_per_mol`
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
 
 ### config
@@ -1710,7 +1737,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_analysis_pyscf.py`
 
-	対象: `pyscf_backend.analysis_pyscf.valence_space_size`, `orbital_choices`, `compute_mulliken_charges`。PySCF を実行せず、必要な属性だけを持つ代用の SCF・分子オブジェクトで、価電子殻・内殻の軌道数の数え上げ、閉殻の HOMO/LUMO 表示名と縮退、開殻（α・β の 2 行配列、2 つの配列の組、ROHF）の SOMO 表示名と既定の軌道、エネルギー（eV）の併記と換算、リストの並び順（エネルギーの低い軌道が下）、軌道数の上限、元素と電荷の対応を検証する。
+	対象: `pyscf_backend.analysis_pyscf.valence_space_size`, `orbital_choices`, `compute_mulliken_charges`。PySCF を実行せず、必要な属性だけを持つ代用の SCF・分子オブジェクトで、価電子殻・内殻の軌道数の数え上げ、閉殻の HOMO/LUMO 表示名と縮退、開殻（α・β の 2 行配列、2 つの配列の組、ROHF）の SOMO 表示名と既定の軌道、エネルギー（eV）の併記と換算、リストの並び順（エネルギーの低い軌道が下）、軌道数の上限、元素と電荷の対応を検証する。エネルギーの換算は`common_backend.energy.HARTREE_TO_EV`を使い、`analysis_pyscf`が自前の定数を持たないことも検証する。
 
 - `test_colab_widgets.py`
 
@@ -1720,13 +1747,21 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 	対象: `common_backend.config_loader.load_yaml`, `CONFIG_DIR`, `PROJECT_ROOT`。`config/` の場所、YAML の読込み、存在しないファイルのエラー、`pyscf_backend`・`uma_backend` が `load_yaml`・`CONFIG_DIR`・`PROJECT_ROOT` を再エクスポートしていないことを検証する。
 
+- `test_ase_bridge.py`
+
+	対象: `common_backend.ase_bridge.structure_to_atoms`。ASE を代用のモジュールに差し替えて、元素記号と座標が渡ること、入力の構造と座標を共有しないこと、電荷・スピン多重度を設定しないこと、ASE 未導入時に `ImportError` になることを検証する。ASE が入っている環境では、本物の `Atoms` でも確認する(入っていなければ、この部分だけスキップ)。
+
 - `test_cube.py`
 
 	対象: `common_backend.cube.max_abs_value`。PySCF を実行せず、cube ファイルの値の最大絶対値、ヘッダー部分の値を数えないこと、値がないときの 0.0、原子数が負のヘッダーを検証する。
 
+- `test_elements.py`
+
+	対象: `common_backend.elements.ATOMIC_NUMBERS`。H〜Xe の 54 元素、原子番号の連続性、代表的な元素、元素記号の表記、Xe より重い元素を含まないこと、`io_reader`・`analysis_pyscf` が自前の表を持たず、表の全元素で軌道の数え上げができることを検証する。
+
 - `test_energy.py`
 
-	対象: `common_backend.energy.relative_energies_kcal`, `HARTREE_TO_KCAL_MOL`, `HARTREE_TO_EV`, `EV_TO_KCAL_MOL`。最後の点を基準にした相対エネルギー[kcal/mol]、空のリスト・NaN のエラー、換算係数(Hartree・eV・kcal/mol の間で整合していること)を検証する。
+	対象: `common_backend.energy.relative_energies_kcal`, `HARTREE_TO_KCAL_MOL`, `HARTREE_TO_EV`。最後の点を基準にした相対エネルギー[kcal/mol]、空のリスト・NaN のエラー、換算係数を検証する。
 
 - `test_energy_plot.py`
 
@@ -1734,7 +1769,11 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_engine.py`
 
-	対象: `pyscf_backend.engine.contains_transition_metal`, `gpu_runtime_detected`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、`subprocess.run` を差し替え、`nvidia-smi` の成功・失敗・コマンド不在・タイムアウトで GPU 有無を正しく判定することを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。
+	対象: `pyscf_backend.engine.contains_transition_metal`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、GPU ランタイムの判定が `engine` に残っていない（`common_backend.runtime` にある）ことを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。
+
+- `test_freq.py`
+
+	対象: `pyscf_backend.freq.FrequencyResult`, `run_frequency_analysis`。PySCF を実行せず、`pyscf.hessian.thermo` を代用のモジュールに差し替えて、振動数と基準振動モードの取り出し、虚振動の数と注意文、熱力学量（ZPE・自由エネルギー・温度）の格納、熱力学量の計算に失敗したときも振動数が残ること（部分的な値を残さない）、PySCF の版によるキー名の違い、結果が共通の親クラスの子であることを検証する。
 
 - `test_githooks.py`
 
@@ -1767,7 +1806,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_pipeline.py`
 
-	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`engine`・`optimize`・`freq`・`writer_molden` を代用の関数に差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。
+	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`engine`・`optimize`・`freq`・`writer_molden`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。
 
 - `test_plot_common.py`
 
@@ -1785,13 +1824,17 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 	対象: `requirements.txt`, `requirements-uma.txt`。PySCF 用／UMA 用の必須パッケージ、PySCF 専用パッケージの UMA 側からの除外、`torch` と `ipywidgets` を requirements で固定しない方針を検証する。`plotly` と `kaleido` は、必須パッケージの検証対象に含めない。
 
+- `test_runtime.py`
+
+	対象: `common_backend.runtime.nvidia_gpu_detected`, `torch_cuda_available`。`subprocess.run` を差し替え、`nvidia-smi` の成功・失敗・コマンド不在・タイムアウトで GPU 有無を正しく判定すること、torch を代用のモジュールに差し替えて、CUDA の可否と torch 未導入時の `False`、2 つの判定が独立であること(GPU ランタイムでも CPU 版の torch なら、前者だけが `True`)を検証する。
+
 - `test_uma_config.py`
 
 	対象: `common_backend.config_loader.load_yaml` と `config/uma_defaults.yaml`, `uma_models.yaml`。UMA の GUI・タスク・最適化・振動数・検証設定、モデルキーの一意性と非推奨モデルの除外、存在しない YAML のエラーを検証する。
 
 - `test_uma_engine.py`
 
-	対象: `uma_backend.uma_engine.describe_device`, `load_predictor`, `clear_predictor_cache`。CPU 警告、`fairchem` 未導入時の準備エラー、ゲート付きモデルの拒否が `uma_hf.UmaSetupError` になること、他の例外は包まないこと、同じモデル・デバイスは 1 回だけ読み込むことを、代用の `fairchem` で検証する。認証関連の名前が `uma_engine` に残っていない（再エクスポートされていない）ことも検証する。
+	対象: `uma_backend.uma_engine.describe_device`, `load_predictor`, `clear_predictor_cache`, `build_atoms`。CPU 警告、GPU の名前の表示、`fairchem` 未導入時の準備エラー、ゲート付きモデルの拒否が `uma_hf.UmaSetupError` になること、他の例外は包まないこと、同じモデル・デバイスは 1 回だけ読み込むことを、代用の `fairchem` で検証する。認証関連の名前が `uma_engine` に残っていない（再エクスポートされていない）こと、デバイスを選ぶ関数が `uma_engine` に残っていないことも検証する。`build_atoms` は、`ase_bridge` を代用品に差し替えて、電荷・スピン多重度が `atoms.info` に整数で入ることを検証する。
 
 - `test_uma_hf.py`
 
@@ -1799,11 +1842,11 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_freq.py`
 
-	対象: `uma_backend.uma_freq.run_frequency_analysis`, `FrequencyResult`。ASE も UMA も使わず、バネのモデルの力を返す代用の Atoms・計算器で、二原子分子の振動数の個数、ZPE の Hartree・kcal/mol への換算、入力 Atoms 非変更、進捗通知、大きな虚振動と小さな虚振動での注意文の違い、原子 1 個のときの扱いを検証する。ASE が入っている環境では、さらに、結果を、ASE の`Vibrations`(EMT で緩和した Cu₂・Cu₃・Cu₄。ゼロ付近の並進・回転の値を除き、絶対値の大きい 3N-6 個[直線分子は 3N-5 個]と比較)と照合する(ASE が入っていない環境では、この部分だけスキップ)。
+	対象: `uma_backend.uma_freq.run_frequency_analysis`。ASE も UMA も使わず、バネのモデルの力を返す代用の Atoms・計算器で、二原子分子の振動数の個数、ZPE の Hartree・kcal/mol への換算、入力 Atoms 非変更、進捗通知、大きな虚振動と小さな虚振動での注意文の違い、原子 1 個のときの扱いを検証する。ASE が入っている環境では、さらに、結果を、ASE の`Vibrations`(EMT で緩和した Cu₂・Cu₃・Cu₄。ゼロ付近の並進・回転の値を除き、絶対値の大きい 3N-6 個[直線分子は 3N-5 個]と比較)と照合する(ASE が入っていない環境では、この部分だけスキップ)。
 
 - `test_uma_pipeline.py`
 
-	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。
+	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。
 
 - `test_uma_notebook.py`
 
@@ -1811,7 +1854,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_notice_report.py`
 
-	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `uma_backend.uma_freq.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。
+	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `common_backend.vibration.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。
 
 - `test_uma_optimize.py`
 
@@ -1823,7 +1866,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_vibration.py`
 
-	対象: `common_backend.vibration.compute_hessian_fd`, `harmonic_analysis`, `zero_point_energy_ev`。二原子・直線／非直線三原子・単原子の有限差分 Hessian、質量依存性、負の曲率、並進・回転除去、回転不変性、進捗通知、ZPE(虚振動を数えないこと)を、バネのモデルの解析解で検証する。ASE が入っている環境では、さらに、`harmonic_analysis`の結果を、ASE の`VibrationsData.from_2d`(バネのモデルの Hessian)と照合する(ASE が入っていない環境では、この部分だけスキップ。ASE の返す値を比較用にそろえる補助関数は、ASE なしでも検証する)。
+	対象: `common_backend.vibration.compute_hessian_fd`, `harmonic_analysis`, `zero_point_energy_ev`, `FrequencyResult`。二原子・直線／非直線三原子・単原子の有限差分 Hessian、質量依存性、負の曲率、並進・回転除去、回転不変性、進捗通知、ZPE(虚振動を数えないこと)を、バネのモデルの解析解で検証する。結果の入れ物`FrequencyResult`は、空の状態、虚振動の数が振動数から求まること、ZPEの kcal/mol への換算を検証する。ASE が入っている環境では、さらに、`harmonic_analysis`の結果を、ASE の`VibrationsData.from_2d`(バネのモデルの Hessian)と照合する(ASE が入っていない環境では、この部分だけスキップ。ASE の返す値を比較用にそろえる補助関数は、ASE なしでも検証する)。
 
 - `test_visualizer.py`
 
