@@ -11,19 +11,18 @@ import os
 import sys
 import types
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qchem_colab_app.common_backend import ase_bridge  # noqa: E402
+from qchem_colab_app.common_backend import ase_bridge, io_reader  # noqa: E402
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
 
 
 def _structure():
-    return SimpleNamespace(symbols=["O", "H", "H"],
-                           coords=[[0.0, 0.0, 0.1], [0.0, 0.76, -0.47], [0.0, -0.76, -0.47]])
+    return io_reader.Structure(symbols=["O", "H", "H"],
+                               coords=[[0.0, 0.0, 0.1], [0.0, 0.76, -0.47], [0.0, -0.76, -0.47]])
 
 
 class FakeAtoms:

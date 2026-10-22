@@ -8,15 +8,15 @@ Mole・SCFの構築と実行は、PySCFが必要なため、Colab上での実機
 import os
 import sys
 import unittest
-from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from qchem_colab_app.common_backend import io_reader  # noqa: E402
 from qchem_colab_app.pyscf_backend import engine  # noqa: E402
 
 
 def _structure(symbols):
-    return SimpleNamespace(symbols=symbols, coords=[[0.0, 0.0, 0.0]] * len(symbols))
+    return io_reader.Structure(symbols=list(symbols), coords=[[0.0, 0.0, 0.0]] * len(symbols))
 
 
 class TestContainsTransitionMetal(unittest.TestCase):

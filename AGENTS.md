@@ -19,9 +19,16 @@
 - ソースコードを変更するときは、同時に、このファイル末尾の「仕様書」(各モジュールと関数の仕様[引数・戻り値・目的・呼出先・呼出元]・
   テストの対象)、上の「ディレクトリ構成」、`README.md`も更新する(`README.md`は利用者向けの内容だけ。
   実装に関するメモは、このファイルに書く)。仕様書の書き方は、「仕様(モジュールと関数)」の冒頭を参照する。
-- **修正が必要なテストを探すときは、変更した項目の「関連テスト」を見る**(`python3 tests/spec_analysis.py --fix`で、最新にしてから)。
-  結果クラス(`FrequencyResult`・`OptimizationResult`など)の代用品には、`SimpleNamespace`ではなく、実物のクラスを使う
-  (属性だけを真似る代用品は、属性名の変更や削除が、関連テストから見つからず、テストが古いまま残るため)。
+- **修正が必要なテストを探すときは、変更した項目の「関連テスト」を見る**(`python3.12 tests/spec_analysis.py --fix`で、最新にしてから)。
+  このリポジトリで定義しているクラス(`Structure`・`FrequencyResult`・`OptimizationResult`など)の代用品には、`SimpleNamespace`ではなく、
+  実物のクラスを使う(属性だけを真似る代用品は、属性名の変更や削除が、関連テストから見つからず、テストが古いまま残るため)。
+  `gui`・`common_backend`のテストでは、エンジンのパッケージをimportしないため、共通の親クラス(`common_backend.optimization.OptimizationResult`等)を使う。
+  外部ライブラリのオブジェクト(PySCFのMole・SCF、ASEのAtoms、py3Dmol、ipywidgetsのFileUpload、torchなど)も、実物を使う
+  (外部ライブラリの版が上がって、属性名や戻り値の形が変わったときに、代用品だと、テストが通ったまま、実機で初めて壊れるため。
+  実際に、実物のPySCFで確認して、虚振動が検出されない誤りが見つかった)。小さな分子・SCFの結果は、`tests/real_molecules.py`を使う
+  (どれも1秒未満)。ライブラリが入っていない環境では、`@unittest.skipUnless(real_molecules.HAS_...)`で、そのテストだけをスキップする。
+  代用品を使ってよいのは、実物では作れないときだけ(今のライブラリが作らない形の値、実際には起こらない値、Hugging Faceへの接続・
+  モデルのダウンロード・GPUが必要なもの)。使うときは、テストファイルの冒頭の説明に、理由を書く。
 - パッケージの依存の向きは、`gui` → `pyscf_backend`・`uma_backend` → `common_backend`(一方向)。`pyscf_backend/`と
   `uma_backend/`は、お互いをimportしない。バックエンド(`common_backend`・`pyscf_backend`・`uma_backend`)は、`gui`・
   `ipywidgets`・`IPython`をimportしない。`gui`の共通部品(`parts`など)は、`pyscf_backend`・`uma_backend`をimportしない。
@@ -41,10 +48,11 @@
     ダウンロード名の既定値、設定の読み込み(`common_backend.config_loader.load_yaml`)と`__version__`(`common_backend.version`)、
     エネルギーの単位換算(`common_backend.energy`)、cubeファイルの読み取り(`common_backend.cube`)、
     振動数解析の数値計算と結果の入れ物(`common_backend.vibration`。数値計算を使うのは現在UMA版だけ。`FrequencyResult`は両方が使い、
-    PySCF版は子クラスで熱力学量の項目を足す)、元素のデータ(`common_backend.elements`)、GPUの判定(`common_backend.runtime`)、
+    PySCF版は子クラスで熱力学量の項目を足す)、
+    最適化の結果の入れ物(`common_backend.optimization`。`OptimizationResult`は両方が使い、PySCF版・UMA版は子クラスでエンジン固有の項目を足す)、元素のデータ(`common_backend.elements`)、GPUの判定(`common_backend.runtime`)、
     ASEのAtomsへの変換(`common_backend.ase_bridge`)、原子電荷の描画(`gui.plot_common`)。
     1か所からしか呼ばれていなくても、特定のエンジンに依存しない部品は、共通のパッケージに置く方針である。
-  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、結果クラス(`OptimizationResult`等。共通の親クラスを作るかは、「今後の予定・検討中の事項」を参照)、
+  - 独立のまま残しているもの: エラー表示の`except`の連鎖、進捗・ログの文面、計算の流れの結果クラス(`CalculationResult`)、
     設定ファイル(`defaults.yaml`・`uma_defaults.yaml`)、扱える元素の範囲、ノートブックの「1-a〜1-c」セル(リポジトリ取得前に動くため)。
 - `AGENTS.md`は、`develop`・`feature/*`では追跡し、`main`では追跡しない。Claudeが`main`へのマージの手順を案内するときは、
   必ず「`AGENTS.md`のGit管理」と「`main`ブランチへのリリース(マージ)の手順」の4(`--no-ff --no-commit`でマージ →
@@ -56,9 +64,22 @@
 
 ## 開発・動作確認の進め方
 
-コードの作成・単体テストは、ネットワークに接続できないサンドボックスで行っているため、PySCF・fairchem・Google Colab実機を使った
-動作は、そこでは確認できない。Colab上での動作(PySCFの呼び出し、UMAの推論、ドラッグ&ドロップ・グラフのクリックの
-JavaScript連携など)は、リリース前にColab実機で確認してから、タグを打つ。単体テストで確認できる範囲は`tests/`にある。
+コードの作成と単体テストは、利用者のMacの仮想環境(下の「ローカルの開発環境」)と、Claudeのサンドボックス(PyPIからライブラリを
+入れられる)で行う。PySCF・ASE・py3Dmol・geomeTRIC・ipywidgetsは、実物を使って確認できる。UMAのモデルの実際の読み込みと推論
+(Hugging Faceのトークンが必要)、GPU(GPU4PySCF・CUDA)、Google Colab実機でのJavaScript連携(ドラッグ&ドロップ・グラフのクリック)は、
+単体テストでは確認できないため、リリース前にColab実機で確認してから、タグを打つ。単体テストで確認できる範囲は`tests/`にある。
+
+### ローカルの開発環境(利用者のMac)
+
+- OS・CPU: macOS(Darwin)、Apple silicon(arm64)。NVIDIAのGPUはないため、GPU4PySCFは入れていない
+- Python: 3.12.15。実行コマンドは`python3.12`(`python3`ではない)
+- 仮想環境: プロジェクトルート直下の`.venv/`(Gitの管理外)。有効にするコマンドは`source .venv/bin/activate`
+  (有効にすると、プロンプトの先頭に`(.venv)`が付く)
+- 主なライブラリの版(2026-10-22に確認): ase 3.29.0、fairchem-core 2.23.0、geometric 1.1.1、ipython 9.17.1、ipywidgets 8.1.9、
+  numpy 2.4.6、py3Dmol 2.5.5、pyscf 2.14.0、PyYAML 6.0.3、scipy 1.18.1、torch 2.13.0。版が変わったら、ここを更新する
+  (確認のコマンド: `python3.12 -m pip list`)
+- 単体テストの実行: `python3.12 -m unittest discover -s tests -p "test_*.py"`(1分以内)。仕様書の更新: `python3.12 tests/spec_analysis.py --fix`
+- このファイルは、GitHubにも送られるため、ユーザー名を含むフォルダの絶対パス・トークン等は書かない
 
 ## ディレクトリ構成(各ファイルの役割)
 
@@ -99,6 +120,7 @@ qchem_colab_app/
 │   │   ├── io_reader.py             # 構造ファイルの読み込み・入力バリデーション
 │   │   ├── writer_xyz.py             # xyz出力(単一構造・多フレーム・最適化の標準出力2ファイル)
 │   │   ├── energy.py                  # エネルギーの単位換算(Hartree・eV・kcal/mol)・相対エネルギー(バックエンドと画面の両方が使う)
+│   │   ├── optimization.py             # 構造最適化の結果の入れ物(OptimizationResult。PySCF版・UMA版の共通の親クラス。エンジンに依存しない)
 │   │   └── vibration.py                # 振動数解析の数値計算(中心差分のHessian・並進回転を除いた調和解析・ZPE。純粋なnumpy)
 │   ├── gui/                        # 画面の層(ipywidgets・ColabのJavaScript連携・3D表示・SVGグラフ)
 │   │   ├── __init__.py               # 説明だけ(何もimportしない)
@@ -132,6 +154,7 @@ qchem_colab_app/
     ├── test_io_reader.py / test_config.py / test_visualizer.py   # 入力・設定・分子軌道の可視化(PySCF非依存部分)
     ├── test_cube.py                  # cubeファイルの値の読み取り(common_backend)
     ├── test_plot_common.py          # 原子電荷の色分け・数値ラベル・電荷表(gui。py3Dmolの代用品を使用)
+    ├── test_optimization.py           # 最適化の結果の共通の親クラスと、PySCF版・UMA版の子クラス(common_backend)
     ├── test_vibration.py              # 振動数解析の数値計算・FrequencyResult(common_backend。バネのモデルの解析解・ASEとの照合)
     ├── test_elements.py / test_runtime.py / test_ase_bridge.py   # 元素表・GPU判定・ASEへの変換(common_backend。torch・ASEの代用品を使用)
     ├── test_freq.py                   # PySCF版の振動数解析の結果の組み立て(pyscf.hessian.thermoの代用品を使用)
@@ -150,6 +173,7 @@ qchem_colab_app/
     ├── test_gui_parts.py             # 共通の画面部品(電荷・スピン多重度の入力を含む。ipywidgets・Colabの代用品を使用)
     ├── test_notebooks_hidden_code.py  # 両ノートブックのコードセルが、既定でコード非表示になっているか
     ├── fake_gui_env.py                # test_gui_parts.py用の、ipywidgets・Colabの代用品
+    ├── real_molecules.py                # 実物のライブラリの有無の判定と、小さな分子・SCFの結果(PySCF)。テストの代用品ではなく、実物を使うための補助
     ├── test_uma_*.py                   # UMA版(振動数の結果のまとめ・最適化・認証・計算の流れ・ログ・設定・ノートブックの構成など)
     ├── test_requirements.py             # requirements*.txtの方針(ipywidgetsを指定しない、など)
     ├── test_githooks.py                  # .githooksの動作(一時的なgitリポジトリで、mainでのAGENTS.mdの拒否・pushの中止を確認)
@@ -161,10 +185,11 @@ qchem_colab_app/
 アプリケーションから実行時に使わない。`.venv/`・`__pycache__/`・`.pytest_cache/`・`.ipynb_checkpoints/`・`.DS_Store`は
 使い捨てのため、構成と仕様の対象外とする。
 
-テストは、次のコマンドで実行できる(ASEが入っていない環境では、ASEを使う一部のテストはスキップされる)。
+テストは、次のコマンドで実行できる(PySCF・ASE・py3Dmol・ipywidgets・torch・fairchemが入っていない環境では、それを使う
+テストだけがスキップされる。詳しくは「ローカルの開発環境」)。
 
 ```
-python3 -m unittest discover -s tests -p "test_*.py"
+python3.12 -m unittest discover -s tests -p "test_*.py"
 ```
 
 ## パッケージ構成の目的
@@ -173,7 +198,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 一方向に依存させるための構成である。
 
 - `common_backend`: 画面にも計算エンジンにも依存しない共通部品(設定の読み込み・バージョン・構造の読み込み・xyz出力・
-  エネルギーの換算・元素のデータ・GPUの判定・ASEへの変換・振動数解析の数値計算)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
+  エネルギーの換算・元素のデータ・GPUの判定・ASEへの変換・振動数解析の数値計算・最適化の結果の入れ物)。引数は、プレーンなPythonの値(元素記号・座標・エネルギーの数列等)で完結しており、PySCF版・UMA版の両方が使う。
 - `pyscf_backend`: PySCF専用。PySCFのMole/SCFオブジェクトに直接依存しており、UMA版では使えない。
 - `uma_backend`: UMA専用。`pyscf_backend`を一切importしない(PySCFがインストールされていない環境でも動くようにするため)。
 - `gui`: 画面。共通の画面部品(`parts`・`inputs`・`outputs`・`colab_widgets`・`energy_plot`・`plot_common`)は、
@@ -314,11 +339,6 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 - **UMAで最適化した構造への、PySCFによる一点計算**: UMA版の画面から、分子軌道・原子電荷を見られるようにする案。
 - **PySCF版の振動数計算でのGPU利用**: Hessian計算だけ試験的にGPUを使い、失敗したらCPUにフォールバックする案(現在は、
   最終構造のCPU再計算と振動数計算を、常にCPUで行う)。
-- **PySCF版の虚振動の扱いの確認**: `pyscf_backend/freq.py`は、PySCFが返す振動数を`float(f.real)`で実数にしている。
-  虚振動のある構造で、Colab実機で、虚振動が負の値として数えられているかを確認する(PySCFの版による違いの可能性がある)。
-- **`OptimizationResult`の共通の親クラス**: `pyscf_backend.optimize`と`uma_backend.uma_optimize`に、`symbols`・`energies`・
-  `coords_history`・`converged`・`elapsed_seconds`が共通の結果クラスが2つある。`FrequencyResult`と同じ形(共通の親+エンジン固有の項目を
-  足す子)にするかを検討する。
 - **`io_reader._read_with_ase`の移動**: `ase_bridge`へ移すと、`io_reader`と`ase_bridge`が互いをimportする。`Structure`・`StructureError`を
   別のモジュールに分ければ移せるが、importする側が広く変わる。必要になった時点で検討する。
 
@@ -370,7 +390,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 2. `README.md`冒頭の「現在のバージョン」を、`vX.Y.Z`に更新する(`tests/test_readme.py`が、`__version__`との一致、リンク、コードフェンス、
    記載ファイルの存在を検査する)。
 3. このファイル末尾の「仕様書」と「ディレクトリ構成」を見直し、追加・変更したファイルと仕様を反映する。
-4. テストが通ることを確認する(`python3 -m unittest discover -s tests -p "test_*.py"`)。
+4. テストが通ることを確認する(`python3.12 -m unittest discover -s tests -p "test_*.py"`)。
 5. Colab実機で動作を確認したあと、`main`上で`git tag -a vX.Y.Z -m "変更内容"`を作成して、pushする。
 
 ### lockファイルの運用(`main`ブランチだけでGit管理する)
@@ -464,6 +484,15 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 ## 開発メモ(実装上の注意)
 
+- **テストの`ResourceWarning: unclosed file`**: PySCFの`SCF`オブジェクトは、作るたびに、チェックポイント用の一時ファイルを開く。
+  オブジェクトが循環参照のまま解放されると、PySCF側で閉じられず、テストの終了時に警告が複数出る(このリポジトリの`open()`が原因ではない。
+  `with`の外の`open()`がないことは、構文解析で確認した)。`tests/real_molecules.py`が、読み込み時に`pyscf.scf.hf.MUTE_CHKFILE = True`にして、
+  一時ファイルを作らないようにしている。新しい警告が出たら、`python3.12 -X dev -X tracemalloc=15 -W always -m unittest ...`で、ファイルを
+  開いた場所を調べる。
+- **PySCFの虚振動の表現**: `pyscf.hessian.thermo.harmonic_analysis`は、既定(`imaginary_freq=True`)では、虚振動を、実部が0の複素数
+  (例: `0+2268j`)で返す。実部だけを取ると`0.0`になり、虚振動が検出されない(v0.2.2で、実物のPySCF 2.14.0で確認して直した)。
+  `pyscf_backend/freq.py`の`_signed_wavenumber`が、虚部の大きさを負の値にして、`common_backend/vibration.py`と同じ
+  「虚振動は負の値」にそろえる。PySCFの版が変わったときは、直線の水(鞍点)で虚振動が2個になることを、`tests/test_freq.py`が確認する。
 - **構造最適化のエネルギー履歴がほぼ1点しかない場合**: `pyscf_backend/optimize.py`の`_make_callback()`内で、PySCFのgeomeTRIC連携が渡す
   コールバック引数のキー名(`energy`・`e_tot`・`mol`・`coords`等)が、使っているPySCFの版と一致していない可能性がある。
   `pyscf.geomopt.geometric_solver`のソースと照らし合わせて調整する。
@@ -503,7 +532,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 呼出先・呼出元は、プロジェクト内のものだけを、テストを除いて書く。他のモジュールの項目は`gui.parts.ChargeInput`のようにパッケージ名からの名前で、同じモジュールの項目は短い名前で書く。名前の後ろの括弧は、呼出しの種類を表す(「定数」: 定数の参照、「コールバックとして登録」: 呼出しをイベントやコールバックに任せる登録、「例外の捕捉」: `except`での捕捉、「属性として参照」: プロパティの参照)。クラスの「呼出先」は、`__init__`の呼出先、「呼出元」は、そのクラスを生成する箇所である。モジュール内の項目は、ソースファイルの定義の順に並べる。
 
-「呼出先」「呼出元」「関連テスト」の行は、**手で書かず**、`python3 tests/spec_analysis.py --fix`が、ソースとテストの構文解析から更新する。`tests/test_agents_spec.py`が、これらの行が最新か、ソースの定義すべてに項目があるか(逆も同じ)を検査する(`AGENTS.md`がない`main`ブランチでは、スキップする)。構文解析では分からない呼出し(型の分からない変数の属性の参照など)は、`tests/spec_analysis.py`の`MANUAL_EDGES`に足す。関連テストは、テストに、その名前があり、かつ、(名前がプロジェクト全体で1つだけ、またはテストがそのモジュールをimportしている)ときに挙げる(メソッド・プロパティは、モジュールのimportと、クラス名・メソッド名の両方が必要)。関数・クラス・メソッド・公開定数を追加・変更・削除したときは、項目の文章(引数・戻り値・目的など)を手で直してから、`--fix`を実行する。
+「呼出先」「呼出元」「関連テスト」の行は、**手で書かず**、`python3.12 tests/spec_analysis.py --fix`が、ソースとテストの構文解析から更新する。`tests/test_agents_spec.py`が、これらの行が最新か、ソースの定義すべてに項目があるか(逆も同じ)を検査する(`AGENTS.md`がない`main`ブランチでは、スキップする)。構文解析では分からない呼出し(型の分からない変数の属性の参照など)は、`tests/spec_analysis.py`の`MANUAL_EDGES`に足す。関連テストは、テストに、その名前があり、かつ、(名前がプロジェクト全体で1つだけ、またはテストがそのモジュールをimportしている)ときに挙げる(メソッド・プロパティは、モジュールのimportと、クラス名・メソッド名の両方が必要)。関数・クラス・メソッド・公開定数を追加・変更・削除したときは、項目の文章(引数・戻り値・目的など)を手で直してから、`--fix`を実行する。
 
 - `ColabApp.ipynb`
   - 目的: PySCF 版の Colab 実行入口。実行環境の表示、GitHub からのブランチ／タグ選択取得、依存関係と任意 GPU4PySCF の導入、lock ファイルの生成、サンプル構造の作成、`gui.pyscf_screen.build_app()` の表示を順に行う。目的はブラウザだけで PySCF 計算を実行可能にすること。すべてのコードセルは、メタデータ `cellView: form` と先頭行の `#@title 題名` により、既定でコードを折りたたんで題名だけを表示する（ColabReaction と同じ方式。クリックすればコードを開ける）
@@ -579,7 +608,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 設定読込みを一元化し、ファイルが無いときは配置を確認する日本語メッセージの `FileNotFoundError` にする
     - 呼出先: `CONFIG_DIR`（定数）
     - 呼出元: `gui.pyscf_screen.build_app`、`gui.uma_screen.build_app`、`pyscf_backend.engine._load_basis`、`pyscf_backend.engine._load_functional`
-    - 関連テスト: `tests/test_config.py`、`tests/test_config_loader.py`、`tests/test_uma_config.py`
+    - 関連テスト: `tests/test_config.py`、`tests/test_config_loader.py`、`tests/test_pipeline.py`、`tests/test_uma_config.py`
 
 - `cube.py`
 
@@ -592,7 +621,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 技術選定: 標準ライブラリだけで読む。PySCF の `cubegen.orbital` が値の配列を返さない版でも、書き出した cube ファイルから閾値のもとを得られるようにするため
     - 呼出先: なし
     - 呼出元: `pyscf_backend.visualizer_pyscf.render_orbital`
-    - 関連テスト: `tests/test_cube.py`
+    - 関連テスト: `tests/test_cube.py`、`tests/test_visualizer.py`
 
 - `elements.py`
 
@@ -648,7 +677,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 元素記号、Å 単位座標、注釈を保持するデータクラス。PySCF/UMA 共通入力形式
     - 呼出先: なし
     - 呼出元: `_read_with_ase`、`read_xyz`
-    - 関連テスト: `tests/test_io_reader.py`
+    - 関連テスト: `tests/test_ase_bridge.py`、`tests/test_engine.py`、`tests/test_gui_input.py`、`tests/test_io_reader.py`、`tests/test_pipeline.py`、`tests/test_uma_engine.py`、`tests/test_uma_pipeline.py`
 
   - `read_xyz(filepath: str) -> Structure`
     - 引数: XYZ ファイルパス
@@ -690,6 +719,18 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 呼出先: `StructureError`、`common_backend.elements.ATOMIC_NUMBERS`（定数）
     - 呼出元: `gui.inputs.load_uploaded_structure`
     - 関連テスト: `tests/test_gui_input.py`、`tests/test_io_reader.py`
+
+- `optimization.py`
+
+  構造最適化の結果の入れ物。PySCF にも ASE にも UMA にも依存しない。PySCF 版・UMA 版の共通の親クラス `OptimizationResult` を置き、それぞれの `OptimizationResult`（`pyscf_backend.optimize`・`uma_backend.uma_optimize`）は、この親クラスの子クラスとして、エンジン固有の項目を足す（振動数解析の `common_backend.vibration.FrequencyResult` と同じ構成）。画面（`gui.parts.EnergyStructureViewer`）と出力関数（`common_backend.writer_xyz.write_optimization_outputs`）は、共通の項目だけを使う。
+
+  - `OptimizationResult()`
+    - 引数: なし
+    - 戻り値: `symbols`（元素記号のリスト）、`energies`（各ステップのエネルギー [Hartree]）、`coords_history`（各ステップの座標 [Å]。要素は `[[x, y, z], ...]`）、`converged`（収束したか）、`elapsed_seconds`（所要時間 [秒]）を持つ結果
+    - 目的: 構造最適化の結果を入れる、PySCF 版・UMA 版の共通の親クラス
+    - 呼出先: なし
+    - 呼出元: なし
+    - 関連テスト: `tests/test_gui_parts.py`、`tests/test_optimization.py`、`tests/test_writer_xyz.py`
 
 - `runtime.py`
 
@@ -758,7 +799,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 振動数解析の結果を入れる、PySCF 版・UMA 版の共通の親クラス。UMA 版はそのまま使い、PySCF 版は子クラスで熱力学量を足す。画面（`gui.parts.VibrationViewer`）は `frequencies_cm1` と `normal_modes` だけを使う
     - 呼出先: なし
     - 呼出元: `pyscf_backend.freq.FrequencyResult.__init__`、`uma_backend.uma_freq.run_frequency_analysis`
-    - 関連テスト: `tests/test_freq.py`、`tests/test_uma_freq.py`、`tests/test_uma_notice_report.py`、`tests/test_vibration.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_gui_parts.py`、`tests/test_uma_freq.py`、`tests/test_uma_notice_report.py`、`tests/test_uma_pipeline.py`、`tests/test_vibration.py`
     - `n_imaginary`（プロパティ）
       - 戻り値: 虚振動（負の振動数）の数
       - 目的: `frequencies_cm1` から求めるため、振動数と食い違わない
@@ -813,12 +854,12 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 関連テスト: `tests/test_writer_xyz.py`
 
   - `write_optimization_outputs(out_dir: str, final_symbols, final_coords, final_comment: str, opt_result) -> tuple[str, str]`
-    - 引数: 出力先フォルダ、最終構造の元素・座標・コメント、`symbols`・`coords_history`・`energies` を持つ最適化結果
+    - 引数: 出力先フォルダ、最終構造の元素・座標・コメント、`symbols`・`coords_history`・`energies` を持つ最適化結果（`common_backend.optimization.OptimizationResult`、またはその子クラス）
     - 戻り値: 最終構造とトラジェクトリのパス
     - 目的: 構造最適化の標準の出力 2 ファイルを同じ名前・形式で書き出す
     - 呼出先: `FINAL_STRUCTURE_FILENAME`（定数）、`write_final_structure`、`TRAJECTORY_FILENAME`（定数）、`write_trajectory`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`、`uma_backend.uma_pipeline.run_calculation`
-    - 関連テスト: `tests/test_writer_xyz.py`
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_writer_xyz.py`
 
   - `xyz_string(symbols, coords, comment: str = "") -> str`
     - 引数: 元素記号のリスト、座標のリスト、任意のコメント
@@ -1243,7 +1284,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 選択した最適化ステップを表示する
     - 呼出先: なし
     - 呼出元: `gui.parts.EnergyStructureViewer._show_structure_at_step`、`gui.parts.StructureFileInput._update_preview`
-    - 関連テスト: `tests/test_gui_parts.py`
+    - 関連テスト: `tests/test_gui_parts.py`、`tests/test_plot_common.py`
 
   - `render_vibration(symbols, final_coords, frequencies_cm1, normal_modes, mode_index: int = 0, amplitude: float = 0.6, n_frames: int = 20, width: int = 500, height: int = 400) -> tuple[py3Dmol.view, str]`
     - 引数: 最終構造、振動数、正規モード、表示モード、振幅、フレーム数、サイズ
@@ -1251,7 +1292,7 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
     - 目的: 選択モードの変位をループ表示する
     - 呼出先: `common_backend.writer_xyz.multiframe_xyz_string`
     - 呼出元: `gui.parts.VibrationViewer._on_button_clicked`
-    - 関連テスト: `tests/test_gui_parts.py`
+    - 関連テスト: `tests/test_gui_parts.py`、`tests/test_plot_common.py`
 
   - `atomic_charges_table_html(charges) -> str`
     - 引数: 原子電荷 [(元素記号, 電荷), ...]（原子と同じ順）
@@ -1376,7 +1417,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: `cart=True` により 6D/10F の Molden 互換出力を優先する
     - 呼出先: `_load_basis`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
-    - 関連テスト: `tests/test_pipeline.py`
+    - 関連テスト: `tests/test_analysis_pyscf.py`、`tests/test_pipeline.py`
 
   - `_try_import_gpu4pyscf() -> module | None`
     - 引数: なし
@@ -1405,11 +1446,13 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
 
 - `optimize.py`
 
-  - `OptimizationResult`
-    - 目的: 最終 Mole、GPU 情報、エネルギー・座標履歴、収束状態、所要時間、再計算用密度行列を保持する結果コンテナ
+  - `OptimizationResult(common_backend.optimization.OptimizationResult)`
+    - 引数: なし
+    - 戻り値: 共通の項目に加えて、`mol_final`（最適化後の Mole）、`used_gpu`（GPU4PySCF で最適化したか）、`gpu_message`（GPU の使用・フォールバックの説明）、`dm0_guess`（再計算用の密度行列。取得できなければ `None`）を持つ結果
+    - 目的: PySCF 版の構造最適化の結果。共通の親クラスに、最終 Mole・GPU 情報・再計算用密度行列を足す
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_pipeline.py`
 
   - `_to_numpy(arr) -> numpy.ndarray`
     - 引数: NumPy または CuPy の配列
@@ -1434,7 +1477,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: 内部座標を使う geomeTRIC を採用し、有機分子の収束性を優先する
     - 呼出先: `OptimizationResult`、`pyscf_backend.engine.build_scf`、`_make_callback`、`_to_numpy`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_pipeline.py`
 
 - `freq.py`
 
@@ -1446,22 +1489,30 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 呼出元: `run_frequency_analysis`
     - 関連テスト: なし
 
+  - `_signed_wavenumber(f) -> float`
+    - 引数: 振動数 [cm^-1]（実数・複素数のどちらでもよい）
+    - 戻り値: 虚振動を負の値にした実数の振動数。PySCF は虚振動を、実部が 0 の複素数で返すため、虚部の大きさを負の値にする
+    - 目的: 虚振動が 0.0 になって検出されない誤りを防ぐ（`common_backend.vibration` と同じ「虚振動は負の値」にそろえる）
+    - 呼出先: なし
+    - 呼出元: `run_frequency_analysis`
+    - 関連テスト: `tests/test_freq.py`
+
   - `FrequencyResult(common_backend.vibration.FrequencyResult)`
     - 引数: なし
     - 戻り値: 共通の項目に加えて、`gibbs_hartree`（全自由エネルギー G_tot [Hartree]）と `temperature_K`（熱力学量を求めた温度 [K]）を持つ結果。どちらも、求められなかったときは `None`
     - 目的: PySCF 版の振動数解析の結果。PySCF の `thermo.thermo` が求める熱力学量の項目を、共通の親に足す
     - 呼出先: `common_backend.vibration.FrequencyResult`
     - 呼出元: `run_frequency_analysis`
-    - 関連テスト: `tests/test_freq.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_pipeline.py`
 
   - `run_frequency_analysis(mf, defaults: dict) -> FrequencyResult`
     - 引数: 収束済み CPU SCF、周波数設定
     - 戻り値: 振動数解析結果
     - 目的: Hessian、調和振動数、ZPE と自由エネルギーを計算する
     - 技術選定: GPU Hessian は十分に検証されていないため CPU PySCF を用いる
-    - 呼出先: `FrequencyResult`、`_get`、`common_backend.vibration.FrequencyResult.n_imaginary`
+    - 呼出先: `FrequencyResult`、`_get`、`_signed_wavenumber`、`common_backend.vibration.FrequencyResult.n_imaginary`
     - 呼出元: `pyscf_backend.pipeline.run_calculation`
-    - 関連テスト: `tests/test_freq.py`
+    - 関連テスト: `tests/test_freq.py`、`tests/test_pipeline.py`
 
 - `analysis_pyscf.py`
 
@@ -1573,7 +1624,7 @@ PySCF を計算エンジンとする ab initio 計算パッケージ。`common_b
     - 技術選定: PySCF cube 出力を py3Dmol へ渡す
     - 呼出先: `_mo_coeff_for_cube`、`common_backend.cube.max_abs_value`
     - 呼出元: `gui.pyscf_screen.build_app`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_visualizer.py`
 
 - `writer_molden.py`
 
@@ -1647,17 +1698,19 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 呼出元: `run_geometry_optimization`（定数）
     - 関連テスト: `tests/test_uma_config.py`
 
-  - `OptimizationResult`
-    - 目的: UMA 最適化の元素、座標・エネルギー・最大力履歴、最終 Atoms、収束状態、所要時間を保持するコンテナ。`final_fmax` プロパティは最終最大力[eV/Å]を返す
+  - `OptimizationResult(common_backend.optimization.OptimizationResult)`
+    - 引数: なし
+    - 戻り値: 共通の項目に加えて、`energies_ev`（各ステップのエネルギー [eV]）、`fmax_history`（各ステップの力の最大値 [eV/Å]）、`fmax_target`（収束条件 [eV/Å]）、`optimizer_name`（最適化アルゴリズム名）、`max_steps`（最大ステップ数）を持つ結果
+    - 目的: UMA 版の構造最適化の結果。共通の親クラスに、eV のエネルギー・最大力の履歴・最適化の条件を足す。`final_fmax` プロパティは最終最大力 [eV/Å] を返す
     - 呼出先: なし
     - 呼出元: `run_geometry_optimization`
-    - 関連テスト: なし
+    - 関連テスト: `tests/test_optimization.py`、`tests/test_uma_notice_report.py`、`tests/test_uma_pipeline.py`
     - `final_fmax`（プロパティ）
       - 戻り値: 最後のステップの力の最大値 [eV/Å]（履歴がなければ `None`）
       - 目的: 収束の判定と、ログ・画面の表示に使う
       - 呼出先: なし
       - 呼出元: `run_geometry_optimization`（属性として参照）、`uma_backend.uma_pipeline.run_calculation`、`uma_backend.uma_report.build_log_text`
-      - 関連テスト: なし
+      - 関連テスト: `tests/test_optimization.py`
 
   - `run_geometry_optimization(atoms: ase.Atoms, calculator, opt_cfg: dict, progress = None) -> OptimizationResult`
     - 引数: 初期 Atoms、計算器、最適化設定、任意の進捗コールバック
@@ -1666,7 +1719,7 @@ FAIR-Chem/UMA を計算エンジンとする機械学習ポテンシャル用パ
     - 技術選定: ASE 最適化器を用いて UMA Calculator と直結する
     - 呼出先: `ALLOWED_OPTIMIZERS`（定数）、`OptimizationResult`、`common_backend.energy.HARTREE_TO_EV`（定数）、`OptimizationResult.final_fmax`（属性として参照）
     - 呼出元: `uma_backend.uma_pipeline.run_calculation`
-    - 関連テスト: `tests/test_uma_optimize.py`
+    - 関連テスト: `tests/test_uma_optimize.py`、`tests/test_uma_pipeline.py`
 
 - `uma_freq.py`
 
@@ -1887,19 +1940,23 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 ### tests
 
-テストは `python -m unittest discover -s tests -v` または pytest で実行する。外部サービス・GPU・実モデルダウンロードを必要とする部分は、フェイク環境または小さな ASE モデルで境界を検証する。以下は各テストモジュールが検証するプロジェクト内の関数・クラス・ファイルの完全一覧である。
+テストは `python3.12 -m unittest discover -s tests -p "test_*.py"` で実行する(「ローカルの開発環境」を参照)。PySCF・ASE・py3Dmol・geomeTRIC・ipywidgets・torch・fairchem は、入っていれば実物を使い(`real_molecules.py`)、入っていなければ、そのテストだけをスキップする。実際のモデルの読み込み・推論(Hugging Face のトークンが必要)・GPU は、フェイクの環境・差し替えで境界だけを検証する。以下は各テストモジュールが検証するプロジェクト内の関数・クラス・ファイルの完全一覧である。
 
 - `fake_gui_env.py`
 
 	`fake_gui_env(colab: bool = True)`、`_build_ipywidgets`、`_build_ipython_display`、`_Env` は、`test_gui_parts.py` で `gui.parts` をブラウザや Colab 接続なしで検証するための代用品（`qchem_colab_app.gui.parts` などを読み込み直す際、`sys.modules` だけでなく、親パッケージの属性も消す）（Text・IntText・Button・Dropdown などの代用ウィジェットを含む）を提供する。
 
+- `real_molecules.py`
+
+	`HAS_PYSCF`・`HAS_GEOMETRIC`・`HAS_ASE`・`HAS_PY3DMOL`・`HAS_IPYWIDGETS`・`HAS_TORCH`・`HAS_FAIRCHEM`（ライブラリが入っているか。入っていない環境では、`unittest.skipUnless` で、そのテストだけをスキップする）、`build_mole`・`atom_mole`・`run_scf`、実物の小さな計算結果（`water_rhf`・`methyl_uhf`・`methyl_rohf`・`oxygen_triplet_uhf`・`ethanol_cation_uhf`・`benzene_rhf`・`water_equilibrium_rhf`・`linear_water_rhf`。最初に使ったときに 1 回だけ計算して使い回す。どれも 1 秒未満）、`modified_copy`（使い回す結果を、複製してから書き換える）、`hypothetical_rhf`（計算していない RHF に、仮の軌道の占有数・エネルギーを入れる）は、テストで、外部ライブラリの代用品ではなく、実物を使うための補助を提供する。PySCF は関数の中で import するため、入っていない環境でも、このモジュールは読み込める（PySCF が入っている環境では、読み込み時に `pyscf.scf.hf.MUTE_CHKFILE = True` にして、SCF オブジェクトがチェックポイント用の一時ファイルを開かないようにする。PySCF 内部の `ResourceWarning: unclosed file` を防ぐため）。
+
 - `test_agents_spec.py`
 
-	対象: `AGENTS.md`の仕様書(`tests/spec_analysis.py`の解析と突き合わせる)。ソースの定義すべてに仕様書の項目があること(逆も同じ)、「呼出先」「呼出元」「関連テスト」の行が最新であること(古ければ`python3 tests/spec_analysis.py --fix`で更新する)、`tests/`のテストファイルすべてに、この節の項目があること(逆も同じ)を検査する。`AGENTS.md`がない`main`ブランチでは、スキップする。
+	対象: `AGENTS.md`の仕様書(`tests/spec_analysis.py`の解析と突き合わせる)。ソースの定義すべてに仕様書の項目があること(逆も同じ)、「呼出先」「呼出元」「関連テスト」の行が最新であること(古ければ`python3.12 tests/spec_analysis.py --fix`で更新する)、`tests/`のテストファイルすべてに、この節の項目があること(逆も同じ)を検査する。`AGENTS.md`がない`main`ブランチでは、スキップする。
 
 - `test_analysis_pyscf.py`
 
-	対象: `pyscf_backend.analysis_pyscf.valence_space_size`, `orbital_choices`, `compute_mulliken_charges`。PySCF を実行せず、必要な属性だけを持つ代用の SCF・分子オブジェクトで、価電子殻・内殻の軌道数の数え上げ、閉殻の HOMO/LUMO 表示名と縮退、開殻（α・β の 2 行配列、2 つの配列の組、ROHF）の SOMO 表示名と既定の軌道、エネルギー（eV）の併記と換算、リストの並び順（エネルギーの低い軌道が下）、軌道数の上限、元素と電荷の対応を検証する。エネルギーの換算は`common_backend.energy.HARTREE_TO_EV`を使い、`analysis_pyscf`が自前の定数を持たないことも検証する。
+	対象: `pyscf_backend.analysis_pyscf.valence_space_size`, `orbital_choices`, `compute_mulliken_charges`。実物の PySCF で、水・メチルラジカル・酸素（三重項）・エタノール陽イオン・ベンゼンの SCF を実際に計算して（`real_molecules.py`、どれも 1 秒未満）、価電子殻・内殻の軌道数の数え上げ、閉殻の HOMO/LUMO 表示名と縮退（ベンゼンの 2 重に縮退した HOMO・LUMO）、開殻（UHF の α・β の 2 行配列、2 つの配列の組、ROHF）の SOMO 表示名と既定の軌道、エネルギー（eV）の併記と換算、リストの並び順（エネルギーの低い軌道が下）、軌道数の上限、元素と電荷の対応（Mulliken 電荷の和が全電荷に一致すること）を検証する。軌道エネルギーの値を指定したいテストは、実物の SCF の結果を複製して、軌道エネルギーだけを書き換える。実際には起こらない軌道の数の確認は、計算していない実物の RHF に、仮の軌道の占有数・エネルギーを入れる。元素記号の表記ゆれは、PySCF が正規化するため実物では現れないので、実物の Mole の `atom_pure_symbol` だけを差し替える。エネルギーの換算は`common_backend.energy.HARTREE_TO_EV`を使い、`analysis_pyscf`が自前の定数を持たないことも検証する。PySCF が入っていない環境では、すべてスキップする。
 
 - `test_colab_widgets.py`
 
@@ -1911,7 +1968,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_ase_bridge.py`
 
-	対象: `common_backend.ase_bridge.structure_to_atoms`。ASE を代用のモジュールに差し替えて、元素記号と座標が渡ること、入力の構造と座標を共有しないこと、電荷・スピン多重度を設定しないこと、ASE 未導入時に `ImportError` になることを検証する。ASE が入っている環境では、本物の `Atoms` でも確認する(入っていなければ、この部分だけスキップ)。
+	対象: `common_backend.ase_bridge.structure_to_atoms`。ASE を代用のモジュールに差し替えて、元素記号と座標が渡ること、入力の構造と座標を共有しないこと、電荷・スピン多重度を設定しないこと、ASE 未導入時に `ImportError` になることを検証する。ASE が入っている環境では、本物の `Atoms` でも確認する(入っていなければ、この部分だけスキップ)。構造は、実物の `common_backend.io_reader.Structure` で作る。
 
 - `test_cube.py`
 
@@ -1931,11 +1988,11 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_engine.py`
 
-	対象: `pyscf_backend.engine.contains_transition_metal`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、GPU ランタイムの判定が `engine` に残っていない（`common_backend.runtime` にある）ことを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。
+	対象: `pyscf_backend.engine.contains_transition_metal`。遷移金属の判定（各周期の d ブロック元素と、隣接する主族元素の区別）と、GPU ランタイムの判定が `engine` に残っていない（`common_backend.runtime` にある）ことを検証する（Mole・SCF の構築と実行は PySCF が必要なため、Colab 実機で確認する）。構造は、実物の `common_backend.io_reader.Structure` で作る。
 
 - `test_freq.py`
 
-	対象: `pyscf_backend.freq.FrequencyResult`, `run_frequency_analysis`。PySCF を実行せず、`pyscf.hessian.thermo` を代用のモジュールに差し替えて、振動数と基準振動モードの取り出し、虚振動の数と注意文、熱力学量（ZPE・自由エネルギー・温度）の格納、熱力学量の計算に失敗したときも振動数が残ること（部分的な値を残さない）、PySCF の版によるキー名の違い、結果が共通の親クラスの子であることを検証する。
+	対象: `pyscf_backend.freq.FrequencyResult`, `run_frequency_analysis`, `_signed_wavenumber`。実物の PySCF で、水（HF/STO-3G）の Hessian・調和振動数・熱力学量を実際に計算して、振動数と基準振動モードの取り出し（PySCF を直接呼んだ結果との一致）、熱力学量（ZPE・自由エネルギー・温度）の格納、結果が共通の親クラスの子であることを検証する。虚振動は、鞍点である直線の水で実際に出し、2 個の虚振動が負の値で数えられ、注意文が出ることを検証する（PySCF は虚振動を複素数で返す）。熱力学量の計算に失敗したときも振動数が残ること（部分的な値を残さない）と、PySCF の版によるキー名の違いは、実物の `pyscf.hessian.thermo` の関数だけを差し替えて検証する。PySCF が入っていない環境では、PySCF を使うテストだけをスキップする。
 
 - `test_githooks.py`
 
@@ -1943,7 +2000,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `test_gui_input.py`
 
-	対象: `gui.inputs.extract_uploaded_file`, `load_uploaded_structure`, `format_charge`, `parse_charge`, `ChargeInputError`。ipywidgets 7/8 とドロップ入力の優先順位、構造の読込みと検証の順序・一時ファイルの拡張子と後始末、電荷の正負の表示・全角数字・Unicode のマイナス・空白・無効値を検証する。`load_uploaded_structure` は `io_reader` の関数を差し替え、受け渡しだけを確認する。 `read_uploaded_structure`（一時ファイルの拡張子・後始末・検証をしないこと）と `describe_structure` も検証する。
+	対象: `gui.inputs.extract_uploaded_file`, `load_uploaded_structure`, `format_charge`, `parse_charge`, `ChargeInputError`。実物の ipywidgets 8.x の `FileUpload` で、アップロードされたファイルの取り出し（辞書のタプル・bytes への変換・先頭のファイル・何も選んでいない状態）とドロップ入力の優先順位を検証する。今の ipywidgets が作らない形の value（7.x の辞書形式・属性を持つオブジェクト・想定外の型・空の値のうちタプル以外）だけは、`SimpleNamespace` で代用する。構造の読込みと検証の順序・一時ファイルの拡張子と後始末、電荷の正負の表示・全角数字・Unicode のマイナス・空白・無効値を検証する。`load_uploaded_structure` は `io_reader` の関数を差し替え、受け渡しだけを確認する。 `read_uploaded_structure`（一時ファイルの拡張子・後始末・検証をしないこと）と `describe_structure` も検証する。構造は、実物の `common_backend.io_reader.Structure` で作る。ipywidgets が入っていない環境では、`FileUpload` を使うテストだけをスキップする。
 
 - `test_gui_output.py`
 
@@ -1952,7 +2009,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 - `test_gui_parts.py`
 
 	対象: `gui.parts.dropdown_from_list`; `StructureFileInput.__init__`, `_on_file_dropped`, `_on_upload_changed`, `read`; `EnergyStructureViewer.__init__`, `show`, `_show_structure_at_step`, `_draw_energy_plot`, `_on_slider_changed`, `_on_plot_clicked`; `VibrationViewer.__init__`, `setup`, `_on_button_clicked`; `DownloadPanel.__init__`, `show`; `ChargeInput.__init__`, `_on_text_changed`, `_step`; `MultiplicityInput.__init__`, `value`。Colab／非 Colab 入力、SVG コールバック、エネルギーと座標の対応、スライダー同期、描画失敗表示、振動モード、ダウンロード名と再描画、電荷入力の整形・無効値の巻き戻し・±1 ボタン、多重度入力の値の取得を検証する。 受け取った構造の自動表示（ドロップ・ボタン、概要、読み込めない内容の説明、表示の失敗がファイルの受取りを妨げないこと）、`EnergyStructureViewer`・`VibrationViewer`・`DownloadPanel` の `reset`、`VibrationViewer.setup` による前回のアニメーションの消去も検証する。
-Colab では、ファイル選択ボタンが画面に置かれていないこと（ドロップ領域だけ）、説明文が「枠をクリック」を案内すること、最後にドロップしたファイルが使われることを、Colab 以外では、ファイル選択ボタンが最初のウィジェットで、選んだファイルの読込み・構造の表示が動くことを検証する。
+Colab では、ファイル選択ボタンが画面に置かれていないこと（ドロップ領域だけ）、説明文が「枠をクリック」を案内すること、最後にドロップしたファイルが使われることを、Colab 以外では、ファイル選択ボタンが最初のウィジェットで、選んだファイルの読込み・構造の表示が動くことを検証する。最適化結果・振動数解析の結果は、実物の共通のクラス（`common_backend.optimization.OptimizationResult`・`common_backend.vibration.FrequencyResult`）で作る（`gui` は計算エンジンのパッケージを使わないため、親クラスを使う）。
 
 - `test_io_reader.py`
 
@@ -1966,13 +2023,17 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 	対象: `ColabApp.ipynb`, `ColabApp_UMA.ipynb`。すべてのコードセルが `cellView: form` と先頭行の `#@title 題名` を持ち（コード非表示）、題名が重複せず、セル ID が保持されていることを検証する。
 
+- `test_optimization.py`
+
+	対象: `common_backend.optimization.OptimizationResult`、および、その子クラス `pyscf_backend.optimize.OptimizationResult`・`uma_backend.uma_optimize.OptimizationResult`（`final_fmax` を含む）。空の状態、インスタンス間でリストを共有しないこと、子クラスが共通の項目を親から引き継ぎ、エンジン固有の項目だけを足していること（PySCF 版と UMA 版が、お互いの項目を持たないこと）、どちらのエンジンの結果も、共通の出力関数（`common_backend.writer_xyz.write_optimization_outputs`）が同じように受け取れることを検証する。PySCF・ASE・UMA は使わない。
+
 - `test_pipeline.py`
 
-	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`engine`・`optimize`・`freq`・`writer_molden`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。
+	対象: `pyscf_backend.pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。2 通りで検証する。(1) `engine`・`optimize`・`freq`・`writer_molden`・`runtime` の関数だけを差し替え、段階の呼出し順序と引数（再計算は常に CPU、最適化時の密度行列を初期値に渡す）、振動数計算の有無、GPU の自動判定と明示指定、原子数の注意の閾値、遷移金属の拒否（計算前）、段階の例外がそのまま送出されること、出力ファイルの名前と中身、ログの内容を検証する。分子は実物の `pyscf.gto.Mole`、SCF オブジェクトは計算していない実物の RHF、構造・最適化結果・振動数結果は、実物のクラス（`common_backend.io_reader.Structure`・`pyscf_backend.optimize.OptimizationResult`・`pyscf_backend.freq.FrequencyResult`）を使う。(2) 実際の計算（`TestRealCalculation`）: 少し歪めた水（HF/3-21G）の構造最適化・CPU での再計算・振動数計算・出力（xyz・トラジェクトリ・molden）を、PySCF と geomeTRIC で、差し替えずに実際に走らせる（約 3 秒）。収束した構造（O-H 約 0.967 Å、H-O-H 約 108°）、虚振動がないこと、ZPE、出力ファイルの中身、ログを検証する。GPU4PySCF を使う計算は、Colab 実機で確認する。PySCF・geomeTRIC が入っていない環境では、このファイルのテストをスキップする（遷移金属の拒否など PySCF を使わない部分を含む。）。
 
 - `test_plot_common.py`
 
-	対象: `gui.plot_common.atomic_charges_table_html`, `_charge_gradient_color`, `add_atom_charge_labels`, `add_atom_charge_spheres`, `render_charges`。py3Dmol・PySCF なしで、電荷表の HTML、正・中性・負の色、原子ごとのラベル・球の追加（位置・色・ファンデルワールス半径・電荷による大きさの変化）、py3Dmol を代用品に差し替えた `render_charges` の組み立て、`plot_common` が計算エンジンのパッケージを import していないことを検証する。
+	対象: `gui.plot_common.atomic_charges_table_html`, `_charge_gradient_color`, `add_atom_charge_labels`, `add_atom_charge_spheres`, `render_charges`, `render_single_structure`, `render_vibration`。電荷表の HTML、正・中性・負の色、原子ごとのラベル・球の追加（位置・色・ファンデルワールス半径・電荷による大きさの変化）は、呼び出しを記録するテスト用のクラス（`FakeView`）で検証する。`render_charges`・`render_single_structure`・`render_vibration` は、実物の py3Dmol で `view` を作り、それが組み立てた JavaScript（`startjs`）の呼び出しと引数（球・ラベルの数と色、フレーム数、アニメーションの設定、虚振動のラベル）を検証する。`plot_common` が計算エンジンのパッケージを import していないことも検証する。ブラウザ上での実際の 3D 表示は、Colab 実機で確認する。py3Dmol が入っていない環境では、それを使うテストだけをスキップする。
 
 - `test_package_layering.py`
 
@@ -1988,7 +2049,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_runtime.py`
 
-	対象: `common_backend.runtime.nvidia_gpu_detected`, `torch_cuda_available`。`subprocess.run` を差し替え、`nvidia-smi` の成功・失敗・コマンド不在・タイムアウトで GPU 有無を正しく判定すること、torch を代用のモジュールに差し替えて、CUDA の可否と torch 未導入時の `False`、2 つの判定が独立であること(GPU ランタイムでも CPU 版の torch なら、前者だけが `True`)を検証する。
+	対象: `common_backend.runtime.nvidia_gpu_detected`, `torch_cuda_available`。`subprocess.run` を差し替え（戻り値は実物の `subprocess.CompletedProcess`）、`nvidia-smi` の成功・失敗・コマンド不在・タイムアウトで GPU 有無を正しく判定すること、実物の torch の `cuda.is_available` だけを差し替えて、CUDA の可否と、torch 未導入時の `False`、2 つの判定が独立であること(GPU ランタイムでも CPU 版の torch なら、前者だけが `True`)を検証する。torch が入っていない環境では、torch を使うテストだけをスキップする。
 
 - `test_uma_config.py`
 
@@ -1996,7 +2057,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_engine.py`
 
-	対象: `uma_backend.uma_engine.describe_device`, `load_predictor`, `clear_predictor_cache`, `build_atoms`。CPU 警告、GPU の名前の表示、`fairchem` 未導入時の準備エラー、ゲート付きモデルの拒否が `uma_hf.UmaSetupError` になること、他の例外は包まないこと、同じモデル・デバイスは 1 回だけ読み込むことを、代用の `fairchem` で検証する。認証関連の名前が `uma_engine` に残っていない（再エクスポートされていない）こと、デバイスを選ぶ関数が `uma_engine` に残っていないことも検証する。`build_atoms` は、`ase_bridge` を代用品に差し替えて、電荷・スピン多重度が `atoms.info` に整数で入ることを検証する。
+	対象: `uma_backend.uma_engine.describe_device`, `load_predictor`, `clear_predictor_cache`, `build_atoms`。CPU 警告、GPU の名前の表示（実物の torch の `cuda.get_device_name` だけを差し替える）、`fairchem` 未導入時の準備エラー、ゲート付きモデルの拒否が `uma_hf.UmaSetupError` になること、他の例外は包まないこと、モデル名・デバイスが fairchem に渡ること、同じモデル・デバイスは 1 回だけ読み込むことを、実物の fairchem の `pretrained_mlip.get_predict_unit`（モデルを取得する関数）だけを差し替えて検証する（Hugging Face への接続・ダウンロードはしない）。認証関連の名前が `uma_engine` に残っていない（再エクスポートされていない）こと、デバイスを選ぶ関数が `uma_engine` に残っていないことも検証する。`build_atoms` は、実物の ASE の `Atoms` と、`ase_bridge` の本物の変換で、電荷・スピン多重度が `atoms.info` に整数で入ることを検証する。ASE・torch・fairchem が入っていない環境では、それを使うテストだけをスキップする。
 
 - `test_uma_hf.py`
 
@@ -2008,7 +2069,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_pipeline.py`
 
-	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。
+	対象: `uma_backend.uma_pipeline.CalculationSettings`, `CalculationResult`, `run_calculation`。`uma_hf`・`uma_engine`・`uma_optimize`・`uma_freq`・`runtime` を代用の関数に差し替え、段階の呼出し順序と引数（タスク名は設定ファイルから）、振動数計算の有無と、最終構造に置いた複製への実行、デバイスごとの注意（CPU での低速）、収束しなかった場合の注意、原子数の注意の閾値、Hessian 進捗の報告間隔、アクセス権の確認が最初に行われること、段階の例外がそのまま送出されること、出力ファイルの名前と中身、計算ログへ渡す内容を検証する。構造・最適化結果・振動数結果は、実物のクラス（`common_backend.io_reader.Structure`・`uma_backend.uma_optimize.OptimizationResult`・`common_backend.vibration.FrequencyResult`）で作る（虚振動の数は、振動数から求まる）。
 
 - `test_uma_notebook.py`
 
@@ -2016,7 +2077,7 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_uma_notice_report.py`
 
-	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `common_backend.vibration.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。
+	対象: `uma_backend.uma_notice.notice_text`, `uma_backend.uma_report.build_log_text`, `uma_backend.uma_optimize.OptimizationResult`, `common_backend.vibration.FrequencyResult`。UMA の一次情報・引用、計算条件、履歴、未収束表示、振動数、通知、秘匿情報を含まないログを検証する。最適化結果・振動数結果は、実物のクラスで作る（最終の最大力は、`fmax_history` の最後の値から求まる）。
 
 - `test_uma_optimize.py`
 
@@ -2032,11 +2093,11 @@ Colab では、ファイル選択ボタンが画面に置かれていないこ�
 
 - `test_visualizer.py`
 
-	対象: `pyscf_backend.visualizer_pyscf._mo_coeff_for_cube`。PySCF を実行せず、閉殻の 2 次元の軌道係数、開殻（UHF/UKS）の 3 次元の係数、α・β の組から、α スピンの軌道を取り出すことを検証する。あわせて、原子電荷の描画関数や cube の読取りが、このモジュールに存在しないことも確認する。
+	対象: `pyscf_backend.visualizer_pyscf._mo_coeff_for_cube`, `render_orbital`。実物の PySCF（水 RHF/6-31G・メチルラジカル UHF/6-31G）で、閉殻の 2 次元の軌道係数、開殻（UHF）の 3 次元の係数、α・β の組から、α スピンの軌道を取り出すことを検証する。`render_orbital` は、実物の PySCF（cubegen）で cube ファイルを実際に作り、実物の py3Dmol が組み立てた JavaScript で、cube データの埋め込み、正・負の等値面（青・赤）、等値面の閾値が軌道の最大絶対値の割合（既定 12%）であること、割合を変えられること、開殻では α の係数を使うことを検証する。あわせて、原子電荷の描画関数や cube の読取りが、このモジュールに存在しないことも確認する。PySCF・py3Dmol が入っていない環境では、それを使うテストだけをスキップする。
 
 - `test_writer_xyz.py`
 
-	対象: `common_backend.writer_xyz.xyz_string`, `multiframe_xyz_string`, `write_final_structure`, `write_trajectory`, `write_optimization_outputs`。XYZ の形式、コメント、フレーム数、標準のファイル名と書出し先、最終構造がトラジェクトリの最終フレームと別でもよいことを検証する。
+	対象: `common_backend.writer_xyz.xyz_string`, `multiframe_xyz_string`, `write_final_structure`, `write_trajectory`, `write_optimization_outputs`。XYZ の形式、コメント、フレーム数、標準のファイル名と書出し先、最終構造がトラジェクトリの最終フレームと別でもよいことを検証する。最適化結果は、共通の親クラス `common_backend.optimization.OptimizationResult` の実物で作る。
 
 ### references
 

@@ -3,13 +3,13 @@ uma_backend.uma_optimize
 --------------------
 ASEの最適化アルゴリズム(LBFGS等)とUMAを使った構造最適化。
 
-qchem_colab_app/pyscf_backend/optimize.py(PySCF + geomeTRIC)と、結果を入れる入れ物
-(OptimizationResult)の項目名をそろえてある。これにより、gui/・common_backend/ の
-可視化・出力関数(エネルギー推移・構造表示・xyz出力)をそのまま使える。
+結果を入れる入れ物(OptimizationResult)は、PySCF版(qchem_colab_app/pyscf_backend/optimize.py)と同じ
+共通の親クラス(common_backend/optimization.py の OptimizationResult)を継承し、UMA固有の項目を足す。
+これにより、gui/・common_backend/ の可視化・出力関数(エネルギー推移・構造表示・xyz出力)をそのまま使える。
 
-    energies        : 各ステップのエネルギー [Hartree]  (UMA/ASEはeVで返すので換算する)
-    coords_history  : 各ステップの座標 [Å]
-    symbols         : 元素記号のリスト
+    energies        : 各ステップのエネルギー [Hartree]  (UMA/ASEはeVで返すので換算する。親クラスの項目)
+    coords_history  : 各ステップの座標 [Å]               (親クラスの項目)
+    symbols         : 元素記号のリスト                    (親クラスの項目)
 
 【収束判定】
 ASEの慣例どおり、「各原子にかかる力の大きさ(3成分のノルム)の最大値(fmax)」が
@@ -26,20 +26,26 @@ import time
 
 import numpy as np
 
-from qchem_colab_app.common_backend import energy
+from qchem_colab_app.common_backend import energy, optimization
 
 ALLOWED_OPTIMIZERS = ("LBFGS", "BFGS", "FIRE")
 
 
-class OptimizationResult:
+class OptimizationResult(optimization.OptimizationResult):
+    """UMA版の構造最適化の結果。共通の項目に、UMA(ASE)の項目を足す。
+
+    energies_ev    : 各ステップのエネルギー [eV]
+    fmax_history   : 各ステップの力の最大値 [eV/Å]
+    fmax_target    : 収束条件の力の最大値 [eV/Å]
+    optimizer_name : 使った最適化アルゴリズム名
+    max_steps      : 最大ステップ数
+    final_fmax     : 最後のステップの力の最大値 [eV/Å](fmax_history から求める)
+    """
+
     def __init__(self):
-        self.symbols = []
-        self.energies = []          # 各ステップのエネルギー(Hartree)
-        self.energies_ev = []       # 同(eV)
-        self.fmax_history = []      # 各ステップの力の最大値(eV/Å)
-        self.coords_history = []    # 各ステップの座標(Å)。要素は [[x,y,z], ...]
-        self.converged = False
-        self.elapsed_seconds = 0.0
+        super().__init__()
+        self.energies_ev = []
+        self.fmax_history = []
         self.fmax_target = None
         self.optimizer_name = ""
         self.max_steps = 0

@@ -2,9 +2,12 @@
 tests/test_gui_input.py
 -----------------------
 gui.inputs(アップロードされたファイルの取り出し・読み込みと検証・電荷の表示と読み取り)の単体テスト。
-ipywidgetsには依存しない(FileUploadの値は、同じ形の辞書・オブジェクトで代用している)。
+構造は、実物の common_backend.io_reader.Structure で作る。アップロードされたファイルの取り出しは、実物の
+ipywidgets.FileUpload(8.x)で確認する(入っていない環境では、そのテストだけをスキップする)。
+今のipywidgetsが作らない形の value(7.x の辞書形式など)だけは、SimpleNamespace で代用する。
 """
 
+import datetime
 import os
 import sys
 import unittest
@@ -12,27 +15,70 @@ from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import real_molecules as rm  # noqa: E402
 from qchem_colab_app.common_backend import io_reader  # noqa: E402
 
 from qchem_colab_app.gui import inputs as gui_input  # noqa: E402
 
+SKIP_NO_IPYWIDGETS = "ipywidgetsがインストールされていないためスキップ"
 
-class TestExtractUploadedFile(unittest.TestCase):
+
+def _water():
+    return io_reader.Structure(symbols=["O", "H", "H"], coords=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]])
+
+
+def _file_upload(*files):
+    """実物の ipywidgets.FileUpload(8.x)に、アップロードされたファイル(名前, 中身)を入れる。"""
+    import ipywidgets
+    upload = ipywidgets.FileUpload()
+    upload.value = tuple(
+        {"name": name, "type": "chemical/x-xyz", "size": len(content), "content": memoryview(content),
+         "last_modified": datetime.datetime.now(datetime.timezone.utc)}
+        for name, content in files)
+    return upload
+
+
+@unittest.skipUnless(rm.HAS_IPYWIDGETS, SKIP_NO_IPYWIDGETS)
+class TestExtractUploadedFileOfIpywidgets8(unittest.TestCase):
+    """ipywidgets 8.x(実物の FileUpload)。value は、各要素が辞書(name・type・size・content・last_modified)のタプル。"""
+
     CONTENT = b"3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"
 
+    def test_value_is_a_tuple_of_dicts(self):
+        content, name = gui_input.extract_uploaded_file(_file_upload(("a.xyz", self.CONTENT)))
+        self.assertEqual((content, name), (self.CONTENT, "a.xyz"))
+        self.assertIs(type(content), bytes)                      # memoryview ではなく bytes で返る
+
+    def test_the_first_file_is_used_when_several_are_selected(self):
+        content, name = gui_input.extract_uploaded_file(_file_upload(("a.xyz", b"first"), ("b.xyz", b"second")))
+        self.assertEqual((content, name), (b"first", "a.xyz"))
+
     def test_dropped_file_has_priority_over_the_upload_button(self):
-        upload = SimpleNamespace(value=({"name": "button.xyz", "content": b"x"},))
-        content, name = gui_input.extract_uploaded_file(
-            upload, {"name": "dropped.xyz", "content": self.CONTENT})
+        upload = _file_upload(("button.xyz", b"x"))
+        content, name = gui_input.extract_uploaded_file(upload, {"name": "dropped.xyz", "content": self.CONTENT})
         self.assertEqual((content, name), (self.CONTENT, "dropped.xyz"))
 
-    def test_ipywidgets_8_value_is_a_tuple_of_dicts(self):
-        upload = SimpleNamespace(value=({"name": "a.xyz", "content": memoryview(self.CONTENT)},))
-        content, name = gui_input.extract_uploaded_file(upload)
-        self.assertEqual((content, name), (self.CONTENT, "a.xyz"))
+    def test_nothing_selected_raises_a_helpful_error(self):
+        import ipywidgets
+        with self.assertRaises(io_reader.StructureError) as ctx:
+            gui_input.extract_uploaded_file(ipywidgets.FileUpload())       # 何も選んでいない(value は空のタプル)
+        self.assertIn("アップロード", str(ctx.exception))
 
-    def test_ipywidgets_8_value_can_be_objects_with_attributes(self):
+
+class TestExtractUploadedFileOfOtherShapes(unittest.TestCase):
+    """今の ipywidgets(8.x)が作らない形の value。インストールした版では作れないため、SimpleNamespace で代用する
+    (ipywidgets 7.x の辞書形式、属性を持つオブジェクト、想定外の型、空の値のうち、タプル以外のもの)。"""
+
+    CONTENT = b"3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"
+
+    def test_dropped_file_has_priority_over_any_upload_value(self):
+        upload = SimpleNamespace(value=({"name": "button.xyz", "content": b"x"},))
+        content, name = gui_input.extract_uploaded_file(upload, {"name": "dropped.xyz", "content": self.CONTENT})
+        self.assertEqual((content, name), (self.CONTENT, "dropped.xyz"))
+
+    def test_value_can_be_objects_with_attributes(self):
         upload = SimpleNamespace(value=[SimpleNamespace(name="b.gjf", content=self.CONTENT)])
         content, name = gui_input.extract_uploaded_file(upload)
         self.assertEqual((content, name), (self.CONTENT, "b.gjf"))
@@ -42,7 +88,7 @@ class TestExtractUploadedFile(unittest.TestCase):
         content, name = gui_input.extract_uploaded_file(upload)
         self.assertEqual((content, name), (self.CONTENT, "c.pdb"))
 
-    def test_nothing_selected_raises_a_helpful_error(self):
+    def test_other_empty_values_raise_a_helpful_error(self):
         for empty in ((), {}, None):
             with self.assertRaises(io_reader.StructureError) as ctx:
                 gui_input.extract_uploaded_file(SimpleNamespace(value=empty))
@@ -58,7 +104,7 @@ class TestReadUploadedStructure(unittest.TestCase):
 
     def setUp(self):
         self.seen = {}
-        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+        self.structure = _water()
 
         def read_structure(path):
             self.seen["path"] = path
@@ -101,7 +147,7 @@ class TestReadUploadedStructure(unittest.TestCase):
 
 class TestDescribeStructure(unittest.TestCase):
     def test_file_name_atom_count_and_composition(self):
-        text = gui_input.describe_structure(SimpleNamespace(symbols=["O", "H", "H"]), "water.xyz")
+        text = gui_input.describe_structure(_water(), "water.xyz")
         self.assertEqual(text, "ファイル: water.xyz  原子数: 3  組成: H, O")
 
 
@@ -111,7 +157,7 @@ class TestLoadUploadedStructure(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.seen = {}
-        self.structure = SimpleNamespace(symbols=["O", "H", "H"])
+        self.structure = _water()
 
         def read_structure(path):
             self.seen["path"] = path

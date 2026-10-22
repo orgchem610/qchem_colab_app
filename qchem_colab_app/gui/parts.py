@@ -7,7 +7,8 @@ gui/pyscf_calc.py(PySCF版)と gui/uma_calc.py(UMA版)で共通の、画面部�
     StructureFileInput    構造ファイルの入力。Colabでは、ドラッグ&ドロップ領域(枠をクリックしても選べる)。
                           Colab以外では、ファイル選択ボタン。受け取ったファイルの構造は、その場で自動的に表示する
     EnergyStructureViewer エネルギー収束グラフ(点をクリック)+ スライダー + 構造表示
-                          渡す結果: .energies[Hartree] / .coords_history[Å] / .symbols を持つ任意のオブジェクト
+                          渡す結果: common_backend.optimization.OptimizationResult(または、その子クラス)。
+                          使う項目は .energies[Hartree] / .coords_history[Å] / .symbols
     VibrationViewer       振動モードの選択とアニメーション表示
                           渡す結果: .frequencies_cm1 / .normal_modes を持つ任意のオブジェクト
     DownloadPanel         ダウンロードボタン(ファイル名の入力欄つき)

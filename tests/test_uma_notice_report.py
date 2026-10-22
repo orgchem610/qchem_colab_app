@@ -8,12 +8,11 @@ uma_backend.uma_notice(UMAに関する注意書き)と uma_backend.uma_report(�
 import os
 import sys
 import unittest
-from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from qchem_colab_app.common_backend import vibration  # noqa: E402
-from qchem_colab_app.uma_backend import uma_notice, uma_report  # noqa: E402
+from qchem_colab_app.uma_backend import uma_notice, uma_optimize, uma_report  # noqa: E402
 
 
 class TestNotice(unittest.TestCase):
@@ -47,11 +46,17 @@ class TestNotice(unittest.TestCase):
 
 
 def _opt_result(converged=True):
-    return SimpleNamespace(
-        optimizer_name="LBFGS", fmax_target=0.01, max_steps=500, converged=converged,
-        energies=[-76.40, -76.42, -76.43], energies_ev=[-2079.0, -2079.5, -2079.8],
-        fmax_history=[0.9, 0.2, 0.008], elapsed_seconds=3.2,
-        final_fmax=0.008 if converged else 0.2)
+    # 代用品ではなく実物を使う(FrequencyResultと同じ理由)。最終の力の最大値(final_fmax)は、fmax_historyの最後の値
+    result = uma_optimize.OptimizationResult()
+    result.optimizer_name = "LBFGS"
+    result.fmax_target = 0.01
+    result.max_steps = 500
+    result.converged = converged
+    result.energies = [-76.40, -76.42, -76.43]
+    result.energies_ev = [-2079.0, -2079.5, -2079.8]
+    result.fmax_history = [0.9, 0.2, 0.008] if converged else [0.9, 0.5, 0.2]
+    result.elapsed_seconds = 3.2
+    return result
 
 
 def _freq_result():

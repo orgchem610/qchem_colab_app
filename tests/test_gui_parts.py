@@ -17,14 +17,13 @@ import re
 import sys
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fake_gui_env import fake_gui_env  # noqa: E402
-from qchem_colab_app.common_backend import io_reader  # noqa: E402
+from qchem_colab_app.common_backend import io_reader, optimization, vibration  # noqa: E402
 
 XYZ = b"3\nwater\nO 0.0 0.0 0.0\nH 0.96 0.0 0.0\nH -0.24 0.93 0.0\n"
 
@@ -34,12 +33,20 @@ def _payload(name, content=XYZ):
 
 
 def _result(n_energies=6, n_coords=7):
-    return SimpleNamespace(
-        symbols=["O", "H", "H"],
-        energies=[-76.0 - 0.02 * (1 - 0.7 ** i) for i in range(n_energies)],
-        coords_history=[[[0.0, 0.0, 0.1 * i]] * 3 for i in range(n_coords)],
-        fmax_history=[1.0 / (i + 1) for i in range(max(n_energies, n_coords))],
-    )
+    """EnergyStructureViewer に渡す、共通の親クラスの結果(gui は、計算エンジンのパッケージを使わない)。"""
+    result = optimization.OptimizationResult()
+    result.symbols = ["O", "H", "H"]
+    result.energies = [-76.0 - 0.02 * (1 - 0.7 ** i) for i in range(n_energies)]
+    result.coords_history = [[[0.0, 0.0, 0.1 * i]] * 3 for i in range(n_coords)]
+    return result
+
+
+def _freq(frequencies_cm1, normal_modes=None):
+    """VibrationViewer に渡す、共通の振動数解析の結果。"""
+    freq = vibration.FrequencyResult()
+    freq.frequencies_cm1 = frequencies_cm1
+    freq.normal_modes = normal_modes
+    return freq
 
 
 def _capture(fn, *args, **kwargs):
@@ -278,9 +285,9 @@ class TestEnergyStructureViewer(_Base):
     def test_custom_step_label_is_used(self):
         viewer = self.gp.EnergyStructureViewer(
             callback_prefix="test_plot2",
-            step_label=lambda i, e, r: f"独自の見出し {i} / fmax {r.fmax_history[i]:.2f}")
+            step_label=lambda i, e, r: f"独自の見出し {i} / 点数 {len(r.energies)}")
         out = _capture(viewer.show, _result())
-        self.assertIn("独自の見出し 5 / fmax 0.17", out)
+        self.assertIn("独自の見出し 5 / 点数 6", out)
 
     def test_rerun_with_fewer_steps_resets_the_slider(self):
         _capture(self.viewer.show, _result(6, 6))
@@ -339,12 +346,12 @@ class TestVibrationViewer(_Base):
         self.assertTrue(self.viewer.mode_dropdown.disabled)
 
     def test_controls_are_disabled_when_there_are_no_modes(self):
-        freq = SimpleNamespace(frequencies_cm1=[], normal_modes=None)
+        freq = _freq([])
         self.viewer.setup(freq, ["H"], [[0, 0, 0]])
         self.assertTrue(self.viewer.button.disabled)
 
     def test_modes_are_listed_with_imaginary_ones_marked(self):
-        freq = SimpleNamespace(frequencies_cm1=[-35.0, 1600.5, 3700.2], normal_modes=[0, 1, 2])
+        freq = _freq([-35.0, 1600.5, 3700.2], [0, 1, 2])
         self.viewer.setup(freq, ["O", "H", "H"], [[0, 0, 0]] * 3)
         labels = [label for label, _ in self.viewer.mode_dropdown.options]
         self.assertEqual(len(labels), 3)
@@ -353,7 +360,7 @@ class TestVibrationViewer(_Base):
         self.assertFalse(self.viewer.button.disabled)
 
     def test_button_shows_the_animation_and_its_label(self):
-        freq = SimpleNamespace(frequencies_cm1=[1600.5], normal_modes=[0])
+        freq = _freq([1600.5], [0])
         self.viewer.setup(freq, ["O", "H", "H"], [[0, 0, 0]] * 3)
         out = _capture(self.viewer.button.click)
         self.assertIn("1600.0", out)
@@ -364,7 +371,7 @@ class TestVibrationViewerReset(_Base):
     def setUp(self):
         super().setUp()
         self.viewer = self.gp.VibrationViewer()
-        self.freq = SimpleNamespace(frequencies_cm1=[1600.5], normal_modes=[0])
+        self.freq = _freq([1600.5], [0])
         self.viewer.setup(self.freq, ["O", "H", "H"], [[0, 0, 0]] * 3)
         self.viewer.output.outputs.append("前回のアニメーション")
 
