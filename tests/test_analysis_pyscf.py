@@ -2,40 +2,31 @@
 tests/test_analysis_pyscf.py
 ----------------------------
 pyscf_backend.analysis_pyscf(軌道・電荷の情報の取り出し)の単体テスト。
-PySCFは使わず、必要な属性だけを持つ代用のオブジェクトで確認する。
+実物のPySCFで、水・メチルラジカル・酸素(三重項)・エタノール陽イオン・ベンゼンのSCFを実際に計算して確認する
+(どれも1秒未満。tests/real_molecules.py)。
+
+軌道エネルギーの値を指定したいテスト(縮退のしきい値・eVへの換算など)は、実物のSCFの結果を複製して、
+軌道エネルギーだけを書き換える。実際には起こらない軌道の数の確認は、計算していない実物のRHFに、仮の軌道の
+占有数・エネルギーを入れる。元素記号の表記ゆれ(PySCFが正規化するため、実物では起こらない)は、
+実物のMoleの atom_symbol・atom_pure_symbol だけを差し替える。
+PySCFが入っていない環境では、このファイルのテストをすべてスキップする。
 """
 
 import os
 import sys
 import unittest
-from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import real_molecules as rm  # noqa: E402
 from qchem_colab_app.common_backend import energy  # noqa: E402
 from qchem_colab_app.pyscf_backend import analysis_pyscf  # noqa: E402
 
-
-def _mol(symbols):
-    return SimpleNamespace(natm=len(symbols), atom_symbol=lambda i: symbols[i])
-
-
-def _closed_shell(n_occ, n_mo, energies=None):
-    """閉殻(RHF/RKS): mo_occ・mo_energy は1次元のnumpy配列。"""
-    return SimpleNamespace(
-        mo_occ=np.array([2.0] * n_occ + [0.0] * (n_mo - n_occ)),
-        mo_energy=np.arange(n_mo, dtype=float) if energies is None else np.array(energies, dtype=float),
-    )
-
-
-def _open_shell(n_alpha, n_beta, n_mo):
-    """開殻(UHF/UKS): mo_occ・mo_energy は、α・βの2行のnumpy配列。"""
-    occ_a = [1.0] * n_alpha + [0.0] * (n_mo - n_alpha)
-    occ_b = [1.0] * n_beta + [0.0] * (n_mo - n_beta)
-    energy = np.arange(n_mo, dtype=float)
-    return SimpleNamespace(mo_occ=np.array([occ_a, occ_b]), mo_energy=np.array([energy, energy]))
+SKIP_NO_PYSCF = "PySCFがインストールされていないためスキップ"
 
 
 def _name(label):
@@ -52,31 +43,41 @@ def _labels(choices):
     return [label for label, _ in choices.options]
 
 
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class TestValenceSpaceSize(unittest.TestCase):
     def test_hydrogen_and_second_period_atoms(self):
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["H", "H"])), (0, 2))
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["O", "H", "H"])), (1, 6))
+        self.assertEqual(analysis_pyscf.valence_space_size(rm.build_mole("H 0 0 0; H 0 0 0.74")), (0, 2))
+        self.assertEqual(analysis_pyscf.valence_space_size(rm.water_rhf().mol), (1, 6))
 
     def test_third_period_atoms_have_five_core_orbitals(self):
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["S"])), (5, 4))
+        self.assertEqual(analysis_pyscf.valence_space_size(rm.atom_mole("S")), (5, 4))
 
     def test_fourth_and_fifth_period_main_group_atoms(self):
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["Br"])), (14, 4))
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["I"])), (23, 4))
+        self.assertEqual(analysis_pyscf.valence_space_size(rm.atom_mole("Br")), (14, 4))
+        self.assertEqual(analysis_pyscf.valence_space_size(rm.atom_mole("I")), (23, 4))
 
     def test_element_symbols_are_normalized_and_unknown_ones_fall_back(self):
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["cl"])), (5, 4))
-        self.assertEqual(analysis_pyscf.valence_space_size(_mol(["Xx"])), (0, 4))
+        # PySCFは元素記号を正規化するため、小文字や未知の記号は実物のMoleでは現れない。
+        # 実物のMole(Cl原子)の、元素記号を返す関数だけを差し替える
+        mol = rm.atom_mole("Cl")
+        with mock.patch.object(mol, "atom_pure_symbol", lambda i: "cl"):
+            self.assertEqual(analysis_pyscf.valence_space_size(mol), (5, 4))
+        with mock.patch.object(mol, "atom_pure_symbol", lambda i: "Xx"):
+            self.assertEqual(analysis_pyscf.valence_space_size(mol), (0, 4))
 
     def test_pure_symbol_is_preferred_when_available(self):
-        mol = SimpleNamespace(natm=1, atom_symbol=lambda i: "C1", atom_pure_symbol=lambda i: "C")
+        # 原子に付けたラベル(C1)は、atom_symbolでは「C1」、atom_pure_symbolでは「C」になる
+        mol = rm.build_mole("C1 0 0 0", basis="sto-3g")
+        self.assertEqual(mol.atom_symbol(0), "C1")
         self.assertEqual(analysis_pyscf.valence_space_size(mol), (1, 4))
 
 
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class TestOrbitalChoicesClosedShell(unittest.TestCase):
     def setUp(self):
-        # 水: 占有軌道5個。内殻1+価電子殻6=7番目の軌道(軌道6番)まで表示する
-        self.choices = analysis_pyscf.orbital_choices(_mol(["O", "H", "H"]), _closed_shell(5, 13))
+        # 水 RHF/6-31G: 軌道13個、電子が入った軌道5個。内殻1+価電子殻6=7番目の軌道(軌道6番)まで表示する
+        self.mf = rm.water_rhf()
+        self.choices = analysis_pyscf.orbital_choices(self.mf.mol, self.mf)
 
     def test_all_occupied_and_valence_virtual_orbitals_are_listed(self):
         self.assertEqual(sorted(i for _, i in self.choices.options), [0, 1, 2, 3, 4, 5, 6])
@@ -100,43 +101,48 @@ class TestOrbitalChoicesClosedShell(unittest.TestCase):
             self.assertNotIn("LUMO+", label)
 
     def test_degenerate_homo_and_lumo_are_all_marked(self):
-        energies = [-1.0, -0.5, -0.5, 0.2, 0.2, 0.9, 1.0, 1.1]
-        choices = analysis_pyscf.orbital_choices(_mol(["N", "H", "H", "H"]), _closed_shell(3, 8, energies))
+        # ベンゼン(D6h)のHOMO(e1g)・LUMO(e2u)は、どちらも2重に縮退している
+        mf = rm.benzene_rhf()
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         names = _names(choices)
-        self.assertEqual(names[0], "軌道0番")
-        self.assertEqual((names[1], names[2]), ("軌道1番(HOMO)", "軌道2番(HOMO)"))
-        self.assertEqual((names[3], names[4]), ("軌道3番(LUMO)", "軌道4番(LUMO)"))
-        self.assertEqual(choices.default_index, 2)
+        self.assertEqual(names[18], "軌道18番")
+        self.assertEqual((names[19], names[20]), ("軌道19番(HOMO)", "軌道20番(HOMO)"))
+        self.assertEqual((names[21], names[22]), ("軌道21番(LUMO)", "軌道22番(LUMO)"))
+        self.assertEqual(choices.default_index, 20)
+        self.assertEqual(sum("(HOMO)" in s for s in _labels(choices)), 2)
+        self.assertEqual(sum("(LUMO)" in s for s in _labels(choices)), 2)
 
     def test_slightly_different_energies_are_not_degenerate(self):
-        energies = [-1.0, -0.5, -0.4, 0.2, 0.3, 0.9, 1.0, 1.1]
-        labels = _labels(analysis_pyscf.orbital_choices(
-            _mol(["N", "H", "H", "H"]), _closed_shell(3, 8, energies)))
+        energies = [-20.5, -1.3, -0.7, -0.5, -0.4, 0.2, 0.3, 0.9, 1.1, 1.3, 1.4, 1.5, 1.6]
+        mf = rm.modified_copy(self.mf, mo_energy=np.array(energies))
+        labels = _labels(analysis_pyscf.orbital_choices(mf.mol, mf))
         self.assertEqual(sum("(HOMO)" in s for s in labels), 1)
         self.assertEqual(sum("(LUMO)" in s for s in labels), 1)
 
     def test_list_stops_at_the_number_of_available_orbitals(self):
-        choices = analysis_pyscf.orbital_choices(_mol(["O", "H", "H"]), _closed_shell(5, 6))
+        mf = rm.hypothetical_rhf(self.mf.mol, n_occupied=5, n_mo=6)
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         self.assertEqual(sorted(i for _, i in choices.options), [0, 1, 2, 3, 4, 5])
 
     def test_all_occupied_orbitals_are_listed_even_beyond_the_valence_count(self):
-        # 価電子殻の軌道数(内殻0+価電子殻1=1)より、電子が入っている軌道が多い場合
-        choices = analysis_pyscf.orbital_choices(_mol(["H"]), _closed_shell(3, 6))
+        # 価電子殻の軌道数(H2: 内殻0+価電子殻2=2)より、電子が入っている軌道が多い場合
+        mf = rm.hypothetical_rhf(rm.build_mole("H 0 0 0; H 0 0 0.74"), n_occupied=3, n_mo=6)
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         self.assertEqual(sorted(i for _, i in choices.options), [0, 1, 2, 3])
         self.assertEqual(choices.default_index, 2)
 
     def test_mo_energy_may_be_a_plain_list(self):
-        mf = _closed_shell(2, 8)
-        mf.mo_energy = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
-        self.assertEqual(analysis_pyscf.orbital_choices(_mol(["H", "H"]), mf).default_index, 1)
+        mf = rm.modified_copy(self.mf, mo_energy=[float(e) for e in self.mf.mo_energy])
+        self.assertEqual(analysis_pyscf.orbital_choices(mf.mol, mf).default_index, 4)
 
 
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class TestOrbitalEnergyDisplay(unittest.TestCase):
     ENERGIES = [-20.5, -1.3, -0.7, -0.5, -0.4, 0.2, 0.5, 0.9, 1.1, 1.3, 1.4, 1.5, 1.6]
 
     def setUp(self):
-        self.choices = analysis_pyscf.orbital_choices(
-            _mol(["O", "H", "H"]), _closed_shell(5, 13, self.ENERGIES))
+        mf = rm.modified_copy(rm.water_rhf(), mo_energy=np.array(self.ENERGIES))
+        self.choices = analysis_pyscf.orbital_choices(mf.mol, mf)
 
     def _label_of(self, index):
         return next(label for label, i in self.choices.options if i == index)
@@ -154,20 +160,28 @@ class TestOrbitalEnergyDisplay(unittest.TestCase):
         values = [float(label.split("  ")[-1].replace(" eV", "")) for label, _ in self.choices.options]
         self.assertEqual(values, sorted(values, reverse=True))
 
+    def test_real_orbital_energies_are_converted_too(self):
+        mf = rm.water_rhf()
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
+        homo = next(label for label, i in choices.options if i == 4)
+        self.assertTrue(homo.endswith(f"  {mf.mo_energy[4] * energy.HARTREE_TO_EV:+.2f} eV"))
+
     def test_open_shell_shows_the_alpha_orbital_energy(self):
-        mf = _open_shell(3, 2, 10)
-        energy_alpha = np.arange(10, dtype=float) * 0.1
-        mf.mo_energy = np.array([energy_alpha, energy_alpha + 5.0])      # βは大きくずらしてある
-        choices = analysis_pyscf.orbital_choices(_mol(["C", "H", "H", "H"]), mf)
+        base = rm.methyl_uhf()
+        energy_alpha = np.arange(base.mo_energy.shape[1], dtype=float) * 0.1
+        mf = rm.modified_copy(base, mo_energy=np.array([energy_alpha, energy_alpha + 5.0]))   # βは大きくずらしてある
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         label = next(label for label, i in choices.options if i == 2)
         self.assertTrue(label.endswith("  +5.44 eV"))                    # 0.2 Hartree
 
 
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class TestOrbitalChoicesOpenShell(unittest.TestCase):
     def test_doublet_like_the_ethanol_cation(self):
-        # エタノール陽イオン: α電子13個・β電子12個。軌道12番だけに電子が1個
-        mol = _mol(["C", "C", "O"] + ["H"] * 6)
-        choices = analysis_pyscf.orbital_choices(mol, _open_shell(13, 12, 39))
+        # エタノール陽イオン UHF/6-31G: α電子13個・β電子12個。軌道12番だけに電子が1個
+        mf = rm.ethanol_cation_uhf()
+        self.assertEqual(mf.mo_occ.shape, (2, 39))
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         self.assertTrue(choices.open_shell)
         self.assertEqual(choices.default_index, 12)
         labels = _labels(choices)
@@ -177,38 +191,53 @@ class TestOrbitalChoicesOpenShell(unittest.TestCase):
         self.assertEqual([i for _, i in choices.options], list(range(20, -1, -1)))
 
     def test_triplet_marks_both_singly_occupied_orbitals(self):
-        choices = analysis_pyscf.orbital_choices(_mol(["O", "O"]), _open_shell(9, 7, 20))
+        mf = rm.oxygen_triplet_uhf()                                       # α電子9個・β電子7個
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         somo = [i for label, i in choices.options if "SOMO" in label]
         self.assertEqual(sorted(somo), [7, 8])
         self.assertEqual(choices.default_index, 8)
 
     def test_pair_of_arrays_is_also_accepted(self):
-        mf = _open_shell(3, 2, 10)
-        mf.mo_occ = (mf.mo_occ[0], mf.mo_occ[1])
-        mf.mo_energy = (mf.mo_energy[0], mf.mo_energy[1])
-        choices = analysis_pyscf.orbital_choices(_mol(["C", "H", "H", "H"]), mf)
+        base = rm.methyl_uhf()
+        mf = rm.modified_copy(base, mo_occ=(base.mo_occ[0], base.mo_occ[1]),
+                              mo_energy=(base.mo_energy[0], base.mo_energy[1]))
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         self.assertTrue(choices.open_shell)
-        self.assertEqual(choices.default_index, 2)
+        self.assertEqual(choices.default_index, 4)                          # α電子5個
 
     def test_restricted_open_shell_uses_occupation_one(self):
         # ROHF: 1次元の配列で、電子が1個の軌道の占有数が1
-        mf = SimpleNamespace(mo_occ=np.array([2.0, 2.0, 1.0, 0.0, 0.0, 0.0]),
-                             mo_energy=np.arange(6, dtype=float))
-        choices = analysis_pyscf.orbital_choices(_mol(["C", "H", "H", "H"]), mf)
+        mf = rm.methyl_rohf()
+        self.assertEqual(mf.mo_occ.ndim, 1)
+        choices = analysis_pyscf.orbital_choices(mf.mol, mf)
         self.assertTrue(choices.open_shell)
-        self.assertEqual(choices.default_index, 2)
-        self.assertIn("軌道2番(SOMO)", list(_names(choices).values()))
+        self.assertEqual(choices.default_index, 4)
+        self.assertIn("軌道4番(SOMO)", list(_names(choices).values()))
 
 
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class TestComputeMullikenCharges(unittest.TestCase):
     def test_pairs_each_element_with_its_charge(self):
-        mol = SimpleNamespace(natm=3, atom_symbol=lambda i: ["O", "H", "H"][i])
-        mf = SimpleNamespace(mulliken_pop=lambda verbose=0: (None, [-0.45, 0.225, 0.225]))
-        charges = analysis_pyscf.compute_mulliken_charges(mol, mf)
+        mf = rm.water_rhf()
+        charges = analysis_pyscf.compute_mulliken_charges(mf.mol, mf)
         self.assertEqual([s for s, _ in charges], ["O", "H", "H"])
-        self.assertAlmostEqual(charges[0][1], -0.45)
-        self.assertAlmostEqual(sum(c for _, c in charges), 0.0)
+        self.assertLess(charges[0][1], 0.0)                                  # 酸素は負、水素は正
+        self.assertGreater(charges[1][1], 0.0)
+        self.assertAlmostEqual(charges[1][1], charges[2][1], places=6)       # 2つの水素は等価
+        self.assertAlmostEqual(sum(c for _, c in charges), 0.0, places=6)    # 中性分子の電荷の和は0
         self.assertTrue(all(isinstance(c, float) for _, c in charges))
+
+    def test_charges_agree_with_pyscf_called_directly(self):
+        mf = rm.water_rhf()
+        expected = mf.mulliken_pop(verbose=0)[1]
+        charges = analysis_pyscf.compute_mulliken_charges(mf.mol, mf)
+        self.assertTrue(np.allclose([c for _, c in charges], expected))
+
+    def test_open_shell_charges_sum_to_the_total_charge(self):
+        mf = rm.ethanol_cation_uhf()
+        charges = analysis_pyscf.compute_mulliken_charges(mf.mol, mf)
+        self.assertEqual(len(charges), 9)
+        self.assertAlmostEqual(sum(c for _, c in charges), 1.0, places=6)    # 陽イオン
 
 
 if __name__ == "__main__":

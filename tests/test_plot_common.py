@@ -2,19 +2,26 @@
 tests/test_plot_common.py
 -------------------------
 gui.plot_common のうち、原子電荷の可視化(色分け・数値ラベル・電荷表)の単体テスト。
-py3Dmol・ipywidgetsがなくても動く(py3Dmolのviewは、呼び出しを記録する代用品を使う)。
-構造・振動アニメーションの実際の3D表示は、Colab上での実機確認が必要。
+原子電荷の色分け・ラベル・球の部品は、呼び出しを記録するテスト用のクラス(FakeView)で確認する。
+render_charges などの view を作る関数は、実物のpy3Dmolで確認する(組み立てたJavaScriptの内容まで)。
+ブラウザ上での実際の3D表示だけは、Colab上での実機確認が必要。py3Dmolが入っていない環境では、
+それを使うテストだけをスキップする。
 """
 
 import os
+import re
 import sys
-import types
 import unittest
-from unittest import mock
+
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import real_molecules as rm  # noqa: E402
 from qchem_colab_app.gui import plot_common  # noqa: E402
+
+SKIP_NO_PY3DMOL = "py3Dmolがインストールされていないためスキップ"
 
 
 class FakeView:
@@ -124,29 +131,67 @@ class TestAddAtomChargeSpheres(unittest.TestCase):
         self.assertEqual(view.called("addSphere"), [])
 
 
+@unittest.skipUnless(rm.HAS_PY3DMOL, SKIP_NO_PY3DMOL)
 class TestRenderCharges(unittest.TestCase):
-    """py3Dmolを、代用の view に差し替えて、組み立ての順序と引数だけを確認する。"""
+    """実物のpy3Dmolで view を作り、それが組み立てたJavaScript(呼び出しと引数)を確認する。"""
 
     def _render(self, **kwargs):
-        fake_module = types.SimpleNamespace(view=lambda **kw: self.view)
-        self.view = FakeView()
-        with mock.patch.dict(sys.modules, {"py3Dmol": fake_module}):
-            return plot_common.render_charges(WATER_SYMBOLS, WATER_COORDS, WATER_CHARGES, **kwargs)
+        return plot_common.render_charges(WATER_SYMBOLS, WATER_COORDS, WATER_CHARGES, **kwargs)
 
     def test_structure_spheres_and_labels_are_added(self):
+        import py3Dmol
         view = self._render()
-        self.assertIs(view, self.view)
-        self.assertEqual(len(view.called("addModel")), 1)
-        xyz = view.called("addModel")[0][1][0]
-        self.assertTrue(xyz.startswith("3\n"))
-        self.assertEqual(len(view.called("addSphere")), 3)
-        self.assertEqual(len(view.called("addLabel")), 3)
-        self.assertEqual(len(view.called("zoomTo")), 1)
+        self.assertIsInstance(view, py3Dmol.view)
+        js = view.startjs
+        self.assertEqual(js.count("addModel("), 1)
+        self.assertTrue('addModel("3\\nstructure' in js)                 # 原子数3の xyz
+        self.assertEqual(js.count("addSphere("), 3)
+        self.assertEqual(js.count("addLabel("), 3)
+        self.assertGreaterEqual(js.count("zoomTo("), 1)
+
+    def test_spheres_and_labels_carry_the_charge_colors_and_values(self):
+        js = self._render().startjs
+        self.assertTrue('"color": "#ff2222"' in js)                       # 最大|電荷|の負電荷=赤の球
+        self.assertTrue('"backgroundColor": "#ff5b5b"' in js)             # 負のラベル=赤系
+        self.assertEqual(js.count('"backgroundColor": "#5b9bff"'), 2)     # 正のラベル=青系(水素2個)
+        self.assertTrue('addLabel("-0.45"' in js)
+        self.assertEqual(js.count('addLabel("+0.23"'), 2)
 
     def test_labels_can_be_hidden(self):
-        view = self._render(show_labels=False)
-        self.assertEqual(len(view.called("addSphere")), 3)
-        self.assertEqual(view.called("addLabel"), [])
+        js = self._render(show_labels=False).startjs
+        self.assertEqual(js.count("addSphere("), 3)
+        self.assertEqual(js.count("addLabel("), 0)
+
+
+@unittest.skipUnless(rm.HAS_PY3DMOL, SKIP_NO_PY3DMOL)
+class TestRenderStructureAndVibration(unittest.TestCase):
+    """構造・振動アニメーションの表示も、実物のpy3Dmolで、組み立てたJavaScriptまで確認する。"""
+
+    def test_single_structure(self):
+        import py3Dmol
+        view = plot_common.render_single_structure(WATER_SYMBOLS, WATER_COORDS)
+        self.assertIsInstance(view, py3Dmol.view)
+        self.assertEqual(view.startjs.count("addModel("), 1)
+        self.assertTrue('"stick"' in view.startjs)
+
+    def _vibration(self, frequency):
+        modes = np.zeros((3, 3, 3))
+        modes[0, 0, 0] = 1.0
+        return plot_common.render_vibration(WATER_SYMBOLS, WATER_COORDS, [frequency, 3700.0, 3800.0], modes,
+                                            mode_index=0, n_frames=20)
+
+    def test_vibration_is_an_animation_of_the_requested_number_of_frames(self):
+        view, label = self._vibration(1600.5)
+        js = view.startjs
+        self.assertEqual(js.count("addModelsAsFrames("), 1)
+        self.assertEqual(len(re.findall(r"frame \d+", js)), 20)
+        self.assertEqual(js.count("animate("), 1)
+        self.assertTrue('"loop": "backAndForth"' in js)
+        self.assertEqual(label, "振動数 1600.5 cm\u207b\u00b9")
+
+    def test_an_imaginary_frequency_is_marked_in_the_label(self):
+        _, label = self._vibration(-120.0)
+        self.assertEqual(label, "振動数 -120.0 cm\u207b\u00b9(虚振動)")
 
 
 class TestPlotCommonDoesNotDependOnAnEngine(unittest.TestCase):

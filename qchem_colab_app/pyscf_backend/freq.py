@@ -16,6 +16,11 @@ GPU4PySCFのHessian(2次微分)機能はまだ十分な検証ができていな�
 pyscf.hessian.thermo.harmonic_analysis() が返す辞書のキー名は、
 PySCFのバージョンによって細部が異なる可能性があるため、
 _get() ヘルパーで複数の候補キー名を試す作りにしている。
+
+虚振動は、PySCF(harmonic_analysis の既定の設定)では、実部が0の複素数(例: 0+2268j)で返される。
+実部だけを取ると 0.0 になって虚振動が見つからなくなるため、_signed_wavenumber() で、
+虚部の大きさを負の値にした実数にしている(虚振動は、負の値で表す。common_backend/vibration.py と同じ約束)。
+(v0.2.2で、実物のPySCFで確認して直した。それまでは、虚振動が0.0になり、検出されなかった。)
 """
 
 import time
@@ -28,6 +33,12 @@ def _get(d: dict, *keys, default=None):
         if k in d:
             return d[k]
     return default
+
+
+def _signed_wavenumber(f) -> float:
+    """振動数 [cm^-1] を、虚振動を負の値にした実数にする(実数・複素数のどちらを受け取ってもよい)。"""
+    f = complex(f)
+    return float(f.real) if f.imag == 0 else -abs(f.imag)
 
 
 class FrequencyResult(vibration.FrequencyResult):
@@ -60,7 +71,7 @@ def run_frequency_analysis(mf, defaults: dict) -> FrequencyResult:
     freq_info = thermo.harmonic_analysis(mf.mol, hess)
 
     freqs = list(_get(freq_info, "freq_wavenumber", "freq_cm-1", default=[]))
-    result.frequencies_cm1 = [float(f.real) if hasattr(f, "real") else float(f) for f in freqs]
+    result.frequencies_cm1 = [_signed_wavenumber(f) for f in freqs]
     result.normal_modes = _get(freq_info, "norm_mode", "normal_mode")
 
     freq_cfg = defaults["frequency"]
