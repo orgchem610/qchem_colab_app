@@ -10,7 +10,12 @@ tests/real_molecules.py
                        テストの中で値を書き換えるときは、modified_copy() で複製してから書き換える
                        (使い回す結果そのものは、書き換えない)。
 
-PySCFは、関数の中でimportする。入っていない環境でも、このモジュール自体は読み込める。
+PySCFが入っている環境では、このモジュールを読み込んだときに、PySCFの設定 MUTE_CHKFILE を True にする。
+PySCFのSCFオブジェクトは、作るたびに、チェックポイント用の一時ファイルを開き、オブジェクトが解放されたときに閉じる。
+ところが、SCFオブジェクトが循環参照になっていると、PySCF側で閉じられないまま解放されることがあり、
+テストの終了時に「ResourceWarning: unclosed file」が複数出る(プロジェクトのコードやテストの open() ではなく、PySCFの内部が原因)。
+テストは、チェックポイントを使わないため、この設定で、一時ファイルを作らないようにしている
+(アプリ本体の計算には、この設定は影響しない)。
 """
 
 import copy
@@ -35,6 +40,10 @@ HAS_PY3DMOL = _installed("py3Dmol")
 HAS_IPYWIDGETS = _installed("ipywidgets")
 HAS_TORCH = _installed("torch")
 HAS_FAIRCHEM = _installed("fairchem")
+
+if HAS_PYSCF:
+    from pyscf.scf import hf as _pyscf_hf
+    _pyscf_hf.MUTE_CHKFILE = True       # SCFオブジェクトが、チェックポイント用の一時ファイルを開かない(上の説明を参照)
 
 # 構造(Å)。atom の書式は pyscf.gto.Mole.atom の文字列
 WATER = "O 0 0 0.1173; H 0 0.7572 -0.4692; H 0 -0.7572 -0.4692"

@@ -484,6 +484,11 @@ GPU割り当てを消費しないよう、「ハードウェアアクセラレ�
 
 ## 開発メモ(実装上の注意)
 
+- **テストの`ResourceWarning: unclosed file`**: PySCFの`SCF`オブジェクトは、作るたびに、チェックポイント用の一時ファイルを開く。
+  オブジェクトが循環参照のまま解放されると、PySCF側で閉じられず、テストの終了時に警告が複数出る(このリポジトリの`open()`が原因ではない。
+  `with`の外の`open()`がないことは、構文解析で確認した)。`tests/real_molecules.py`が、読み込み時に`pyscf.scf.hf.MUTE_CHKFILE = True`にして、
+  一時ファイルを作らないようにしている。新しい警告が出たら、`python3.12 -X dev -X tracemalloc=15 -W always -m unittest ...`で、ファイルを
+  開いた場所を調べる。
 - **PySCFの虚振動の表現**: `pyscf.hessian.thermo.harmonic_analysis`は、既定(`imaginary_freq=True`)では、虚振動を、実部が0の複素数
   (例: `0+2268j`)で返す。実部だけを取ると`0.0`になり、虚振動が検出されない(v0.2.2で、実物のPySCF 2.14.0で確認して直した)。
   `pyscf_backend/freq.py`の`_signed_wavenumber`が、虚部の大きさを負の値にして、`common_backend/vibration.py`と同じ
@@ -1943,7 +1948,7 @@ YAML に選択肢と既定値を置き、既存パイプライン内の手法・
 
 - `real_molecules.py`
 
-	`HAS_PYSCF`・`HAS_GEOMETRIC`・`HAS_ASE`・`HAS_PY3DMOL`・`HAS_IPYWIDGETS`・`HAS_TORCH`・`HAS_FAIRCHEM`（ライブラリが入っているか。入っていない環境では、`unittest.skipUnless` で、そのテストだけをスキップする）、`build_mole`・`atom_mole`・`run_scf`、実物の小さな計算結果（`water_rhf`・`methyl_uhf`・`methyl_rohf`・`oxygen_triplet_uhf`・`ethanol_cation_uhf`・`benzene_rhf`・`water_equilibrium_rhf`・`linear_water_rhf`。最初に使ったときに 1 回だけ計算して使い回す。どれも 1 秒未満）、`modified_copy`（使い回す結果を、複製してから書き換える）、`hypothetical_rhf`（計算していない RHF に、仮の軌道の占有数・エネルギーを入れる）は、テストで、外部ライブラリの代用品ではなく、実物を使うための補助を提供する。PySCF は関数の中で import するため、入っていない環境でも、このモジュールは読み込める。
+	`HAS_PYSCF`・`HAS_GEOMETRIC`・`HAS_ASE`・`HAS_PY3DMOL`・`HAS_IPYWIDGETS`・`HAS_TORCH`・`HAS_FAIRCHEM`（ライブラリが入っているか。入っていない環境では、`unittest.skipUnless` で、そのテストだけをスキップする）、`build_mole`・`atom_mole`・`run_scf`、実物の小さな計算結果（`water_rhf`・`methyl_uhf`・`methyl_rohf`・`oxygen_triplet_uhf`・`ethanol_cation_uhf`・`benzene_rhf`・`water_equilibrium_rhf`・`linear_water_rhf`。最初に使ったときに 1 回だけ計算して使い回す。どれも 1 秒未満）、`modified_copy`（使い回す結果を、複製してから書き換える）、`hypothetical_rhf`（計算していない RHF に、仮の軌道の占有数・エネルギーを入れる）は、テストで、外部ライブラリの代用品ではなく、実物を使うための補助を提供する。PySCF は関数の中で import するため、入っていない環境でも、このモジュールは読み込める（PySCF が入っている環境では、読み込み時に `pyscf.scf.hf.MUTE_CHKFILE = True` にして、SCF オブジェクトがチェックポイント用の一時ファイルを開かないようにする。PySCF 内部の `ResourceWarning: unclosed file` を防ぐため）。
 
 - `test_agents_spec.py`
 
