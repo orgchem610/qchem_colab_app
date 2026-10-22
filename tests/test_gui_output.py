@@ -1,7 +1,7 @@
 """
 tests/test_gui_output.py
 ------------------------
-common.gui_output(ダウンロードのファイル名・ダウンロード項目)の単体テスト。
+gui.outputs(ダウンロードのファイル名・ダウンロード項目)の単体テスト。
 ipywidgetsには依存しない。
 """
 
@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import gui_output  # noqa: E402
+from qchem_colab_app.gui import outputs as gui_output  # noqa: E402
 
 
 class TestDefaultDownloadStem(unittest.TestCase):

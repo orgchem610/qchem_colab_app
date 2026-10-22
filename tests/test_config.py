@@ -1,7 +1,7 @@
 """
 tests/test_config.py
 ----------------------
-config/*.yaml が正しくパースでき、gui.py / engine.py が期待する
+config/*.yaml が正しくパースでき、gui/pyscf_screen.py / engine.py が期待する
 最低限のキーを持っていることを確認する単体テスト。
 
 「設定ファイルを1行足すだけで機能追加できる」設計が壊れていないかを
@@ -14,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from qcapp import load_yaml  # noqa: E402
+from qchem_colab_app.common_backend.config_loader import load_yaml  # noqa: E402
 
 
 class TestPurposesYaml(unittest.TestCase):

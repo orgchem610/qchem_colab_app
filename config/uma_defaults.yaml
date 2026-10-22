@@ -1,6 +1,6 @@
 # config/uma_defaults.yaml
 #
-# UMA版アプリ(uma_app / gui_uma.py)の既定値をまとめたファイルです。
+# UMA版アプリ(uma_backend / gui/uma_calc.py)の既定値をまとめたファイルです。
 # PySCF版(defaults.yaml)とは独立しており、こちらを編集してもPySCF版には影響しません。
 
 gui_defaults:

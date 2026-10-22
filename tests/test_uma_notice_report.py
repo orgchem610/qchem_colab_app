@@ -1,18 +1,18 @@
 """
 tests/test_uma_notice_report.py
 -------------------------------
-uma_app.uma_notice(UMAに関する注意書き)と uma_app.uma_report(ログ本文の組み立て)の単体テスト。
+uma_backend.uma_notice(UMAに関する注意書き)と uma_backend.uma_report(ログ本文の組み立て)の単体テスト。
 どちらも文字列を作るだけで、UMA・ASE・ネットワークには依存しない。
 """
 
 import os
 import sys
 import unittest
-from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import uma_notice, uma_report  # noqa: E402
+from qchem_colab_app.common_backend import vibration  # noqa: E402
+from qchem_colab_app.uma_backend import uma_notice, uma_optimize, uma_report  # noqa: E402
 
 
 class TestNotice(unittest.TestCase):
@@ -46,18 +46,27 @@ class TestNotice(unittest.TestCase):
 
 
 def _opt_result(converged=True):
-    return SimpleNamespace(
-        optimizer_name="LBFGS", fmax_target=0.01, max_steps=500, converged=converged,
-        energies=[-76.40, -76.42, -76.43], energies_ev=[-2079.0, -2079.5, -2079.8],
-        fmax_history=[0.9, 0.2, 0.008], elapsed_seconds=3.2,
-        final_fmax=0.008 if converged else 0.2)
+    # 代用品ではなく実物を使う(FrequencyResultと同じ理由)。最終の力の最大値(final_fmax)は、fmax_historyの最後の値
+    result = uma_optimize.OptimizationResult()
+    result.optimizer_name = "LBFGS"
+    result.fmax_target = 0.01
+    result.max_steps = 500
+    result.converged = converged
+    result.energies = [-76.40, -76.42, -76.43]
+    result.energies_ev = [-2079.0, -2079.5, -2079.8]
+    result.fmax_history = [0.9, 0.2, 0.008] if converged else [0.9, 0.5, 0.2]
+    result.elapsed_seconds = 3.2
+    return result
 
 
 def _freq_result():
-    return SimpleNamespace(
-        frequencies_cm1=[-35.0, 1600.5, 3700.2], elapsed_seconds=1.5,
-        thermo_summary={"ZPE_Hartree": 0.0215, "ZPE_kcal_per_mol": 13.49},
-        warning_message="虚振動が1個検出されました。")
+    # 代用品(SimpleNamespace)ではなく実物を使う: 属性名の変更に、テストが追従できる(AGENTS.mdの「関連テスト」でも検出できる)
+    result = vibration.FrequencyResult()
+    result.frequencies_cm1 = [-35.0, 1600.5, 3700.2]
+    result.elapsed_seconds = 1.5
+    result.zpe_hartree = 0.0215
+    result.warning_message = "虚振動が1個検出されました。"
+    return result
 
 
 def _build(**overrides):
@@ -92,6 +101,17 @@ class TestReport(unittest.TestCase):
         self.assertIn("3700.20", text)
         self.assertIn("ゼロ点エネルギー", text)
         self.assertIn("虚振動が1個検出されました。", text)
+
+    def test_zpe_is_shown_in_hartree_and_kcal_per_mol(self):
+        text = _build()
+        self.assertIn("ゼロ点エネルギー(ZPE): 0.021500 Hartree(13.49 kcal/mol)", text)
+
+    def test_zpe_line_is_omitted_when_it_was_not_calculated(self):
+        result = _freq_result()
+        result.zpe_hartree = None
+        text = _build(freq_result=result)
+        self.assertIn("3700.20", text)
+        self.assertNotIn("ゼロ点エネルギー", text)
 
     def test_frequency_section_is_omitted_when_not_calculated(self):
         text = _build(freq_result=None)

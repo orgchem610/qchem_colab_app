@@ -1,9 +1,9 @@
 """
 test/test_colab_widgets.py
 --------------------------
-common.colab_widgets のうち、Colab/ブラウザなしでテストできる部分
+gui.colab_widgets のうち、Colab/ブラウザなしでテストできる部分
 (ドロップ領域のHTML生成・ドロップされたファイルの検証・識別子の安全確認)の単体テスト。
-(エネルギーグラフの部分は、common/energy_plot.py に分けたため、tests/test_energy_plot.py にある。)
+(エネルギーグラフの部分は、gui/energy_plot.py に分けたため、tests/test_energy_plot.py にある。)
 
 JavaScriptがColab上で実際に動くか(ドロップ → Python呼び出し)は
 このテストでは確認できないため、Colab上での実機確認が必要(README.md参照)。
@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import colab_widgets as cw  # noqa: E402
+from qchem_colab_app.gui import colab_widgets as cw  # noqa: E402
 
 
 class TestParseDroppedPayload(unittest.TestCase):

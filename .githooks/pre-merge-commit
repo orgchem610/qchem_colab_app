@@ -1,0 +1,3 @@
+#!/bin/sh
+# mainブランチにAGENTS.mdが入るコミットを止める(検査の本体は check-agents.sh)
+exec "$(dirname "$0")/check-agents.sh"

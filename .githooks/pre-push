@@ -1,0 +1,17 @@
+#!/bin/sh
+# mainブランチ・タグへのpushに、AGENTS.mdを含むコミットが入っていたら、pushを中止する。
+# (AGENTS.mdは、mainでは追跡しない。AGENTS.mdの「AGENTS.mdのGit管理」を参照)
+zero=0000000000000000000000000000000000000000
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue          # 削除のpushは対象外
+  case "$remote_ref" in
+    refs/heads/main|refs/tags/*)
+      if git ls-tree -r --name-only "$local_sha" 2>/dev/null | grep -qx 'AGENTS.md'; then
+        echo "エラー: $remote_ref に AGENTS.md が含まれているため、pushを中止しました。" >&2
+        echo "  mainでは、AGENTS.md を追跡しません。mainにいる状態で次を実行し、コミットし直してください:" >&2
+        echo "    git rm --cached --ignore-unmatch AGENTS.md" >&2
+        exit 1
+      fi;;
+  esac
+done
+exit 0

@@ -5,7 +5,7 @@
 #   Pythonの科学技術計算系ライブラリは、メジャーバージョンが上がる際に
 #   後方互換性のない変更(API変更)が入ることが珍しくありません
 #   (例: ipywidgets 7→8 でファイルアップロードウィジェットの返り値の型が
-#    dict から tuple に変わっており、実際に common/gui_helpers.py に両対応の
+#    dict から tuple に変わっており、実際に gui/inputs.py に両対応の
 #    吸収コードを書いています)。
 #
 #   そのため、このファイルでは「今動くコードが将来の未知のメジャー
@@ -40,7 +40,7 @@ PyYAML>=6.0
 
 # 構造ファイルの読み込み(.xyz/.com/.gjf/.pdb)。ase.io.read()とAtomsオブジェクトの
 # 基本API(get_chemical_symbols/get_positions)はごく安定しているため下限のみ指定。
-# UMA活用アプリ(uma_app)でもASEはASE+FAIRChemCalculatorの土台として必須になる
+# UMA活用アプリ(uma_backend)でもASEはASE+FAIRChemCalculatorの土台として必須になる
 # ため、本アプリで採用しても依存関係全体としては増加にならない見込み。
 ase>=3.22
 
@@ -48,8 +48,8 @@ ase>=3.22
 # Colab標準のGUI部品の表示の仕組みは ipywidgets 7.x(Colabのランタイムには 7.7.1 が
 # 入っている)向けで、8.x に更新するとGUI部品が表示されなくなることがある
 # (「コードスニペット」のパネルが開くだけになる)。そのため、Colab標準のものを
-# そのまま使う(requirements-uma.txt と同じ方針)。common/gui_parts.py と
-# common/gui_helpers.py は、7.x・8.x のどちらでも動くように書いてある。
+# そのまま使う(requirements-uma.txt と同じ方針)。gui/parts.py と
+# gui/inputs.py は、7.x・8.x のどちらでも動くように書いてある。
 
 # --- 可視化(基本的なAPIのみ使用) ----------------------------------------------
 py3Dmol>=2.1
@@ -58,4 +58,4 @@ py3Dmol>=2.1
 # --- GPU4PySCF について -------------------------------------------------------
 # ColabのCUDAドライババージョンに強く依存するため、このファイルには含めず、
 # ColabApp.ipynb のSetup Section内で個別にインストールを試みます
-# (失敗しても qcapp/engine.py がCPU実行に自動フォールバックします)。
+# (失敗しても qchem_colab_app/pyscf_backend/engine.py がCPU実行に自動フォールバックします)。

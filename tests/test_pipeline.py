@@ -1,10 +1,14 @@
 """
 tests/test_pipeline.py
 ----------------------
-qcapp.pipeline(PySCF版の計算の流れ)の単体テスト。
-PySCFは使わず、engine・optimize・freq・writer_molden を代用の関数に差し替えて、
-各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
-PySCFによる実際の計算は、Colab上での実機確認が必要。
+pyscf_backend.pipeline(PySCF版の計算の流れ)の単体テスト。
+次の2通りで確認する。
+    1. 各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイル(_Base を継承した各クラス):
+       engine・optimize・freq・writer_molden・runtime(GPUの判定)の関数だけを差し替える。分子は実物の
+       pyscf.gto.Mole、SCFオブジェクトは計算していない実物のRHF、構造・最適化結果・振動数結果は実物のクラスを使う。
+    2. 実際の計算(TestRealCalculation): 水(HF/3-21G)の構造最適化・振動数計算・出力を、PySCFとgeomeTRICで
+       実際に走らせる(約3秒)。GPU(GPU4PySCF)を使う計算だけは、Colab上での実機確認が必要。
+PySCF・geomeTRICが入っていない環境では、それを使うテストだけをスキップする。
 """
 
 import contextlib
@@ -13,36 +17,57 @@ import os
 import shutil
 import sys
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import numpy as np
 
-from common import io_reader  # noqa: E402
-from qcapp import __version__, pipeline  # noqa: E402
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import real_molecules as rm  # noqa: E402
+from qchem_colab_app.common_backend import config_loader, io_reader, version  # noqa: E402
+from qchem_colab_app.pyscf_backend import freq, optimize, pipeline  # noqa: E402
 
 DEFAULTS = {"frequency": {"warn_natoms": 40}}
+SKIP_NO_PYSCF = "PySCFがインストールされていないためスキップ"
+SKIP_NO_GEOMETRIC = "PySCFまたはgeomeTRICがインストールされていないためスキップ"
+WATER_COORDS = [[0.0, 0.0, 0.1173], [0.0, 0.7572, -0.4692], [0.0, -0.7572, -0.4692]]
 
 
-class FakeMol:
-    def __init__(self, symbols=("O", "H", "H")):
-        self.symbols = list(symbols)
-        self.natm = len(self.symbols)
-        self.cart = False
-
-    def atom_symbol(self, i):
-        return self.symbols[i]
-
-    def atom_coords(self, unit="Angstrom"):
-        return [[0.0, 0.0, 0.1 * i] for i in range(self.natm)]
+def _mole(n_atoms):
+    """実物の pyscf.gto.Mole。1番目がO、残りがH。最初の3原子は水の構造で、残りは3 Åずつ離して置く。
+    電子の数が奇数になるときは、陽イオンにする(閉殻のまま、RHFオブジェクトを作れるように)。"""
+    coords = WATER_COORDS + [[3.0 * k, 0.0, 0.0] for k in range(1, n_atoms - 2)]
+    atoms = [(symbol, tuple(xyz)) for symbol, xyz in zip(["O"] + ["H"] * (n_atoms - 1), coords)]
+    return rm.build_mole(atoms, basis="sto-3g", charge=(8 + n_atoms - 1) % 2)
 
 
 def _structure(symbols=("O", "H", "H")):
-    return SimpleNamespace(symbols=list(symbols), coords=[[0.0, 0.0, 0.0]] * len(symbols))
+    return io_reader.Structure(symbols=list(symbols), coords=[[0.0, 0.0, 0.0]] * len(symbols))
 
 
+def _optimization_result(final_mol, n_atoms, energies):
+    result = optimize.OptimizationResult()
+    result.mol_final = final_mol
+    result.symbols = [final_mol.atom_symbol(i) for i in range(final_mol.natm)]
+    result.coords_history = [[[0.0, 0.0, 0.0]] * n_atoms] * 3
+    result.energies = list(energies)
+    result.gpu_message = "CPU (通常のPySCF) で計算します。"
+    result.elapsed_seconds = 1.5
+    result.dm0_guess = "dm0"
+    return result
+
+
+def _frequency_result(warning_message):
+    result = freq.FrequencyResult()
+    result.elapsed_seconds = 0.5
+    result.warning_message = warning_message
+    return result
+
+
+@unittest.skipUnless(rm.HAS_PYSCF, SKIP_NO_PYSCF)
 class _Base(unittest.TestCase):
-    """engine・optimize・freq・writer_molden を代用の関数に差し替えて、呼び出しを記録する。"""
+    """engine・optimize・freq・writer_molden の関数だけを差し替えて、呼び出しを記録する。"""
 
     n_atoms = 3
     energies = [-76.0, -76.1, -76.2]
@@ -51,15 +76,13 @@ class _Base(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.logs = []
-        self.mol = FakeMol()
-        self.final_mol = FakeMol(("O",) + ("H",) * (self.n_atoms - 1))
-        self.opt_result = SimpleNamespace(
-            mol_final=self.final_mol, symbols=list(self.final_mol.symbols),
-            coords_history=[[[0.0, 0.0, 0.0]] * self.n_atoms] * 3, energies=list(self.energies),
-            gpu_message="CPU (通常のPySCF) で計算します。", elapsed_seconds=1.5, dm0_guess="dm0")
-        self.mf = SimpleNamespace(name="mf_cpu")
-        self.mf_final = SimpleNamespace(name="mf_final")
-        self.freq_result = SimpleNamespace(elapsed_seconds=0.5, warning_message=self.freq_warning)
+        from pyscf import scf
+        self.mol = _mole(3)
+        self.final_mol = _mole(self.n_atoms)
+        self.opt_result = _optimization_result(self.final_mol, self.n_atoms, self.energies)
+        self.mf = scf.RHF(self.final_mol)              # 計算していない実物のSCFオブジェクト(各段階の受け渡しを見分けるため、2つ作る)
+        self.mf_final = scf.RHF(self.final_mol)
+        self.freq_result = _frequency_result(self.freq_warning)
         self.gpu_detected = False
 
         def build_mole(structure, charge, multiplicity, basis_key):
@@ -91,7 +114,7 @@ class _Base(unittest.TestCase):
             mock.patch.object(pipeline.engine, "build_mole", build_mole),
             mock.patch.object(pipeline.engine, "build_scf", build_scf),
             mock.patch.object(pipeline.engine, "run_scf", run_scf),
-            mock.patch.object(pipeline.engine, "gpu_runtime_detected", lambda: self.gpu_detected),
+            mock.patch.object(pipeline.runtime, "nvidia_gpu_detected", lambda: self.gpu_detected),
             mock.patch.object(pipeline.optimize, "run_geometry_optimization", run_geometry_optimization),
             mock.patch.object(pipeline.freq_module, "run_frequency_analysis", run_frequency_analysis),
             mock.patch.object(pipeline.writer_molden, "write_molden", write_molden),
@@ -161,7 +184,7 @@ class TestResult(_Base):
         self.assertIs(result.mf_final, self.mf_final)
         self.assertIs(result.freq_result, self.freq_result)
         self.assertEqual(result.final_symbols, ["O", "H", "H"])
-        self.assertEqual(result.final_coords[1], [0.0, 0.0, 0.1])
+        self.assertTrue(np.allclose(result.final_coords[1], WATER_COORDS[1]))        # Å
         self.assertGreaterEqual(result.total_seconds, 0.0)
 
     def test_output_files_are_written_with_the_standard_names(self):
@@ -178,7 +201,7 @@ class TestResult(_Base):
         result = self.run_pipeline()
         with open(result.final_xyz_path, encoding="utf-8") as f:
             comment = f.read().splitlines()[1]
-        self.assertEqual(comment, f"Optimized by qchem_colab_app (v{__version__}, b3lyp/6-31g*)")
+        self.assertEqual(comment, f"Optimized by qchem_colab_app (v{version.__version__}, b3lyp/6-31g*)")
 
     def test_trajectory_has_one_frame_per_recorded_step(self):
         result = self.run_pipeline()
@@ -269,6 +292,70 @@ class TestErrors(_Base):
             with self.assertRaises(RuntimeError):
                 self.run_pipeline()
         self.assertIn("構造最適化を開始します", self.log_text)
+
+
+@unittest.skipUnless(rm.HAS_PYSCF and rm.HAS_GEOMETRIC, SKIP_NO_GEOMETRIC)
+class TestRealCalculation(unittest.TestCase):
+    """水(HF/3-21G)の構造最適化・振動数計算・出力を、PySCFとgeomeTRICで実際に走らせる(約3秒)。
+
+    engine・optimize・freq・writer_molden・設定ファイル(config/*.yaml)を、差し替えずに、実物のまま通す。
+    入力は、少し歪めた水。収束した構造は、HF/3-21Gの水の平衡構造(O-H 約0.967 Å、H-O-H 約108°)になる。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        defaults = config_loader.load_yaml("defaults.yaml")
+        structure = io_reader.Structure(
+            symbols=["O", "H", "H"], coords=[[0.0, 0.0, 0.12], [0.0, 0.80, -0.47], [0.0, -0.80, -0.47]],
+            comment="distorted water")
+        settings = pipeline.CalculationSettings(
+            charge=0, multiplicity=1, functional_key="hf", basis_key="3-21g", do_frequency=True, try_gpu=False)
+        cls.logs = []
+        cls.result = pipeline.run_calculation(structure, settings, defaults, log=cls.logs.append)
+        cls.addClassCleanup(shutil.rmtree, cls.result.out_dir, True)
+
+    def test_the_optimization_converges_to_the_equilibrium_structure_of_water(self):
+        result = self.result
+        self.assertTrue(result.opt_result.converged)
+        self.assertLess(result.opt_result.energies[-1], result.opt_result.energies[0])      # エネルギーが下がった
+        coords = np.array(result.final_coords)
+        v1, v2 = coords[1] - coords[0], coords[2] - coords[0]
+        for bond in (v1, v2):
+            self.assertAlmostEqual(np.linalg.norm(bond), 0.967, delta=0.01)                # O-H [Å]
+        angle = np.degrees(np.arccos(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+        self.assertAlmostEqual(angle, 107.7, delta=1.5)                                     # H-O-H [度]
+
+    def test_the_final_scf_is_converged_at_the_optimized_structure(self):
+        result = self.result
+        self.assertTrue(result.mf_final.converged)
+        self.assertAlmostEqual(result.mf_final.e_tot, result.opt_result.energies[-1], places=4)
+        self.assertEqual(result.final_symbols, ["O", "H", "H"])
+
+    def test_the_frequencies_are_those_of_a_minimum(self):
+        freq_result = self.result.freq_result
+        self.assertEqual(len(freq_result.frequencies_cm1), 3)
+        self.assertEqual(freq_result.n_imaginary, 0)
+        self.assertEqual(freq_result.warning_message, "")
+        self.assertTrue(all(1500.0 < f < 4500.0 for f in freq_result.frequencies_cm1), freq_result.frequencies_cm1)
+        self.assertTrue(0.015 < freq_result.zpe_hartree < 0.03, freq_result.zpe_hartree)
+
+    def test_output_files_are_written_and_have_the_expected_contents(self):
+        result = self.result
+        with open(result.final_xyz_path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        self.assertEqual(lines[0], "3")
+        self.assertEqual(lines[1], f"Optimized by qchem_colab_app (v{version.__version__}, hf/3-21g)")
+        with open(result.traj_xyz_path, encoding="utf-8") as f:
+            self.assertEqual(len(f.read().splitlines()), len(result.opt_result.coords_history) * 5)
+        with open(result.molden_path, encoding="utf-8") as f:
+            self.assertTrue(f.readline().startswith("[Molden Format]"))
+        self.assertGreater(os.path.getsize(result.molden_path), 1000)                       # 軌道の係数まで書かれている
+
+    def test_the_log_reports_each_stage(self):
+        text = "\n".join(self.logs)
+        for expected in ("構造最適化を開始します", "最終構造でCPU上のSCFを再計算", "振動数計算を開始します",
+                         "構造最適化 + 振動数計算"):
+            self.assertIn(expected, text)
 
 
 if __name__ == "__main__":

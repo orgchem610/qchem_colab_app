@@ -1,18 +1,17 @@
 """
 tests/test_writer_xyz.py
 ------------------------
-common.writer_xyz(xyz形式の出力)の単体テスト。外部ライブラリには依存しない。
+common_backend.writer_xyz(xyz形式の出力)の単体テスト。外部ライブラリには依存しない。
 """
 
 import os
 import sys
 import tempfile
 import unittest
-from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common import writer_xyz  # noqa: E402
+from qchem_colab_app.common_backend import optimization, writer_xyz  # noqa: E402
 
 SYMBOLS = ["O", "H", "H"]
 COORDS = [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
@@ -61,8 +60,10 @@ class TestWriteFiles(unittest.TestCase):
 class TestWriteOptimizationOutputs(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.result = SimpleNamespace(
-            symbols=SYMBOLS, coords_history=[COORDS, COORDS, COORDS], energies=[-75.9, -76.0, -76.1])
+        self.result = optimization.OptimizationResult()
+        self.result.symbols = SYMBOLS
+        self.result.coords_history = [COORDS, COORDS, COORDS]
+        self.result.energies = [-75.9, -76.0, -76.1]
 
     def test_both_files_are_written_with_the_standard_names(self):
         final_path, traj_path = writer_xyz.write_optimization_outputs(

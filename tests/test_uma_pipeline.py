@@ -1,8 +1,8 @@
 """
 tests/test_uma_pipeline.py
 --------------------------
-uma_app.uma_pipeline(UMA版の計算の流れ)の単体テスト。
-UMA・fairchem・ASE・ネットワークは使わず、uma_hf・uma_engine・uma_optimize・uma_freq を
+uma_backend.uma_pipeline(UMA版の計算の流れ)の単体テスト。
+UMA・fairchem・ASE・ネットワークは使わず、uma_hf・uma_engine・uma_optimize・uma_freq・runtime(GPUの判定)を
 代用の関数に差し替えて、各段階の呼び出しの順序・受け渡し・ログの内容・出力ファイルを確認する。
 UMAによる実際の計算は、Colab上での実機確認が必要。
 """
@@ -13,12 +13,12 @@ import os
 import shutil
 import sys
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from uma_app import __version__, uma_hf, uma_pipeline  # noqa: E402
+from qchem_colab_app.common_backend import io_reader, version, vibration  # noqa: E402
+from qchem_colab_app.uma_backend import uma_hf, uma_optimize, uma_pipeline  # noqa: E402
 
 
 def _defaults(warn_natoms=60):
@@ -44,7 +44,29 @@ class FakeAtoms:
 
 
 def _structure(n=3):
-    return SimpleNamespace(symbols=["O"] + ["H"] * (n - 1), coords=[[0.0, 0.0, 0.0]] * n)
+    return io_reader.Structure(symbols=["O"] + ["H"] * (n - 1), coords=[[0.0, 0.0, 0.0]] * n)
+
+
+def _optimization_result(n_atoms, converged):
+    result = uma_optimize.OptimizationResult()
+    result.symbols = ["O"] + ["H"] * (n_atoms - 1)
+    result.coords_history = [[[0.0, 0.0, 0.0]] * n_atoms, [[0.0, 0.0, 0.1]] * n_atoms]
+    result.energies = [-76.0, -76.1]
+    result.energies_ev = [-2068.0, -2070.0]
+    result.fmax_history = [0.5, 0.005 if converged else 0.2]       # 最終の力の最大値(final_fmax)は、ここから求まる
+    result.converged = converged
+    result.elapsed_seconds = 2.0
+    result.max_steps = 500
+    result.optimizer_name = "LBFGS"
+    result.fmax_target = 0.01
+    return result
+
+
+def _frequency_result():
+    result = vibration.FrequencyResult()
+    result.frequencies_cm1 = [1600.0]
+    result.elapsed_seconds = 1.0
+    return result
 
 
 class _Base(unittest.TestCase):
@@ -59,22 +81,15 @@ class _Base(unittest.TestCase):
         self.predictor = object()
         self.calculator = object()
         n = self.n_atoms
-        self.opt_result = SimpleNamespace(
-            symbols=["O"] + ["H"] * (n - 1),
-            coords_history=[[[0.0, 0.0, 0.0]] * n, [[0.0, 0.0, 0.1]] * n],
-            energies=[-76.0, -76.1], energies_ev=[-2068.0, -2070.0], fmax_history=[0.5, 0.005],
-            converged=self.converged, elapsed_seconds=2.0, max_steps=500, final_fmax=0.005 if self.converged else 0.2,
-            optimizer_name="LBFGS", fmax_target=0.01)
-        self.freq_result = SimpleNamespace(
-            elapsed_seconds=1.0, n_imaginary=0, warning_message="", frequencies_cm1=[1600.0],
-            thermo_summary={})
+        self.opt_result = _optimization_result(n, self.converged)
+        self.freq_result = _frequency_result()
 
         def check_model_access():
             self.calls.append(("check_model_access",))
 
-        def get_device():
-            self.calls.append(("get_device",))
-            return self.device
+        def torch_cuda_available():
+            self.calls.append(("torch_cuda_available",))
+            return self.device == "cuda"
 
         def describe_device(device):
             return "GPU(Test)" if device == "cuda" else "CPU(テスト)"
@@ -109,7 +124,7 @@ class _Base(unittest.TestCase):
 
         patches = [
             mock.patch.object(uma_pipeline.uma_hf, "check_model_access", check_model_access),
-            mock.patch.object(uma_pipeline.uma_engine, "get_device", get_device),
+            mock.patch.object(uma_pipeline.runtime, "torch_cuda_available", torch_cuda_available),
             mock.patch.object(uma_pipeline.uma_engine, "describe_device", describe_device),
             mock.patch.object(uma_pipeline.uma_engine, "load_predictor", load_predictor),
             mock.patch.object(uma_pipeline.uma_engine, "make_calculator", make_calculator),
@@ -148,7 +163,7 @@ class _Base(unittest.TestCase):
 class TestOrderAndHandOver(_Base):
     def test_stages_run_in_order_with_the_expected_arguments(self):
         self.run_pipeline()
-        self.assertEqual(self.names(), ["check_model_access", "get_device", "load_predictor",
+        self.assertEqual(self.names(), ["check_model_access", "torch_cuda_available", "load_predictor",
                                         "make_calculator", "build_atoms", "optimize", "frequency"])
         self.assertIn(("load_predictor", "uma-s-1p2p1", "cuda"), self.calls)
         self.assertIn(("make_calculator", True, "omol"), self.calls)      # タスク名は設定ファイルから
@@ -196,7 +211,7 @@ class TestResult(_Base):
         result = self.run_pipeline()
         with open(result.final_xyz_path, encoding="utf-8") as f:
             comment = f.read().splitlines()[1]
-        self.assertEqual(comment, f"Optimized by qchem_colab_app UMA (v{__version__}, uma-s-1p2p1, omol)")
+        self.assertEqual(comment, f"Optimized by qchem_colab_app UMA (v{version.__version__}, uma-s-1p2p1, omol)")
 
     def test_trajectory_has_one_frame_per_recorded_step(self):
         result = self.run_pipeline()
@@ -206,7 +221,7 @@ class TestResult(_Base):
     def test_report_is_built_from_the_conditions_and_results(self):
         result = self.run_pipeline()
         kwargs = self.report_kwargs
-        self.assertEqual(kwargs["version"], __version__)
+        self.assertEqual(kwargs["version"], version.__version__)
         self.assertEqual((kwargs["model_key"], kwargs["task_name"]), ("uma-s-1p2p1", "omol"))
         self.assertEqual(kwargs["device_label"], "GPU(Test)")
         self.assertEqual(kwargs["input_filename"], "ethanol.xyz")
@@ -241,7 +256,7 @@ class TestLog(_Base):
         self.assertIn("収束しました。構造最適化 所要時間: 2.0 秒  (記録された点数: 2)", self.log_text)
 
     def test_frequency_summary_and_warning_are_logged(self):
-        self.freq_result.n_imaginary = 1
+        self.freq_result.frequencies_cm1 = [-35.0, 1600.0]          # 虚振動の数は、振動数から求まる
         self.freq_result.warning_message = "虚振動が1個検出されました。"
         self.run_pipeline()
         self.assertIn("振動数計算 所要時間: 1.0 秒  (虚振動: 1個)", self.log_text)
